@@ -8,7 +8,7 @@
     "modelPath": "./models/embed/nomic-embed-text.gguf",
     "port": 8082
   },
-  "hotkey": "Ctrl+Alt+S",
+  "hotkey": "CmdOrCtrl+Alt+S",
   "llm": {
     "contextSize": 8192,
     "gpuLayers": 999,
