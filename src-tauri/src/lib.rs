@@ -216,6 +216,29 @@ pub(crate) fn project_root() -> PathBuf {
         .to_path_buf()
 }
 
+// third_party配下のエンジンビルド出力(llama-server/whisper-server等)の実行ファイルパスを解決する。
+// - 拡張子: Windowsのみ`.exe`を付与する
+// - 出力先ディレクトリ: CMakeのジェネレータによって`bin/Release/`配下(Visual Studio等の
+//   マルチコンフィグ)と`bin/`直下(Ninja/Unix Makefiles等のシングルコンフィグ、macOSのMetal
+//   ビルドはこちら)のどちらになるか変わるため、両方試して実在する方を採用する。
+// どちらも存在しない場合(未ビルド等)は`bin/Release/`側のパスを返す(エラーメッセージ表示用)。
+fn resolve_engine_exe(build_dir: &Path, exe_base_name: &str) -> PathBuf {
+    let exe_name = if cfg!(windows) {
+        format!("{exe_base_name}.exe")
+    } else {
+        exe_base_name.to_string()
+    };
+    let with_release = build_dir.join("bin/Release").join(&exe_name);
+    if with_release.exists() {
+        return with_release;
+    }
+    let without_release = build_dir.join("bin").join(&exe_name);
+    if without_release.exists() {
+        return without_release;
+    }
+    with_release
+}
+
 // フォルダ構成の再編(system/library分離)により、知識データ(library/)は
 // project_root()(system/)の外、その兄弟ディレクトリに置かれている。
 fn library_root() -> PathBuf {
@@ -232,7 +255,9 @@ fn load_config(root: &Path) -> Result<AppConfig, String> {
 }
 
 // CUDA_PATH/binを見つけてPATHに追加する。未インストール環境でもCPUフォールバックできるよう
-// 見つからない場合はNoneを返すだけでエラーにしない。
+// 見つからない場合はNoneを返すだけでエラーにしない。CUDAはWindows+NVIDIA環境専用のため、
+// それ以外のOSでは常にNone(探索コード自体をコンパイルしない)。
+#[cfg(windows)]
 fn cuda_bin_dir() -> Option<PathBuf> {
     if let Ok(p) = std::env::var("CUDA_PATH") {
         let bin = PathBuf::from(p).join("bin");
@@ -244,10 +269,18 @@ fn cuda_bin_dir() -> Option<PathBuf> {
     default.exists().then_some(default)
 }
 
+#[cfg(not(windows))]
+fn cuda_bin_dir() -> Option<PathBuf> {
+    None
+}
+
 fn extended_path() -> String {
     let existing = std::env::var("PATH").unwrap_or_default();
     match cuda_bin_dir() {
-        Some(cuda_bin) => format!("{};{existing}", cuda_bin.display()),
+        Some(cuda_bin) => {
+            let sep = if cfg!(windows) { ';' } else { ':' };
+            format!("{}{sep}{existing}", cuda_bin.display())
+        }
         None => existing,
     }
 }
@@ -303,7 +336,8 @@ fn start_backend_services_impl(
     let root = project_root();
     let config = load_config(&root)?;
 
-    let llama_server_exe = root.join("third_party/llama.cpp/build/bin/Release/llama-server.exe");
+    let llama_server_exe =
+        resolve_engine_exe(&root.join("third_party/llama.cpp/build"), "llama-server");
 
     let mut results = Vec::new();
 
@@ -401,7 +435,10 @@ fn start_backend_services_impl(
     if procs.rag.is_none() {
         emit_startup_stage(app, "詩織の図書館(検索インデックス)を読み込んでいます");
         let rag_dir = root.join("services/rag");
+        #[cfg(windows)]
         let python_exe = rag_dir.join(".venv/Scripts/python.exe");
+        #[cfg(not(windows))]
+        let python_exe = rag_dir.join(".venv/bin/python");
         let port_str = config.rag.port.to_string();
         let args = [
             "-m",
@@ -925,7 +962,8 @@ struct ModelSwitchResult {
 fn switch_model(state: tauri::State<BackendState>, file_name: String) -> Result<ModelSwitchResult, String> {
     let root = project_root();
     let config = app_config()?;
-    let llama_server_exe = root.join("third_party/llama.cpp/build/bin/Release/llama-server.exe");
+    let llama_server_exe =
+        resolve_engine_exe(&root.join("third_party/llama.cpp/build"), "llama-server");
     let target_path = root.join("models/llm").join(&file_name);
     if !target_path.exists() {
         return Err(format!("モデルファイルが見つかりません: {}", target_path.display()));
@@ -1873,7 +1911,10 @@ impl SttManager {
 }
 
 fn whisper_server_exe_path() -> PathBuf {
-    project_root().join("third_party/whisper.cpp/build/bin/Release/whisper-server.exe")
+    resolve_engine_exe(
+        &project_root().join("third_party/whisper.cpp/build"),
+        "whisper-server",
+    )
 }
 
 #[tauri::command]
@@ -1997,6 +2038,49 @@ fn greet(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // resolve_engine_exeが「Release/あり」「Release/なし」どちらのビルド出力構成でも
+    // 実在するパスを見つけられることを確認する軽量テスト(実バイナリ不要、tempdirで代用)。
+    // cargo test --lib resolve_engine_exe
+    #[test]
+    fn resolve_engine_exe_prefers_existing_release_dir() {
+        let dir = std::env::temp_dir().join(format!(
+            "shiori_test_resolve_engine_exe_release_{}",
+            std::process::id()
+        ));
+        let bin_release = dir.join("bin/Release");
+        std::fs::create_dir_all(&bin_release).unwrap();
+        std::fs::write(bin_release.join(exe_name_for_test("dummy-server")), b"").unwrap();
+
+        let resolved = resolve_engine_exe(&dir, "dummy-server");
+        assert_eq!(resolved, bin_release.join(exe_name_for_test("dummy-server")));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn resolve_engine_exe_falls_back_to_bin_without_release() {
+        let dir = std::env::temp_dir().join(format!(
+            "shiori_test_resolve_engine_exe_norelease_{}",
+            std::process::id()
+        ));
+        let bin = dir.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join(exe_name_for_test("dummy-server")), b"").unwrap();
+
+        let resolved = resolve_engine_exe(&dir, "dummy-server");
+        assert_eq!(resolved, bin.join(exe_name_for_test("dummy-server")));
+
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn exe_name_for_test(base: &str) -> String {
+        if cfg!(windows) {
+            format!("{base}.exe")
+        } else {
+            base.to_string()
+        }
+    }
 
     // parse_memo_intentの検知ロジックを確認する軽量テスト(LLM不要)。
     // cargo test --lib parse_memo_intent

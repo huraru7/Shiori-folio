@@ -25,8 +25,11 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell Vite to ignore watching `src-tauri` and `third_party`
+      // (third_partyはllama.cpp/whisper.cpp/piper-plus等のエンジンを丸ごとcloneしたもので、
+      // Vite側のプロジェクトとは無関係。含めたままだとpiper-plusのWASM向けソースが依存
+      // スキャンに誤って巻き込まれ、`@piper-plus/g2p`解決失敗の警告が出る)
+      ignored: ["**/src-tauri/**", "**/third_party/**"],
     },
   },
 }));

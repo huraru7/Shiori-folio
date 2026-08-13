@@ -1,7 +1,8 @@
 """RAG検索サーバー。/search でクエリを受け取り、embedding-server経由で
 ベクトル化してChromaDBのshiori_knowledgeコレクションをtop_k件検索する。
 
-起動: .venv\\Scripts\\uvicorn.exe app:app --port 8083 --host 127.0.0.1
+起動: Windowsは.venv\\Scripts\\uvicorn.exe、Mac/Linuxは.venv/bin/uvicorn を使い
+app:app --port 8083 --host 127.0.0.1
 """
 from __future__ import annotations
 
