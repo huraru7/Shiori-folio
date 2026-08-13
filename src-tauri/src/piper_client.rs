@@ -32,9 +32,14 @@ pub fn synthesize_and_play(
     config_path: &Path,
     voice: &VoiceParams,
 ) -> Result<(), String> {
-    let exe = root
-        .join("third_party/piper-plus/src/rust/target/release")
-        .join(crate::exe_name("piper-plus-cli"));
+    let exe_name = crate::exe_name("piper-plus-cli");
+    let portable = crate::portable_bin_dir().join(&exe_name);
+    let exe = if portable.exists() {
+        portable
+    } else {
+        root.join("third_party/piper-plus/src/rust/target/release")
+            .join(&exe_name)
+    };
     let tmp_dir = std::env::temp_dir();
     let out_filename = format!("shiori-tts-{}.wav", std::process::id());
     let out_path = tmp_dir.join(&out_filename);

@@ -261,8 +261,29 @@ pub(crate) fn exe_name(base: &str) -> String {
     }
 }
 
+// 段階G: portable/パッケージではthird_party/のソース・ビルド中間生成物を
+// 含めず、コンパイル済みのエンジンバイナリのみをbin/<os>/にフラットに
+// 配置する。ここが存在すればdevツリー(third_party/.../build/bin)より
+// 優先して使う(USBポータブル版の実行ファイルは常にこちらを見る)。
+pub(crate) fn portable_bin_dir() -> PathBuf {
+    let os_dir = if cfg!(target_os = "macos") {
+        "mac"
+    } else if cfg!(windows) {
+        "win"
+    } else {
+        "linux"
+    };
+    project_root().join("bin").join(os_dir)
+}
+
 fn resolve_engine_exe(build_dir: &Path, exe_base_name: &str) -> PathBuf {
     let exe_name = exe_name(exe_base_name);
+
+    let portable = portable_bin_dir().join(&exe_name);
+    if portable.exists() {
+        return portable;
+    }
+
     let with_release = build_dir.join("bin/Release").join(&exe_name);
     if with_release.exists() {
         return with_release;
@@ -493,9 +514,19 @@ fn start_rag_service(
     emit_startup_stage(app, "詩織の図書館(検索インデックス)を読み込んでいます");
     let rag_dir = root.join("services/rag");
     #[cfg(windows)]
-    let python_exe = rag_dir.join(".venv/Scripts/python.exe");
+    let python_rel = "Scripts/python.exe";
     #[cfg(not(windows))]
-    let python_exe = rag_dir.join(".venv/bin/python");
+    let python_rel = "bin/python";
+    // 段階G: portable/パッケージではRAG用のPython環境もbin/<os>/rag-venv/に
+    // OS別に配置する(エンジンバイナリのbin/<os>/配置と同じ考え方。venvは
+    // コンパイル済みバイナリを含むためOSをまたいで共有できない)。存在すれば
+    // こちらを優先し、無ければ開発ツリーのservices/rag/.venvにフォールバックする。
+    let portable_python = portable_bin_dir().join("rag-venv").join(python_rel);
+    let python_exe = if portable_python.exists() {
+        portable_python
+    } else {
+        rag_dir.join(".venv").join(python_rel)
+    };
     let port_str = config.rag.port.to_string();
     let args = [
         "-m",
