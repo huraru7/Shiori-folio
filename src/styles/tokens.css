@@ -1,0 +1,83 @@
+/* デザイントークン。モックアップから抽出したCSS変数を一元管理する。 */
+
+@font-face {
+  font-family: 'Shippori Mincho';
+  src: url('../assets/fonts/ShipporiMincho-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Shippori Mincho';
+  src: url('../assets/fonts/ShipporiMincho-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans JP';
+  src: url('../assets/fonts/NotoSansJP-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans JP';
+  src: url('../assets/fonts/NotoSansJP-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Noto Sans JP';
+  src: url('../assets/fonts/NotoSansJP-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  /* 配色転換(2026-08-12、UI/UX改善指示書1章)。深夜ブルーの神秘的な世界観から、
+     苔色/テラコッタ基調の温かみのある実用トーンへ全面置換。
+     変数名は`--night`から`--bg`に改名した(値がもう「夜」ではないため)。 */
+  --bg: #17150F;
+  --bg-deep: #100F0A;
+  --paper: #EDE6D6;
+  --paper-dim: #A79E8C;
+  --glass: rgba(237, 230, 214, 0.04);
+  --glass-border: rgba(237, 230, 214, 0.09);
+
+  --moss: #8FA06B;
+  --moss-deep: #6E7F4F;
+  --clay: #C68A5E;
+
+  --accent-search: var(--moss);
+  --accent-task: #7FAFC4;
+  --accent-diary: var(--clay);
+  --accent-chat: #B08FC4;
+
+  /* コントロールパネルの危険度表現(安全=苔色/要注意=テラコッタ/危険=コーラル)。
+     安全・要注意は既存のaccent-search/accent-diaryと同系色に揃えている。 */
+  --safe: var(--accent-search);
+  --safe-bg: rgba(143, 160, 107, 0.1);
+  --caution: var(--accent-diary);
+  --caution-bg: rgba(198, 138, 94, 0.1);
+  --danger: #C97A6E;
+  --danger-bg: rgba(201, 122, 110, 0.1);
+  --info: var(--accent-task);
+
+  /* 図書館UI(2026-08-12)のカテゴリ色分け。既存のaccent-*と値が重なる部分も
+     あるが、「会話モードの強調色」と「蔵書カテゴリの色分け」は意味的に別の
+     概念のため、専用のトークンとして分ける。 */
+  --category-profile: var(--moss);
+  --category-garden: var(--clay);
+  --category-portfolio: #7FAFC4;
+  --category-memo: #B08FC4;
+
+  --font-display: 'Shippori Mincho', serif;
+  --font-body: 'Noto Sans JP', sans-serif;
+}

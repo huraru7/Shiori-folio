@@ -1,0 +1,26 @@
+.orb-core {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.orb-core__center {
+  position: relative;
+  border-radius: 50%;
+  filter: blur(1px);
+  /* 配色転換(2026-08-12)に合わせてグローを全体的に弱めている(40px→18px)。 */
+  box-shadow: 0 0 18px currentColor;
+}
+
+.orb-core__label {
+  position: absolute;
+  bottom: -32px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  color: var(--paper-dim);
+}

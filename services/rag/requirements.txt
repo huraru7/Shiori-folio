@@ -1,0 +1,8 @@
+chromadb
+fastapi
+uvicorn[standard]
+httpx
+tiktoken
+ragas
+sentence-transformers
+rapidfuzz

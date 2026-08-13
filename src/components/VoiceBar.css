@@ -1,0 +1,53 @@
+.voice-bar {
+  flex: 0 0 auto;
+  margin: 0 clamp(14px, 2vw, 32px) 20px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 8px 14px;
+}
+
+.voice-bar__mic {
+  background: transparent;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: var(--paper-dim);
+}
+
+.voice-bar__mic--active {
+  color: var(--accent-search);
+}
+
+.voice-bar__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--paper);
+  font-family: var(--font-body);
+}
+
+.voice-bar__submit {
+  /* 「押せる場所が分かりにくい」問題への対策(2026-08-12)。輪郭線・透明スタイル
+     をやめ、塗りつぶしの実線ボタンにしている。 */
+  background: var(--moss);
+  border: none;
+  border-radius: 9px;
+  padding: 7px 16px;
+  color: var(--bg-deep);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 0.8rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.voice-bar__submit:hover {
+  background: var(--moss-deep);
+}

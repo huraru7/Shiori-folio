@@ -1,0 +1,504 @@
+.control-panel {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+  color: var(--paper);
+  font-family: var(--font-body);
+}
+
+.control-panel__sidebar {
+  flex: 0 0 auto;
+  width: clamp(70px, 30%, 140px);
+  min-width: 0;
+  padding: 10px 0;
+  border-right: 0.5px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.015);
+  overflow-y: auto;
+}
+
+.control-panel__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  font-size: 11px;
+  color: var(--paper-dim);
+  cursor: pointer;
+  border-right: 2px solid transparent;
+  transition: color 0.2s ease;
+  min-width: 0;
+}
+
+.control-panel__nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-panel__nav-item:hover {
+  color: var(--paper);
+}
+
+.control-panel__nav-item--active {
+  background: var(--glass);
+  border-right-color: var(--moss);
+  color: var(--paper);
+}
+
+.control-panel__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--paper-dim);
+  flex-shrink: 0;
+}
+
+.control-panel__dot--safe {
+  background: var(--safe);
+}
+
+.control-panel__dot--caution {
+  background: var(--caution);
+}
+
+.control-panel__dot--danger {
+  background: var(--danger);
+}
+
+.control-panel__main {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.control-panel__page-head {
+  margin-bottom: 28px;
+}
+
+.control-panel__page-head h1 {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.control-panel__page-head p {
+  font-size: 12px;
+  color: var(--paper-dim);
+  margin-top: 6px;
+}
+
+.control-panel__error {
+  font-size: 12px;
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 0.5px solid rgba(232, 96, 122, 0.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 16px;
+}
+
+.control-panel__panel {
+  min-width: 0;
+  background: var(--glass);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 14px;
+  padding: 20px 22px;
+  backdrop-filter: blur(10px);
+  margin-bottom: 18px;
+}
+
+.control-panel__panel-label {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--paper-dim);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+/* ウィンドウ幅(コンテナ幅)に応じて自動的に列数が変わるようにする。
+   以前はビューポート基準の@media(min-width:760px)で列数を切り替えていたが、
+   これはアプリ全体のウィンドウ幅を見てしまい、コンパクトな設定ウィンドウ
+   (実際の表示幅)では常に4列のままはみ出す原因になっていた
+   (2026-08-12、ウィンドウシステムの表示崩れ修正)。 */
+.control-panel__gauge-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.control-panel__sparkline {
+  width: 100%;
+  height: 20px;
+  margin-top: 8px;
+  color: inherit;
+  opacity: 0.8;
+}
+
+.control-panel__disk-io {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+  font-size: 11.5px;
+  color: var(--paper-dim);
+}
+
+.control-panel__service-model {
+  color: var(--paper-dim);
+  font-size: 11px;
+}
+
+.control-panel__service-usage {
+  color: var(--paper-dim);
+  font-size: 10px;
+  margin-left: 4px;
+}
+
+.control-panel__gauge {
+  min-width: 0;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+}
+
+.control-panel__gauge-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 10px;
+}
+
+.control-panel__gauge-name {
+  min-width: 0;
+  font-size: 12px;
+  color: var(--paper-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.control-panel__gauge-val {
+  flex-shrink: 0;
+  font-size: 18px;
+  font-family: var(--font-display);
+  color: var(--paper);
+}
+
+.control-panel__gauge-val--safe {
+  color: var(--safe);
+}
+
+.control-panel__gauge-val--caution {
+  color: var(--caution);
+}
+
+.control-panel__gauge-val--danger {
+  color: var(--danger);
+}
+
+.control-panel__gauge-bar {
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+.control-panel__gauge-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+.control-panel__gauge-fill--safe {
+  background: var(--safe);
+}
+
+.control-panel__gauge-fill--caution {
+  background: var(--caution);
+}
+
+.control-panel__gauge-fill--danger {
+  background: var(--danger);
+}
+
+.control-panel__gauge-sub {
+  font-size: 10px;
+  color: var(--paper-dim);
+  margin-top: 8px;
+}
+
+.control-panel__service-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.control-panel__service-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12.5px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.control-panel__debug-table-wrap {
+  overflow-x: auto;
+}
+
+.control-panel__debug-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.control-panel__debug-table th,
+.control-panel__debug-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--glass-border);
+  white-space: nowrap;
+}
+
+.control-panel__debug-table th {
+  color: var(--paper-dim);
+  font-weight: 500;
+}
+
+.control-panel__service-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--paper-dim);
+}
+
+.control-panel__pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--safe);
+  box-shadow: 0 0 5px var(--safe);
+}
+
+.control-panel__pc-info {
+  font-size: 12px;
+  color: var(--paper-dim);
+  line-height: 1.8;
+}
+
+/* ===== フォーム系(音声設定・詳細設定) ===== */
+
+.control-panel__slider-row {
+  margin: 16px 0;
+}
+
+.control-panel__slider-top {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.control-panel__slider-val {
+  color: var(--info);
+  font-family: var(--font-display);
+}
+
+.control-panel__slider-input {
+  width: 100%;
+  accent-color: var(--info);
+}
+
+.control-panel__field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  gap: 16px;
+}
+
+.control-panel__field-label {
+  font-size: 13px;
+  color: var(--paper-dim);
+}
+
+.control-panel__text-input {
+  background: rgba(255, 255, 255, 0.03);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--paper);
+  font-size: 13px;
+  padding: 6px 10px;
+  width: 160px;
+  font-family: var(--font-body);
+}
+
+.control-panel__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.control-panel__btn {
+  font-size: 12px;
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 0.5px solid var(--glass-border);
+  background: var(--glass);
+  color: var(--paper);
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.control-panel__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-panel__btn--primary {
+  /* 「押せる場所が分かりにくい」問題への対策(2026-08-12)。輪郭線・透明スタイル
+     をやめ、塗りつぶしの実線ボタンにしている。 */
+  background: var(--moss);
+  border-color: var(--moss);
+  color: var(--bg-deep);
+  font-weight: 700;
+}
+
+.control-panel__btn--primary:hover:not(:disabled) {
+  background: var(--moss-deep);
+  border-color: var(--moss-deep);
+}
+
+.control-panel__note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.control-panel__note--safe {
+  color: var(--safe);
+  background: var(--safe-bg);
+  border: 0.5px solid rgba(74, 222, 156, 0.3);
+}
+
+.control-panel__note--caution {
+  color: var(--caution);
+  background: var(--caution-bg);
+  border: 0.5px solid rgba(232, 184, 122, 0.3);
+}
+
+.control-panel__note--danger {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border: 0.5px solid rgba(232, 96, 122, 0.3);
+}
+
+.control-panel__note .control-panel__actions {
+  margin-top: 10px;
+}
+
+/* ===== ナビ無効化(モデル切替中) ===== */
+
+.control-panel__nav-item--disabled,
+.control-panel__back--disabled {
+  opacity: 0.4;
+  pointer-events: none;
+  cursor: not-allowed;
+}
+
+/* ===== モデル切替(危険ゾーン) ===== */
+
+.control-panel__page-head-danger {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--danger);
+}
+
+.control-panel__panel--danger {
+  border: 0.5px solid rgba(232, 96, 122, 0.3);
+  background: linear-gradient(180deg, rgba(232, 96, 122, 0.05), transparent 60%);
+}
+
+.control-panel__danger-warn {
+  background: rgba(232, 96, 122, 0.08);
+  border: 0.5px solid rgba(232, 96, 122, 0.25);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.control-panel__model-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 0.5px solid transparent;
+  gap: 16px;
+}
+
+.control-panel__model-card--current {
+  border-color: rgba(74, 222, 156, 0.3);
+  background: var(--safe-bg);
+}
+
+.control-panel__model-name {
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-panel__model-meta {
+  font-size: 10.5px;
+  color: var(--paper-dim);
+  margin-top: 4px;
+}
+
+.control-panel__badge {
+  font-size: 9.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  letter-spacing: 0.05em;
+}
+
+.control-panel__badge--safe {
+  background: var(--safe-bg);
+  color: var(--safe);
+  border: 0.5px solid rgba(74, 222, 156, 0.35);
+}
+
+.control-panel__btn--danger {
+  background: rgba(232, 96, 122, 0.12);
+  border-color: rgba(232, 96, 122, 0.4);
+  color: var(--danger);
+}
+
+.control-panel__restart-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--caution);
+  margin-top: 14px;
+  background: var(--caution-bg);
+  border: 0.5px solid rgba(232, 184, 122, 0.3);
+  padding: 8px 12px;
+  border-radius: 8px;
+}

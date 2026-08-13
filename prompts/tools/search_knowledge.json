@@ -1,0 +1,14 @@
+{
+  "type": "function",
+  "function": {
+    "name": "search_knowledge",
+    "description": "ふらるさんと積み重ねてきた過去のメモ・エッセイ・作品説明ドラフトの記憶を検索する。「調べて」「前に何か言ってたっけ」のように、明示的に検索を頼まれたときに使う。",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": { "type": "string", "description": "検索したい内容" }
+      },
+      "required": ["query"]
+    }
+  }
+}

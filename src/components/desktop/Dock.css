@@ -1,0 +1,67 @@
+.dock-wrap {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: center;
+  padding: 10px 0 12px;
+  /* タスクバーはウィンドウより常に手前(2026-08-12、UI/UX改善指示書5章)。
+     desktop-areaと同じ重なりコンテキスト内で確実に最前面になるよう、
+     ウィンドウのzIndex(useWindowStore、10始まり)より十分大きい値にしている。 */
+  position: relative;
+  z-index: 1000;
+}
+
+.dock {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background: rgba(23, 21, 15, 0.75);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 18px;
+  padding: 8px 14px;
+  /* ウィンドウがタスクバーの下に潜り込む部分だけ、すりガラス越しに見える表現に
+     なる(4章の「ウィンドウ同士は不透明」ルールの、タスクバーに限った例外)。 */
+  backdrop-filter: blur(14px);
+}
+
+.dock__divider {
+  width: 0.5px;
+  height: 26px;
+  background: var(--glass-border);
+  margin: 0 2px;
+  align-self: center;
+}
+
+.dock__icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  background: var(--glass);
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s ease;
+}
+
+.dock__icon:hover {
+  transform: translateY(-4px) scale(1.08);
+}
+
+.dock__dot {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--moss);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.dock__dot--active {
+  opacity: 1;
+}

@@ -1,0 +1,32 @@
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px clamp(14px, 2vw, 28px);
+  border-bottom: 0.5px solid var(--glass-border);
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.top-bar__logo {
+  display: flex;
+  align-items: center;
+}
+
+.top-bar__logo-mark {
+  display: block;
+  height: 28px;
+  width: auto;
+}
+
+.top-bar__datetime {
+  font-size: 10px;
+  color: var(--paper-dim);
+  text-align: right;
+  line-height: 1.5;
+  flex-shrink: 0;
+}
+
+.top-bar__date {
+  opacity: 0.75;
+}

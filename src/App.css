@@ -1,0 +1,66 @@
+* {
+  box-sizing: border-box;
+}
+
+/* スクロールバーを見た目上は隠しつつ、スクロール機能自体は維持する
+   (2026-08-12、UI/UX改善指示書3章のレスポンシブ要件)。 */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
+html, body, #root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(circle at 50% 30%, var(--bg) 0%, var(--bg-deep) 100%);
+  color: var(--paper);
+  font-family: var(--font-body);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-width: 0;
+}
+
+/* ヘッダー(全幅)の下、本体行を左3:右7で常に維持する
+   (flex-basis:0 + min-width:0で、どんなウィンドウ幅でも比率が崩れない)。 */
+.app__body {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+}
+
+.app__left {
+  flex: 3 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-right: 0.5px solid var(--glass-border);
+}
+
+/* キャラクター表示エリア＋入力欄を1つの「下部エリア」としてまとめ、
+   常に左ゾーンの下部に固定する(2026-08-12、0-2)。チャットログ(flex:1)が
+   上の残りスペースを使い、下から積み上がる。 */
+.app__left-bottom {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.app__right {
+  flex: 7 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}

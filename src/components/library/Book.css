@@ -1,0 +1,118 @@
+/* 表紙カード方式の本。window-contents-concept.htmlのモックアップから移植
+   (2026-08-12、デスクトップ型ウィンドウシステムの本実装)。 */
+
+.book {
+  position: relative;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.book::before {
+  /* 本の側面のアクセント(縦の細ライン)。物理的な本の背の名残として残す。 */
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.book:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.4);
+}
+
+.book__title {
+  font-family: var(--font-display);
+  line-height: 1.3;
+  margin-top: auto;
+  margin-left: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: rgba(0, 0, 0, 0.72);
+  font-weight: 600;
+}
+
+/* ナレッジウィンドウ用(3-1)。 */
+.book--md {
+  width: 68px;
+  height: 92px;
+  padding: 7px 7px 5px;
+}
+.book--md .book__title {
+  font-size: 9.5px;
+}
+
+/* 図書館ウィンドウ用(3-2、コンパクト)。 */
+.book--sm {
+  width: 52px;
+  height: 70px;
+  padding: 6px 6px 4px;
+}
+.book--sm .book__title {
+  font-size: 8px;
+}
+
+.book--profile {
+  background: linear-gradient(160deg, #a8ba84, var(--moss));
+}
+.book--garden {
+  background: linear-gradient(160deg, #dda97e, var(--clay));
+}
+.book--portfolio {
+  background: linear-gradient(160deg, #a9cedd, #7fafc4);
+}
+.book--memo {
+  background: linear-gradient(160deg, #d2b8dd, #b08fc4);
+}
+.book--uncategorized {
+  background: linear-gradient(160deg, #cfcfcf, #a3a3a3);
+}
+
+/* ===== 司書が持ってくる棚: 魔法のように集まってくる演出 ===== */
+@keyframes book-gather {
+  0% {
+    opacity: 0;
+    transform: translate(var(--fx, 0), var(--fy, -60px)) scale(0.5) rotate(var(--fr, -12deg));
+    filter: blur(3px);
+  }
+  55% {
+    opacity: 1;
+    filter: blur(0);
+  }
+  75% {
+    transform: translate(0, -6px) scale(1.04) rotate(0deg);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0, 0) scale(1) rotate(0deg);
+    filter: blur(0);
+  }
+}
+
+@keyframes book-settle-glow {
+  0% {
+    box-shadow: 0 0 0 rgba(143, 160, 107, 0);
+  }
+  50% {
+    box-shadow: 0 0 14px 3px rgba(143, 160, 107, 0.5);
+  }
+  100% {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  }
+}
+
+.book--gathering {
+  animation:
+    book-gather 0.85s cubic-bezier(0.2, 0.7, 0.3, 1) both,
+    book-settle-glow 0.85s ease-out both;
+}

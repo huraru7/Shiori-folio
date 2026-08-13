@@ -1,0 +1,16 @@
+{
+  "rules": [
+    { "id": "person-001", "pattern": "詩織は", "replacement": "私は" },
+    { "id": "person-002", "pattern": "詩織が", "replacement": "私が" },
+    { "id": "person-003", "pattern": "詩織も", "replacement": "私も" },
+    { "id": "person-004", "pattern": "詩織の", "replacement": "私の" },
+    { "id": "person-005", "pattern": "しおりさんは", "replacement": "私は" },
+    { "id": "person-006", "pattern": "しおりさんが", "replacement": "私が" },
+    { "id": "person-007", "pattern": "しおりさんも", "replacement": "私も" },
+    { "id": "person-008", "pattern": "しおりさんの", "replacement": "私の" },
+    { "id": "person-009", "pattern": "詩織さんは", "replacement": "私は" },
+    { "id": "person-010", "pattern": "詩織さんが", "replacement": "私が" },
+    { "id": "person-011", "pattern": "詩織さんも", "replacement": "私も" },
+    { "id": "person-012", "pattern": "詩織さんの", "replacement": "私の" }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "rules": [
+    { "id": "query-001", "pattern": "んだっけ", "replacement": "" },
+    { "id": "query-002", "pattern": "だっけ", "replacement": "" },
+    { "id": "query-003", "pattern": "かな", "replacement": "" },
+    { "id": "query-004", "pattern": "かも", "replacement": "" }
+  ]
+}

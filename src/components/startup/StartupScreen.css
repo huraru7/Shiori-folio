@@ -1,0 +1,57 @@
+.startup-screen {
+  position: fixed;
+  inset: 0;
+  /* Dock(フリースペースのタスクバー、.dock-wrap)がz-index:1000のため、それより
+     確実に手前に来るよう余裕を持たせる(以前は同値でDOM順の関係からDockが
+     起動画面より前面に出てしまっていた、2026-08-13)。 */
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: var(--bg-deep);
+  opacity: 1;
+  transition: opacity 500ms ease;
+}
+
+.startup-screen--fade-out {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.startup-screen__mark-wrap {
+  position: relative;
+  width: clamp(120px, 22vw, 220px);
+}
+
+.startup-screen__mark {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.startup-screen__mark--gray {
+  filter: grayscale(100%);
+  opacity: 0.55;
+}
+
+.startup-screen__mark--color {
+  position: absolute;
+  inset: 0;
+}
+
+/* バックエンド起動完了を検知してから100%まで一気に埋める区間だけ、
+   clip-pathの変化を滑らかに見せる(通常時はJS側のrequestAnimationFrameが
+   毎フレーム値を更新するので、transitionを常時有効にすると二重に遅延して
+   実際の進み方とズレてしまう)。 */
+.startup-screen__mark--color--catchup {
+  transition: clip-path 400ms ease-out;
+}
+
+.startup-screen__stage-label {
+  font-family: var(--font-body);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--paper-dim);
+}

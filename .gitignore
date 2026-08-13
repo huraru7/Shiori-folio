@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# モデルファイル・データ（容量が大きいためGit管理外）
+models/**/*.gguf
+models/**/*.bin
+models/**/*.onnx
+data/vectordb/
+data/shiori.db
+
+# Rustビルド成果物（OS依存・容量大、Git管理外。docs/setup-third-party.mdの手順で再現）
+src-tauri/target/
+
+# Python仮想環境・キャッシュ（OS依存、Git管理外）
+services/**/.venv/
+services/**/__pycache__/
+services/**/*.pyc
+
+# third_party配下は各エンジンの実クローン（独自の.gitを持つ）。
+# サブモジュール化していないため、そのままでは中身が空扱いで消失する事故を防ぐため丸ごと除外。
+# 再現手順とコミット固定バージョンは docs/setup-third-party.md 参照。
+third_party/*/

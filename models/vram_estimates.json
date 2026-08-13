@@ -1,0 +1,7 @@
+{
+  "qwen2.5-3b-instruct-q4_k_m.gguf": 2.9,
+  "qwen2.5-7b-instruct-iq4_xs.gguf": 4.33,
+  "Qwen_Qwen3-8B-IQ4_XS.gguf": 5.27,
+  "Qwen_Qwen3-4B-IQ4_XS.gguf": 3.43,
+  "google_gemma-3-4b-it-Q4_K_M.gguf": 3.18
+}

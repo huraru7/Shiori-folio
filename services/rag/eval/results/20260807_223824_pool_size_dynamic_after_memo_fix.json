@@ -1,0 +1,346 @@
+{
+  "summary": {
+    "tag": "pool_size_dynamic_after_memo_fix",
+    "timestamp": "2026-08-07T22:38:24",
+    "top_k": 5,
+    "n_items_scored": 25,
+    "n_items_not_found_case": 3,
+    "mean_context_precision": 0.9999999998999999,
+    "mean_context_recall": 1.0,
+    "hit_rate_at_k": 1.0,
+    "not_found_correct_rate": 1.0
+  },
+  "items": [
+    {
+      "user_input": "詩織の由来って何？",
+      "expected_context": [
+        "profile-profile-huraru-37"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-37"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織ってなんでその名前なの",
+      "expected_context": [
+        "profile-profile-huraru-37"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-37"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織のキャラクター名の由来って何だっけ",
+      "expected_context": [
+        "profile-profile-huraru-37"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-37"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織はどのLLMを使ってるの？",
+      "expected_context": [
+        "profile-profile-huraru-31"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-31"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織って何のLLM使ってるんだっけ",
+      "expected_context": [
+        "profile-profile-huraru-31"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-31"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織の頭脳って何？",
+      "expected_context": [
+        "profile-profile-huraru-31"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-31"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織の音声認識は何を使ってるの？",
+      "expected_context": [
+        "profile-profile-huraru-32"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-32"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織の声って何のTTS使ってるんだっけ",
+      "expected_context": [
+        "profile-profile-huraru-32"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-32"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織はどうやって記憶を探すの？",
+      "expected_context": [
+        "profile-profile-huraru-33"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-33"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "huraru.comのベースカラーって何？",
+      "expected_context": [
+        "profile-profile-huraru-6"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-6"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "huraru.comのベースカラーって何だっけ、調べて教えて",
+      "expected_context": [
+        "profile-profile-huraru-6"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-6"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "huraru.comのフォントは何を使ってる？",
+      "expected_context": [
+        "profile-profile-huraru-8"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-8"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "huraru.comのレイアウトはどうなってるの？",
+      "expected_context": [
+        "profile-profile-huraru-9"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-9"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "portfolio.huraru.comのページ構成はどうなってる？",
+      "expected_context": [
+        "profile-profile-huraru-12"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-12",
+        "profile-profile-huraru-2",
+        "profile-profile-huraru-15"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "lab.huraru.comのビルド方針は？",
+      "expected_context": [
+        "profile-profile-huraru-18"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-18"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織にできることは何？",
+      "expected_context": [
+        "profile-profile-huraru-34"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-34",
+        "profile-profile-huraru-35"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織にまだできないことは何？",
+      "expected_context": [
+        "profile-profile-huraru-35"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-35",
+        "profile-profile-huraru-34"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織の将来の目標は何？",
+      "expected_context": [
+        "profile-profile-huraru-36"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-36"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織の開発環境は何？",
+      "expected_context": [
+        "profile-profile-huraru-30"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-30"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "huraru.comの参照サイトは？",
+      "expected_context": [
+        "profile-profile-huraru-10"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-10",
+        "profile-profile-huraru-2"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "詩織の血液型って何だっけ",
+      "expected_context": [],
+      "retrieved_ids": [],
+      "context_precision": null,
+      "context_recall": null,
+      "not_found_correct": true
+    },
+    {
+      "user_input": "詩織の誕生日はいつ？",
+      "expected_context": [],
+      "retrieved_ids": [],
+      "context_precision": null,
+      "context_recall": null,
+      "not_found_correct": true
+    },
+    {
+      "user_input": "詩織の好きな食べ物は何？",
+      "expected_context": [],
+      "retrieved_ids": [],
+      "context_precision": null,
+      "context_recall": null,
+      "not_found_correct": true
+    },
+    {
+      "user_input": "huraru.comのビジュアル演出はどんな技術を使ってる？",
+      "expected_context": [
+        "profile-profile-huraru-7"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-7"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "ポジショニングの一貫性ってどういう考え方？",
+      "expected_context": [
+        "profile-profile-huraru-22"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-22"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "順番の組み替えってどういう考え方？",
+      "expected_context": [
+        "profile-profile-huraru-23"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-23"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "lab.huraru.comの対応予定範囲は？",
+      "expected_context": [
+        "profile-profile-huraru-19"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-19"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    },
+    {
+      "user_input": "portfolio.huraru.comの作品説明文はどう書く方針？",
+      "expected_context": [
+        "profile-profile-huraru-16"
+      ],
+      "retrieved_ids": [
+        "profile-profile-huraru-16",
+        "profile-profile-huraru-11",
+        "profile-profile-huraru-12"
+      ],
+      "context_precision": 0.9999999999,
+      "context_recall": 1.0,
+      "hit_at_k": true
+    }
+  ]
+}

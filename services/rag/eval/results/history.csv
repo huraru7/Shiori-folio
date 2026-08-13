@@ -1,0 +1,7 @@
+tag,timestamp,top_k,n_items_scored,n_items_not_found_case,mean_context_precision,mean_context_recall,hit_rate_at_k,not_found_correct_rate
+baseline,2026-08-07T17:28:03,5,20,3,0.49583333328375,0.7,0.7,0.0
+with_reranker,2026-08-07T17:34:38,5,20,3,0.749999999925,0.75,0.75,1.0
+with_reranker_pool30,2026-08-07T17:38:14,5,20,3,0.9999999999,1.0,1.0,1.0
+with_reranker_extended_dataset,2026-08-07T17:50:28,5,25,3,0.9999999998999999,1.0,1.0,1.0
+pool_size_dynamic_after_memo_fix,2026-08-07T22:38:24,5,25,3,0.9999999998999999,1.0,1.0,1.0
+remove_redundant_distance_filter,2026-08-07T22:54:35,5,25,3,0.9999999998999999,1.0,1.0,1.0

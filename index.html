@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>詩織（Shiori-folio）</title>
+    <!-- tokens.cssの読み込み(JSバンドル経由)を待たず、HTML解析直後から
+         ダーク背景にしておく。ネイティブウィンドウ側のbackgroundColor設定
+         (tauri.conf.json)と合わせて、起動時の白いフラッシュを防ぐ。 -->
+    <style>
+      html,
+      body {
+        background: #100f0a;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

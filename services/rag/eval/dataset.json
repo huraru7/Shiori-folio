@@ -1,0 +1,146 @@
+{
+  "_note": "expected_context はChromaDBのchunk ID(ingest.pyの`{category}-{stem}-{i}`形式)。library/以下のMarkdownを編集して見出し構成が変わると、チャンク分割位置がずれてIDが変わる可能性があるため、ドキュメントを大きく編集した後は`services/rag/eval/dump_chunks.py`等でID一覧を再確認すること。expected_contextが空配列の項目は「該当情報が存在しない」ことを期待するケース(ハルシネーション検知用)。",
+  "items": [
+    {
+      "user_input": "詩織の由来って何？",
+      "reference": "「詩織」は「詩を織る」という意味と「栞」の響きを併せ持ち、huraru.comの「深夜の図書館」という世界観と地続きの存在でありたいという思いからつけられた名前。",
+      "expected_context": ["profile-profile-huraru-37"]
+    },
+    {
+      "user_input": "詩織ってなんでその名前なの",
+      "reference": "「詩織」は「詩を織る」という意味と「栞」の響きを併せ持ち、huraru.comの「深夜の図書館」という世界観と地続きの存在でありたいという思いからつけられた名前。",
+      "expected_context": ["profile-profile-huraru-37"]
+    },
+    {
+      "user_input": "詩織のキャラクター名の由来って何だっけ",
+      "reference": "「詩織」は「詩を織る」という意味と「栞」の響きを併せ持ち、huraru.comの「深夜の図書館」という世界観と地続きの存在でありたいという思いからつけられた名前。",
+      "expected_context": ["profile-profile-huraru-37"]
+    },
+    {
+      "user_input": "詩織はどのLLMを使ってるの？",
+      "reference": "Qwen2.5-7B-Instruct(IQ4_XS量子化、llama.cpp)。",
+      "expected_context": ["profile-profile-huraru-31"]
+    },
+    {
+      "user_input": "詩織って何のLLM使ってるんだっけ",
+      "reference": "Qwen2.5-7B-Instruct(IQ4_XS量子化、llama.cpp)。",
+      "expected_context": ["profile-profile-huraru-31"]
+    },
+    {
+      "user_input": "詩織の頭脳って何？",
+      "reference": "Qwen2.5-7B-Instruct(IQ4_XS量子化、llama.cpp)。",
+      "expected_context": ["profile-profile-huraru-31"]
+    },
+    {
+      "user_input": "詩織の音声認識は何を使ってるの？",
+      "reference": "音声認識(STT)はwhisper.cpp、音声合成(TTS)はpiper-plus(つくよみちゃんボイス)。",
+      "expected_context": ["profile-profile-huraru-32"]
+    },
+    {
+      "user_input": "詩織の声って何のTTS使ってるんだっけ",
+      "reference": "音声合成(TTS)はpiper-plus(つくよみちゃんボイス)。",
+      "expected_context": ["profile-profile-huraru-32"]
+    },
+    {
+      "user_input": "詩織はどうやって記憶を探すの？",
+      "reference": "ChromaDBでふらるさんの過去の記録を検索する。話しかけられるたびに軽く探し、「調べて」と頼まれたときはより丁寧に探す。",
+      "expected_context": ["profile-profile-huraru-33"]
+    },
+    {
+      "user_input": "huraru.comのベースカラーって何？",
+      "reference": "ベースカラーは#080C14(深青)。ガーデン要素にはグリーンをアクセントカラーとして使用。",
+      "expected_context": ["profile-profile-huraru-6"]
+    },
+    {
+      "user_input": "huraru.comのベースカラーって何だっけ、調べて教えて",
+      "reference": "ベースカラーは#080C14(深青)。ガーデン要素にはグリーンをアクセントカラーとして使用。",
+      "expected_context": ["profile-profile-huraru-6"]
+    },
+    {
+      "user_input": "huraru.comのフォントは何を使ってる？",
+      "reference": "見出し・表示用にShippori Minchoを使用している。",
+      "expected_context": ["profile-profile-huraru-8"]
+    },
+    {
+      "user_input": "huraru.comのレイアウトはどうなってるの？",
+      "reference": "コンテンツスコアに応じてカードが1〜3列スパンする「breathing grid」というレイアウト。",
+      "expected_context": ["profile-profile-huraru-9"]
+    },
+    {
+      "user_input": "portfolio.huraru.comのページ構成はどうなってる？",
+      "reference": "ファーストビュー→自己紹介→代表作3点→全作品アーカイブ、という構成。",
+      "expected_context": ["profile-profile-huraru-12"]
+    },
+    {
+      "user_input": "lab.huraru.comのビルド方針は？",
+      "reference": "ビルドツールを使う実験はローカルでビルドし、コンパイル済み出力のみをコミットする(CI/CDは使用しない)。",
+      "expected_context": ["profile-profile-huraru-18"]
+    },
+    {
+      "user_input": "詩織にできることは何？",
+      "reference": "ふらるさんの進めているプロジェクトの進捗を記録・確認できる。",
+      "expected_context": ["profile-profile-huraru-34"]
+    },
+    {
+      "user_input": "詩織にまだできないことは何？",
+      "reference": "以前あった日記のように会話を要約して記録する機能は廃止した。",
+      "expected_context": ["profile-profile-huraru-35"]
+    },
+    {
+      "user_input": "詩織の将来の目標は何？",
+      "reference": "将来的にはUSBにアプリ本体・記憶・頭脳をすべて入れて持ち運べるようにする予定(ポータブル化)。",
+      "expected_context": ["profile-profile-huraru-36"]
+    },
+    {
+      "user_input": "詩織の開発環境は何？",
+      "reference": "Windows+NVIDIA GPU環境で、Tauri(Vite+React+TypeScript/Rust)を使ってデスクトップアプリとして作られている。",
+      "expected_context": ["profile-profile-huraru-30"]
+    },
+    {
+      "user_input": "huraru.comの参照サイトは？",
+      "reference": "Maggie Appletonのデジタルガーデン(maggieappleton.com/garden)を参照している。",
+      "expected_context": ["profile-profile-huraru-10"]
+    },
+    {
+      "user_input": "詩織の血液型って何だっけ",
+      "reference": "該当する記録は存在しない。捏造せず「分からない」と答えるべきケース。",
+      "expected_context": []
+    },
+    {
+      "user_input": "詩織の誕生日はいつ？",
+      "reference": "該当する記録は存在しない。捏造せず「分からない」と答えるべきケース。",
+      "expected_context": []
+    },
+    {
+      "user_input": "詩織の好きな食べ物は何？",
+      "reference": "該当する記録は存在しない。捏造せず「分からない」と答えるべきケース。",
+      "expected_context": []
+    },
+    {
+      "_note": "以下は軽い回帰テストペア(2026-08-07追加)。見出しが近い/話題が隣接するチャンク同士を混同しないかを見るための最小限の追加で、大規模な拡充はフェーズ4(実データ投入)時に行う。",
+      "user_input": "huraru.comのビジュアル演出はどんな技術を使ってる？",
+      "reference": "Three.js＋カスタムシェーダーによるパーティクル・コンステレーションライン等。カードはグラスモーフィズムで表現。",
+      "expected_context": ["profile-profile-huraru-7"]
+    },
+    {
+      "user_input": "ポジショニングの一貫性ってどういう考え方？",
+      "reference": "多ジャンルの幅広さを、同じ思想を異なる媒体で検証し続けている人として読めるよう設計し、一貫性として機能させる考え方。",
+      "expected_context": ["profile-profile-huraru-22"]
+    },
+    {
+      "user_input": "順番の組み替えってどういう考え方？",
+      "reference": "技術力を消すのではなく「企画判断→技術実装」の順で提示し、プランナーとしての文脈を先に立てる考え方。",
+      "expected_context": ["profile-profile-huraru-23"]
+    },
+    {
+      "user_input": "lab.huraru.comの対応予定範囲は？",
+      "reference": "mediumフィールド(web-demo/video/writeup)で、Web以外の実験(Unity・C++・Python等)にも対応予定。",
+      "expected_context": ["profile-profile-huraru-19"]
+    },
+    {
+      "user_input": "portfolio.huraru.comの作品説明文はどう書く方針？",
+      "reference": "感想ではなく設計判断と理由を書く。選ばなかった選択肢を一行添える。数字で具体化する。",
+      "expected_context": ["profile-profile-huraru-16"]
+    }
+  ]
+}

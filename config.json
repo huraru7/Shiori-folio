@@ -1,0 +1,39 @@
+{
+  "data": {
+    "knowledgePath": "../library",
+    "sqlitePath": "./data/shiori.db",
+    "vectorDbPath": "./data/vectordb"
+  },
+  "embedding": {
+    "modelPath": "./models/embed/nomic-embed-text.gguf",
+    "port": 8082
+  },
+  "hotkey": "Ctrl+Alt+S",
+  "llm": {
+    "contextSize": 8192,
+    "gpuLayers": 999,
+    "modelPath": "./models/llm/Qwen_Qwen3-8B-IQ4_XS.gguf",
+    "port": 8080
+  },
+  "rag": {
+    "passiveRecallThreshold": 0.61,
+    "port": 8083
+  },
+  "stt": {
+    "modelPath": "./models/stt/ggml-medium.bin",
+    "port": 8081
+  },
+  "ui": {
+    "showYear": true,
+    "showMonth": true,
+    "showDay": true,
+    "showWeekday": false
+  },
+  "tts": {
+    "configPath": "./models/tts/tsukuyomi-chan.json",
+    "lengthScale": 1.0,
+    "modelPath": "./models/tts/tsukuyomi-chan.onnx",
+    "noiseScale": 0.667,
+    "noiseW": 0.8
+  }
+}

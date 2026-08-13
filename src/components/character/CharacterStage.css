@@ -1,0 +1,9 @@
+.character-stage {
+  flex: 0 0 auto;
+  position: relative;
+  height: clamp(120px, 22vh, 220px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 14px;
+}

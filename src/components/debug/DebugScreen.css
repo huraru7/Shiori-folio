@@ -1,0 +1,43 @@
+.debug-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(ellipse at 50% 20%, var(--bg) 0%, var(--bg-deep) 100%);
+  color: var(--paper);
+  font-family: var(--font-body);
+}
+
+.debug-screen__top {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px 30px;
+  border-bottom: 0.5px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.debug-screen__title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  letter-spacing: 0.06em;
+}
+
+.debug-screen__back {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--paper-dim);
+  cursor: pointer;
+}
+
+.debug-screen__back:hover {
+  color: var(--paper);
+}
+
+/* デバッグ画面は引き続き全画面表示のため、コンパクトウィンドウ向けに
+   縮めたControlPanel.cssの.control-panel__main paddingを読みやすい幅に戻す。 */
+.debug-screen .control-panel__main {
+  max-width: 900px;
+  padding: 36px 44px;
+}

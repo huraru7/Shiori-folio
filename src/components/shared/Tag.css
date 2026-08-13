@@ -1,0 +1,22 @@
+.tag {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-family: var(--font-body);
+}
+
+.tag--warm {
+  background: color-mix(in srgb, var(--accent-diary) 20%, transparent);
+  color: var(--accent-diary);
+}
+
+.tag--teal {
+  background: color-mix(in srgb, var(--accent-search) 20%, transparent);
+  color: var(--accent-search);
+}
+
+.tag--cyan {
+  background: color-mix(in srgb, var(--accent-task) 20%, transparent);
+  color: var(--accent-task);
+}
