@@ -55,3 +55,56 @@
   letter-spacing: 0.05em;
   color: var(--paper-dim);
 }
+
+.startup-screen__error-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: clamp(280px, 60vw, 420px);
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--danger-bg);
+  color: var(--danger);
+}
+
+.startup-screen__error-title {
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.startup-screen__error-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.startup-screen__error-service {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+
+.startup-screen__error-detail {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
+.startup-screen__retry-btn {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border: 1px solid var(--danger);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--danger);
+  font-family: var(--font-body);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.startup-screen__retry-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

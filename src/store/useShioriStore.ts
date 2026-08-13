@@ -20,6 +20,19 @@ let backendEventsSetup: Promise<() => void> | null = null;
 // 進行中のPromiseを共有して1回分の起動だけが実行されるようにする。
 let backendServicesStartup: Promise<ServiceStatus[]> | null = null;
 
+// start_backend_services自体はRust側の設計上、各サービスのhealthy:falseを
+// 含んでいても常にOk(...)で返ってくる(通信エラー等の「本当の例外」とは区別が
+// つかない状態でinvoke()が単に成功してしまう)。呼び出し元がhealthyを見落として
+// 「サーバー未起動のままホーム画面へ進む」退行(2026-08-13に発覚)を防ぐため、
+// いずれかのサービスがhealthy:falseの場合はこのエラーとして投げ、通信エラー等の
+// 本当の例外と区別できるようにする。
+export class BackendStartupError extends Error {
+  constructor(public services: ServiceStatus[]) {
+    super("バックエンドサービスの起動に失敗しました");
+    this.name = "BackendStartupError";
+  }
+}
+
 interface ShioriState {
   // 今まさに実行中のツール(表示用の一時的な状態)。ユーザーが手動で選ぶ
   // ものではなく、バックエンドが実行を開始したタイミングでshiori:activity
@@ -175,11 +188,24 @@ export const useShioriStore = create<ShioriState>((set, get) => ({
             set({ startupStageLabel: event.payload.label });
           },
         );
+        let results: ServiceStatus[];
         try {
-          return await api.startBackendServices();
+          results = await api.startBackendServices();
         } finally {
           unlisten();
         }
+        // start_backend_services自体はhealthy:falseでもOk(...)を返す設計のため、
+        // ここで明示的にチェックする(このチェックを飛ばすと、RAGサーバーが
+        // 起動できていないままホーム画面へ進んでしまう)。
+        const unhealthy = results.filter((r) => !r.healthy);
+        if (unhealthy.length > 0) {
+          // 失敗した状態のPromiseをキャッシュしたままにすると、再試行後に
+          // このメソッドを呼び直しても同じ失敗結果が返り続けてしまうため、
+          // キャッシュをクリアして次回呼び出し時に再度起動処理が走るようにする。
+          backendServicesStartup = null;
+          throw new BackendStartupError(results);
+        }
+        return results;
       })();
     }
     return backendServicesStartup;

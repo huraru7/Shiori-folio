@@ -137,7 +137,9 @@ function ControlPanel() {
         )}
         {activeNav === "voice" && <VoiceSettingsPage />}
         {activeNav === "advanced" && <AdvancedSettingsPage />}
-        {activeNav === "model" && <ModelSwitchPage onSwitchingChange={setIsSwitchingModel} />}
+        {activeNav === "model" && (
+          <ModelSwitchPage onSwitchingChange={setIsSwitchingModel} platform={info?.platform ?? null} />
+        )}
       </main>
     </div>
   );
@@ -164,6 +166,9 @@ function SystemStatusPage({
   const tempLevel = info?.gpu?.temperatureC !== null && info?.gpu?.temperatureC !== undefined
     ? levelForTemp(info.gpu.temperatureC)
     : "safe";
+  // Mac(Apple Silicon)にはdiscrete VRAMが存在しない(統合メモリ)ため、
+  // VRAM・GPU温度ゲージ自体を表示せず、システムRAMのゲージに統合メモリである旨を添える。
+  const isMac = info?.platform === "macos";
 
   return (
     <>
@@ -177,38 +182,40 @@ function SystemStatusPage({
       <div className="control-panel__panel">
         <div className="control-panel__panel-label">リソース使用状況</div>
         <div className="control-panel__gauge-row">
-          <div className="control-panel__gauge">
-            <div className="control-panel__gauge-top">
-              <span className="control-panel__gauge-name">VRAM</span>
-              {vramPercent !== null && (
-                <span className={`control-panel__gauge-val control-panel__gauge-val--${levelFor(vramPercent)}`}>
-                  {vramPercent}%
-                </span>
+          {!isMac && (
+            <div className="control-panel__gauge">
+              <div className="control-panel__gauge-top">
+                <span className="control-panel__gauge-name">VRAM</span>
+                {vramPercent !== null && (
+                  <span className={`control-panel__gauge-val control-panel__gauge-val--${levelFor(vramPercent)}`}>
+                    {vramPercent}%
+                  </span>
+                )}
+              </div>
+              {info?.gpu ? (
+                <>
+                  <div className="control-panel__gauge-bar">
+                    <div
+                      className={`control-panel__gauge-fill control-panel__gauge-fill--${levelFor(vramPercent ?? 0)}`}
+                      style={{ width: `${vramPercent}%` }}
+                    />
+                  </div>
+                  <div className="control-panel__gauge-sub">
+                    {formatMb(info.gpu.vramUsedMb)} / {formatMb(info.gpu.vramTotalMb)}
+                  </div>
+                  <div className={`control-panel__gauge-val--${levelFor(vramPercent ?? 0)}`}>
+                    <Sparkline values={vramHistory} max={100} />
+                  </div>
+                </>
+              ) : (
+                <div className="control-panel__gauge-sub">GPU情報を取得できません(nvidia-smi未検出)</div>
               )}
             </div>
-            {info?.gpu ? (
-              <>
-                <div className="control-panel__gauge-bar">
-                  <div
-                    className={`control-panel__gauge-fill control-panel__gauge-fill--${levelFor(vramPercent ?? 0)}`}
-                    style={{ width: `${vramPercent}%` }}
-                  />
-                </div>
-                <div className="control-panel__gauge-sub">
-                  {formatMb(info.gpu.vramUsedMb)} / {formatMb(info.gpu.vramTotalMb)}
-                </div>
-                <div className={`control-panel__gauge-val--${levelFor(vramPercent ?? 0)}`}>
-                  <Sparkline values={vramHistory} max={100} />
-                </div>
-              </>
-            ) : (
-              <div className="control-panel__gauge-sub">GPU情報を取得できません(nvidia-smi未検出)</div>
-            )}
-          </div>
+          )}
 
           <div className="control-panel__gauge">
             <div className="control-panel__gauge-top">
-              <span className="control-panel__gauge-name">システムRAM</span>
+              <span className="control-panel__gauge-name">{isMac ? "統合メモリ" : "システムRAM"}</span>
               {ramPercent !== null && (
                 <span className={`control-panel__gauge-val control-panel__gauge-val--${levelFor(ramPercent)}`}>
                   {ramPercent}%
@@ -223,6 +230,7 @@ function SystemStatusPage({
             </div>
             <div className="control-panel__gauge-sub">
               {info ? `${formatMb(info.ramUsedMb)} / ${formatMb(info.ramTotalMb)}` : "取得中..."}
+              {isMac && "(GPUと共有)"}
             </div>
             <div className={`control-panel__gauge-val--${levelFor(ramPercent ?? 0)}`}>
               <Sparkline values={ramHistory} max={100} />
@@ -247,22 +255,24 @@ function SystemStatusPage({
             <div className="control-panel__gauge-sub">{info?.cpu.model ?? "取得中..."}</div>
           </div>
 
-          <div className="control-panel__gauge">
-            <div className="control-panel__gauge-top">
-              <span className="control-panel__gauge-name">GPU温度</span>
-              {info?.gpu?.temperatureC != null && (
-                <span className={`control-panel__gauge-val control-panel__gauge-val--${tempLevel}`}>
-                  {info.gpu.temperatureC}℃
-                </span>
-              )}
+          {!isMac && (
+            <div className="control-panel__gauge">
+              <div className="control-panel__gauge-top">
+                <span className="control-panel__gauge-name">GPU温度</span>
+                {info?.gpu?.temperatureC != null && (
+                  <span className={`control-panel__gauge-val control-panel__gauge-val--${tempLevel}`}>
+                    {info.gpu.temperatureC}℃
+                  </span>
+                )}
+              </div>
+              <div className="control-panel__gauge-sub">
+                {info?.gpu?.temperatureC == null ? "取得できません" : "80℃以上で注意"}
+              </div>
+              <div className={`control-panel__gauge-val--${tempLevel}`}>
+                <Sparkline values={tempHistory} max={100} />
+              </div>
             </div>
-            <div className="control-panel__gauge-sub">
-              {info?.gpu?.temperatureC == null ? "取得できません" : "80℃以上で注意"}
-            </div>
-            <div className={`control-panel__gauge-val--${tempLevel}`}>
-              <Sparkline values={tempHistory} max={100} />
-            </div>
-          </div>
+          )}
         </div>
 
         {info?.diskThroughput && (
@@ -762,7 +772,16 @@ type SwitchPhase = "idle" | "estimating" | "confirm" | "switching" | "done" | "e
 // - 危険水域(80%目安)が見込まれる場合は警告を強める
 // - 起動失敗時は自動で元のモデルへロールバックする(バックエンド側で実施)
 // - 切替中は他のページへ移動できないようにする(ControlPanel側でナビを無効化)
-function ModelSwitchPage({ onSwitchingChange }: { onSwitchingChange: (v: boolean) => void }) {
+function ModelSwitchPage({
+  onSwitchingChange,
+  platform,
+}: {
+  onSwitchingChange: (v: boolean) => void;
+  platform: string | null;
+}) {
+  // Mac(統合メモリ)はVRAMという概念が無いため、表示文言だけ「メモリ」に差し替える
+  // (APIのフィールド名自体はvram*のままだが、意味的には統合メモリ使用量を指す)。
+  const memLabel = platform === "macos" ? "メモリ" : "VRAM";
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [target, setTarget] = useState<ModelInfo | null>(null);
@@ -811,7 +830,7 @@ function ModelSwitchPage({ onSwitchingChange }: { onSwitchingChange: (v: boolean
       const result = await api.switchModel(target.fileName);
       if (result.success) {
         setResultMessage(
-          `切り替えが完了しました(実測VRAM: ${result.measuredVramGb ? formatGb(result.measuredVramGb) : "不明"})`,
+          `切り替えが完了しました(実測${memLabel}: ${result.measuredVramGb ? formatGb(result.measuredVramGb) : "不明"})`,
         );
       } else {
         setResultMessage(
@@ -846,7 +865,7 @@ function ModelSwitchPage({ onSwitchingChange }: { onSwitchingChange: (v: boolean
 
       <div className="control-panel__panel control-panel__panel--danger">
         <div className="control-panel__danger-warn">
-          ⚠ 切替中は一時的に会話ができなくなります。VRAM不足の場合は自動的に元のモデルへ
+          ⚠ 切替中は一時的に会話ができなくなります。{memLabel}不足の場合は自動的に元のモデルへ
           ロールバックしますが、うまくいかない場合は変更しないことをおすすめします。
         </div>
 
@@ -861,7 +880,7 @@ function ModelSwitchPage({ onSwitchingChange }: { onSwitchingChange: (v: boolean
                 {model.isCurrent && <span className="control-panel__badge control-panel__badge--safe">使用中</span>}
               </div>
               <div className="control-panel__model-meta">
-                VRAM目安 {formatGb(model.vramEstimateGb)}
+                {memLabel}目安 {formatGb(model.vramEstimateGb)}
                 {model.isMeasured ? "(実測)" : "(概算・未計測)"} ／ ファイルサイズ{" "}
                 {(model.sizeMb / 1024).toFixed(1)}GB
               </div>
@@ -883,7 +902,7 @@ function ModelSwitchPage({ onSwitchingChange }: { onSwitchingChange: (v: boolean
             className={`control-panel__note ${isRisky ? "control-panel__note--danger" : "control-panel__note--caution"}`}
           >
             {isRisky ? "⚠ " : ""}
-            {target.fileName}に切り替えると、VRAM使用率はおよそ{" "}
+            {target.fileName}に切り替えると、{memLabel}使用率はおよそ{" "}
             <strong>{projectedPercent?.toFixed(0)}%</strong> になる見込みです。
             {isRisky && "危険水域(80%以上)に達する可能性があります。"}
             <div className="control-panel__actions">

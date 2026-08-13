@@ -1,10 +1,25 @@
 import { useEffect, useState } from "react";
 import shioriMark from "../../assets/logo/shiori-mark-startup.png";
-import { useShioriStore } from "../../store/useShioriStore";
+import { api, type ServiceStatus } from "../../api/tauri";
+import { BackendStartupError, useShioriStore } from "../../store/useShioriStore";
 import "./StartupScreen.css";
 
 interface Props {
   onFinished: () => void;
+}
+
+// サービス名(Rust側のServiceStatus.name)をユーザー向けの日本語表示に変換する。
+function serviceLabel(name: string): string {
+  switch (name) {
+    case "llm":
+      return "会話用のAIモデル";
+    case "embedding":
+      return "検索用の埋め込みモデル";
+    case "rag":
+      return "詩織の図書館(検索インデックス)";
+    default:
+      return name;
+  }
 }
 
 // 起動画面(2026-08-13新規実装)。当初はロゴの色づきを固定2.9秒のCSSアニメーション
@@ -24,6 +39,10 @@ function StartupScreen({ onFinished }: Props) {
   const [percent, setPercent] = useState(0);
   const [ready, setReady] = useState(false);
   const [fadingOut, setFadingOut] = useState(false);
+  // healthy:falseのまま返ってきたサービス(通信エラー等の「本当の例外」とは区別する)。
+  // 空でない間はホーム画面へ進めず、エラー表示+再試行ボタンを出し続ける。
+  const [failedServices, setFailedServices] = useState<ServiceStatus[] | null>(null);
+  const [retryingName, setRetryingName] = useState<string | null>(null);
   // Rust側(start_backend_services_impl)が各段階の開始時に発行するshiori:startup-stage
   // イベントを、ストア側(useShioriStore.ensureBackendServicesStarted)でリスナー登録→
   // 起動呼び出しの順を保証した上で購読している(取りこぼし防止)。ここでは購読結果の
@@ -33,21 +52,64 @@ function StartupScreen({ onFinished }: Props) {
   // バックエンド起動の完了を実際に待ち受ける。App.tsx側でも同じ関数を呼んでいるが、
   // モジュールスコープのPromiseで多重呼び出しを防いでいるため、実際のinvoke()は
   // 1回しか発生しない(どちらが先に呼んでも同じPromiseを共有する)。
+  //
+  // healthy:falseを含む結果はBackendStartupErrorとして投げられる(useShioriStore参照)。
+  // これは「正常に返ってきたが起動できていない」ケースなので、握りつぶさずエラー表示+
+  // 再試行ボタンを出す。それ以外の例外(IPC通信エラー等、ユーザー側で対処しようがない
+  // 本当の想定外)は、従来通り起動画面に固まらないよう完了扱いにして先へ進む。
   useEffect(() => {
     let cancelled = false;
     useShioriStore
       .getState()
       .ensureBackendServicesStarted()
-      .catch(() => {
-        // 起動に失敗しても起動画面に固まらないよう、完了扱いにして先へ進む
-      })
-      .finally(() => {
+      .then(() => {
         if (!cancelled) setReady(true);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        if (err instanceof BackendStartupError) {
+          setFailedServices(err.services.filter((s) => !s.healthy));
+        } else {
+          setReady(true);
+        }
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  const handleRetry = async (service: ServiceStatus) => {
+    setRetryingName(service.name);
+    try {
+      if (service.name === "rag") {
+        const result = await api.retryRagService();
+        setFailedServices((prev) =>
+          result.healthy ? (prev?.filter((s) => s.name !== "rag") ?? null) : (prev?.map((s) => (s.name === "rag" ? result : s)) ?? null),
+        );
+      } else {
+        // llm/embeddingはセットで再起動される(restart_llm_services)。
+        const results = await api.restartLlmServices();
+        const stillUnhealthy = new Map(results.filter((r) => !r.healthy).map((r) => [r.name, r]));
+        setFailedServices((prev) => {
+          const others = prev?.filter((s) => s.name !== "llm" && s.name !== "embedding") ?? [];
+          return [...others, ...stillUnhealthy.values()];
+        });
+      }
+    } catch (err) {
+      // 再試行自体の通信エラー等。エラー内容をそのサービスの表示に反映する。
+      setFailedServices((prev) => prev?.map((s) => (s.name === service.name ? { ...s, error: String(err) } : s)) ?? null);
+    } finally {
+      setRetryingName(null);
+    }
+  };
+
+  // 再試行によって全サービスが健全になったら、通常のフェードアウト経路へ合流する。
+  useEffect(() => {
+    if (failedServices !== null && failedServices.length === 0) {
+      setFailedServices(null);
+      setReady(true);
+    }
+  }, [failedServices]);
 
   // 完了通知が来るまで、色づきをASYMPTOTE_PERCENT手前まで漸近的に進める
   // (指数関数的に鈍化するので、実際の起動が長引いても唐突に止まって見えない)。
@@ -93,6 +155,29 @@ function StartupScreen({ onFinished }: Props) {
         />
       </div>
       <div className="startup-screen__stage-label">{stageLabel}</div>
+
+      {failedServices && failedServices.length > 0 && (
+        <div className="startup-screen__error-panel">
+          <div className="startup-screen__error-title">
+            起動できていないサービスがあります。会話や検索が正しく動かない可能性があります。
+          </div>
+          {failedServices.map((service) => (
+            <div className="startup-screen__error-row" key={service.name}>
+              <div className="startup-screen__error-service">
+                <span>{serviceLabel(service.name)}</span>
+                {service.error && <span className="startup-screen__error-detail">{service.error}</span>}
+              </div>
+              <button
+                className="startup-screen__retry-btn"
+                onClick={() => handleRetry(service)}
+                disabled={retryingName !== null}
+              >
+                {retryingName === service.name ? "再試行中..." : "再試行"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

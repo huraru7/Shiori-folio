@@ -62,6 +62,9 @@ export const api = {
 
   restartLlmServices: () => invoke<ServiceStatus[]>("restart_llm_services"),
 
+  // 起動画面で「再試行」ボタンから呼ばれる、RAGサーバー単体の再起動。
+  retryRagService: () => invoke<ServiceStatus>("retry_rag_service"),
+
   restartApp: () => invoke<void>("restart_app"),
 
   listAvailableModels: () => invoke<ModelInfo[]>("list_available_models"),

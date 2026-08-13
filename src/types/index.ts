@@ -69,6 +69,8 @@ export interface SystemInfo {
   ramTotalMb: number;
   cpuUsagePercent: number;
   os: string;
+  // "windows" / "macos" / "linux"。VRAM表示可否等のOS判定に使う。
+  platform: string;
   cpu: CpuDetail;
   services: ServiceInfo[];
   diskThroughput: DiskThroughput | null;

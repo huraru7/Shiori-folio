@@ -2,8 +2,13 @@
 //!
 //! GPU情報(使用量・温度・プロセス別VRAM)はsysinfoでは取得できないため
 //! `nvidia-smi`をサブプロセスで呼び出す。nvidia-smiが無い環境(GPU非搭載機、
-//! PATHが通っていない等)では単にNoneを返し、フロントエンド側は
-//! 「GPU情報を取得できません」と表示する想定。
+//! PATHが通っていない等。Mac(Apple Silicon)は常にこれに該当する)では単に
+//! Noneを返し、フロントエンド側は「GPU情報を取得できません」と表示する想定。
+//!
+//! Mac(Apple Silicon)にはdiscrete VRAMという概念自体が存在せず、GPUは物理
+//! メモリをCPUと共有する(統合メモリ)。モデル切替の危険判定・実測校正
+//! (`estimate_model_switch`/`switch_model`)では、VRAM使用量/総量の代わりに
+//! 物理メモリ全体の使用量/総量を使う([`query_memory_headroom`]参照)。
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -72,6 +77,9 @@ pub struct SystemInfoDto {
     pub ram_total_mb: u64,
     pub cpu_usage_percent: f32,
     pub os: String,
+    // "windows" / "macos" / "linux"(`std::env::consts::OS`)。フロントエンド側で
+    // VRAM表示の可否等をOS判定するために使う(長い`os`文字列を解析させないため)。
+    pub platform: String,
     pub cpu: CpuDetail,
     pub services: Vec<ServiceInfo>,
     pub disk_throughput: Option<DiskThroughput>,
@@ -137,6 +145,34 @@ pub fn query_process_vram_map() -> HashMap<u32, u64> {
         }
     }
     map
+}
+
+// モデル切替の危険判定・実測校正(estimate_model_switch/switch_model)で使う
+// 「使用量/総量」。GPU専用メモリの有無に関わらず同じ形で扱えるようにする。
+pub struct MemoryHeadroom {
+    pub used_mb: u64,
+    pub total_mb: u64,
+}
+
+// Windows(NVIDIA discrete GPU)はVRAM使用量/総量をそのまま使う。
+// Mac(Apple Silicon)はdiscrete VRAMが存在せず、GPUは物理メモリをCPUと共有する
+// (統合メモリ)ため、物理メモリ全体の使用量/総量を代用する。専用プールが無い
+// 以上、システム全体のメモリ圧を巻き込む粗さは避けられないが、ハードウェア
+// 構造上はこれが正しいモデル化である(2026-08-13、ユーザー承認済み)。
+#[cfg(windows)]
+pub fn query_memory_headroom(_sys: &sysinfo::System) -> Option<MemoryHeadroom> {
+    query_gpu_info().map(|g| MemoryHeadroom {
+        used_mb: g.vram_used_mb,
+        total_mb: g.vram_total_mb,
+    })
+}
+
+#[cfg(not(windows))]
+pub fn query_memory_headroom(sys: &sysinfo::System) -> Option<MemoryHeadroom> {
+    Some(MemoryHeadroom {
+        used_mb: sys.used_memory() / (1024 * 1024),
+        total_mb: sys.total_memory() / (1024 * 1024),
+    })
 }
 
 #[cfg(windows)]

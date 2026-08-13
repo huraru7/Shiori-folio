@@ -433,47 +433,7 @@ fn start_backend_services_impl(
     // llm/embeddingの設定変更とは無関係なので、既に起動済みなら再起動しない
     // (procs.rag.is_none()で判定)。
     if procs.rag.is_none() {
-        emit_startup_stage(app, "詩織の図書館(検索インデックス)を読み込んでいます");
-        let rag_dir = root.join("services/rag");
-        #[cfg(windows)]
-        let python_exe = rag_dir.join(".venv/Scripts/python.exe");
-        #[cfg(not(windows))]
-        let python_exe = rag_dir.join(".venv/bin/python");
-        let port_str = config.rag.port.to_string();
-        let args = [
-            "-m",
-            "uvicorn",
-            "app:app",
-            "--port",
-            &port_str,
-            "--host",
-            "127.0.0.1",
-        ];
-        match Command::new(&python_exe)
-            .current_dir(&rag_dir)
-            .args(args)
-            .env("PATH", extended_path())
-            .spawn()
-        {
-            Ok(child) => {
-                procs.rag = Some(child);
-                let healthy = wait_for_health(config.rag.port, 30);
-                results.push(ServiceStatus {
-                    name: "rag".into(),
-                    port: config.rag.port,
-                    started: true,
-                    healthy,
-                    error: None,
-                });
-            }
-            Err(e) => results.push(ServiceStatus {
-                name: "rag".into(),
-                port: config.rag.port,
-                started: false,
-                healthy: false,
-                error: Some(e.to_string()),
-            }),
-        }
+        results.push(start_rag_service(procs, app, &root, &config));
     }
 
     // STT(whisper.cpp)はVRAM軽量化のため常時起動せず、録音開始時にオンデマンドで
@@ -484,6 +444,76 @@ fn start_backend_services_impl(
 
     emit_startup_stage(app, "準備が整いました");
     Ok(results)
+}
+
+// RAGサーバー(services/rag、uvicorn)を起動し、ヘルスチェックの結果を含めて返す。
+// start_backend_services_impl(初回起動)とretry_rag_service(起動画面の再試行ボタン)
+// の両方から呼ばれる共通処理として切り出した。
+fn start_rag_service(
+    procs: &mut BackendProcesses,
+    app: Option<&tauri::AppHandle>,
+    root: &Path,
+    config: &AppConfig,
+) -> ServiceStatus {
+    emit_startup_stage(app, "詩織の図書館(検索インデックス)を読み込んでいます");
+    let rag_dir = root.join("services/rag");
+    #[cfg(windows)]
+    let python_exe = rag_dir.join(".venv/Scripts/python.exe");
+    #[cfg(not(windows))]
+    let python_exe = rag_dir.join(".venv/bin/python");
+    let port_str = config.rag.port.to_string();
+    let args = [
+        "-m",
+        "uvicorn",
+        "app:app",
+        "--port",
+        &port_str,
+        "--host",
+        "127.0.0.1",
+    ];
+    match Command::new(&python_exe)
+        .current_dir(&rag_dir)
+        .args(args)
+        .env("PATH", extended_path())
+        .spawn()
+    {
+        Ok(child) => {
+            procs.rag = Some(child);
+            let healthy = wait_for_health(config.rag.port, 30);
+            ServiceStatus {
+                name: "rag".into(),
+                port: config.rag.port,
+                started: true,
+                healthy,
+                error: None,
+            }
+        }
+        Err(e) => ServiceStatus {
+            name: "rag".into(),
+            port: config.rag.port,
+            started: false,
+            healthy: false,
+            error: Some(e.to_string()),
+        },
+    }
+}
+
+// RAGサーバーが起動失敗、またはヘルスチェックが通らないまま残ってしまった場合の
+// 再試行専用コマンド。起動画面の「再試行」ボタンから呼ばれる想定
+// (start_backend_services自体はhealthy:falseでもOk(...)を返す設計のため、
+// 呼び出し元が結果を見て明示的にこちらを呼ぶ必要がある)。
+// プロセスが残っていれば(起動はしたがヘルスチェックが通らなかった場合)一旦
+// 終了してから再度起動を試みる。
+#[tauri::command]
+fn retry_rag_service(state: tauri::State<BackendState>, app: tauri::AppHandle) -> Result<ServiceStatus, String> {
+    let root = project_root();
+    let config = load_config(&root)?;
+    let mut procs = state.0.lock().map_err(|e| e.to_string())?;
+    if let Some(mut c) = procs.rag.take() {
+        let _ = c.kill();
+        let _ = c.wait();
+    }
+    Ok(start_rag_service(&mut procs, Some(&app), &root, &config))
 }
 
 #[tauri::command]
@@ -525,6 +555,7 @@ fn get_system_info(
     let ram_used_mb = sys.used_memory() / (1024 * 1024);
     let ram_total_mb = sys.total_memory() / (1024 * 1024);
     let os = sysinfo::System::long_os_version().unwrap_or_else(|| "不明".to_string());
+    let platform = std::env::consts::OS.to_string();
     let cpu_model = sys
         .cpus()
         .first()
@@ -581,6 +612,10 @@ fn get_system_info(
     // Windows(WDDM)のnvidia-smiはプロセス別VRAM使用量を[N/A]としか返さない既知の
     // 制約があり、vram_by_pidが取れないことが多い。LLMについては優先度3の
     // モデル切替で使っている実測/概算値(models/vram_estimates.json)を代用する。
+    // Mac(統合メモリ)はそもそもVRAM専用の概念が無くnvidia-smi代替も存在しない
+    // ため、この概算フォールバックは行わずサービス一覧のVRAM欄は常に空欄にする
+    // (RAM欄のみで実態を表す)。
+    #[cfg(windows)]
     let llm_vram_mb = vram_mb_of(llm_pid).or_else(|| {
         let c = config.as_ref()?;
         let root = project_root();
@@ -590,6 +625,8 @@ fn get_system_info(
         let (gb, _) = models::estimate_for(&root, &file_name, size_mb);
         Some((gb * 1024.0) as u64)
     });
+    #[cfg(not(windows))]
+    let llm_vram_mb = vram_mb_of(llm_pid);
 
     let services = vec![
         system_info::ServiceInfo {
@@ -680,6 +717,7 @@ fn get_system_info(
         ram_total_mb,
         cpu_usage_percent,
         os,
+        platform,
         cpu,
         services,
         disk_throughput,
@@ -899,14 +937,25 @@ struct ModelSwitchEstimate {
 }
 
 // 実際に2つのモデルを同時にロードして計測することは「避けたい危険な状態」を
-// 自ら作ることになるため行わない。現在ロード中のモデルの実測/概算値をVRAM使用量
+// 自ら作ることになるため行わない。現在ロード中のモデルの実測/概算値を使用量
 // から差し引いた「モデル以外の使用量」に、切替先モデルの実測/概算値を足して見積もる。
+// 「使用量/総量」はWindowsはVRAM、Mac(統合メモリ)は物理メモリ全体を指す
+// (system_info::query_memory_headroom参照)。
 #[tauri::command]
-fn estimate_model_switch(file_name: String) -> Result<ModelSwitchEstimate, String> {
+fn estimate_model_switch(
+    sys: tauri::State<Mutex<sysinfo::System>>,
+    file_name: String,
+) -> Result<ModelSwitchEstimate, String> {
+    let mut sys = sys.lock().map_err(|e| e.to_string())?;
+    sys.refresh_memory();
+    estimate_model_switch_impl(&sys, file_name)
+}
+
+fn estimate_model_switch_impl(sys: &sysinfo::System, file_name: String) -> Result<ModelSwitchEstimate, String> {
     let root = project_root();
     let config = app_config()?;
-    let gpu = system_info::query_gpu_info()
-        .ok_or_else(|| "GPU情報を取得できませんでした(nvidia-smi未検出)".to_string())?;
+    let headroom = system_info::query_memory_headroom(sys)
+        .ok_or_else(|| "メモリ使用状況を取得できませんでした(Windowsではnvidia-smi未検出の可能性があります)".to_string())?;
 
     let current_file_name = Path::new(&config.llm.model_path)
         .file_name()
@@ -924,9 +973,9 @@ fn estimate_model_switch(file_name: String) -> Result<ModelSwitchEstimate, Strin
         / (1024 * 1024);
     let (target_estimate_gb, _) = models::estimate_for(&root, &file_name, target_size_mb);
 
-    let baseline_other_mb = (gpu.vram_used_mb as f64 - current_estimate_gb * 1024.0).max(0.0);
+    let baseline_other_mb = (headroom.used_mb as f64 - current_estimate_gb * 1024.0).max(0.0);
     let projected_used_mb = baseline_other_mb + target_estimate_gb * 1024.0;
-    let projected_vram_percent = projected_used_mb / gpu.vram_total_mb as f64 * 100.0;
+    let projected_vram_percent = projected_used_mb / headroom.total_mb as f64 * 100.0;
 
     Ok(ModelSwitchEstimate {
         projected_vram_percent,
@@ -956,10 +1005,15 @@ struct ModelSwitchResult {
 
 // 「現在のllama-serverを停止 → 新モデルで起動 → ヘルスチェック」の手順で切り替える。
 // 起動またはヘルスチェックに失敗した場合は、元のモデルで自動的に再起動を試みる
-// (起動できない状態のまま放置しない)。成功時は切替前後のVRAM差分を実測値として
-// models/vram_estimates.jsonに書き戻し、次回以降の見積もり精度を上げる。
+// (起動できない状態のまま放置しない)。成功時は切替前後のVRAM差分(Windows)、
+// または新モデルプロセス自体のRSS(Mac、統合メモリのためVRAM差分が取れない)を
+// 実測値としてmodels/vram_estimates.jsonに書き戻し、次回以降の見積もり精度を上げる。
 #[tauri::command]
-fn switch_model(state: tauri::State<BackendState>, file_name: String) -> Result<ModelSwitchResult, String> {
+fn switch_model(
+    state: tauri::State<BackendState>,
+    sys: tauri::State<Mutex<sysinfo::System>>,
+    file_name: String,
+) -> Result<ModelSwitchResult, String> {
     let root = project_root();
     let config = app_config()?;
     let llama_server_exe =
@@ -993,6 +1047,7 @@ fn switch_model(state: tauri::State<BackendState>, file_name: String) -> Result<
         let _ = c.wait();
     }
     std::thread::sleep(Duration::from_millis(800));
+    #[cfg(windows)]
     let floor_mb = system_info::query_gpu_info()
         .map(|g| g.vram_used_mb)
         .unwrap_or(0);
@@ -1002,10 +1057,27 @@ fn switch_model(state: tauri::State<BackendState>, file_name: String) -> Result<
         Ok(child) => {
             procs.llm = Some(child);
             if wait_for_health(config.llm.port, 30) {
-                let after_mb = system_info::query_gpu_info()
-                    .map(|g| g.vram_used_mb)
-                    .unwrap_or(floor_mb);
-                let measured_gb = (after_mb.saturating_sub(floor_mb) as f64 / 1024.0).max(0.1);
+                #[cfg(windows)]
+                let measured_gb = {
+                    let after_mb = system_info::query_gpu_info()
+                        .map(|g| g.vram_used_mb)
+                        .unwrap_or(floor_mb);
+                    (after_mb.saturating_sub(floor_mb) as f64 / 1024.0).max(0.1)
+                };
+                // Mac(統合メモリ)はVRAM専用プールが無くWindowsと同じ差分計測が
+                // できないため、切替後のllama-serverプロセス自体のRSS(常駐メモリ)
+                // を実測値として使う。
+                #[cfg(not(windows))]
+                let measured_gb = {
+                    let pid = procs.llm.as_ref().map(|c| c.id());
+                    let mut s = sys.lock().map_err(|e| e.to_string())?;
+                    s.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+                    let rss_mb = pid
+                        .and_then(|p| s.process(sysinfo::Pid::from_u32(p)))
+                        .map(|p| p.memory() / (1024 * 1024))
+                        .unwrap_or(0);
+                    (rss_mb as f64 / 1024.0).max(0.1)
+                };
                 drop(procs);
                 let _ = models::record_measurement(&root, &file_name, measured_gb);
                 update_llm_model_path(&root, &file_name)?;
@@ -2200,6 +2272,33 @@ mod tests {
         println!("get_config/set_configの往復・バリデーションともにOK");
     }
 
+    // RAGサーバーの起動失敗検知・再試行の動作確認用(2026-08-13、起動画面が
+    // healthy:falseを握りつぶしてホーム画面へ進んでしまう退行の修正確認)。
+    // 事前にservices/rag/.venv/bin/pythonを一時的に別名へ退避させてから実行すると、
+    // start_rag_service(=start_backend_services_impl/retry_rag_serviceの両方が
+    // 使う共通処理)がhealthy:false(かつプロセス自体が起動しない)を返すことを
+    // 確認できる。pythonを元に戻してから再度実行すると、同じ関数呼び出しだけで
+    // healthy:trueに回復すること(=リトライボタンの動作)を確認できる。
+    // cargo test --lib -- --ignored --nocapture phase_rag_startup_failure_and_retry
+    #[test]
+    #[ignore]
+    fn phase_rag_startup_failure_and_retry() {
+        let root = project_root();
+        let config = load_config(&root).expect("config.jsonの読み込みに失敗");
+        let mut procs = BackendProcesses::default();
+
+        let status = start_rag_service(&mut procs, None, &root, &config);
+        println!(
+            "started={} healthy={} error={:?}",
+            status.started, status.healthy, status.error
+        );
+
+        if let Some(mut c) = procs.rag.take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        }
+    }
+
     // list_available_models/estimate_model_switchの動作確認用(実際の切替は行わない)。
     // cargo test --lib -- --ignored --nocapture phase_model_list_and_estimate
     #[test]
@@ -2215,9 +2314,12 @@ mod tests {
         }
 
         let target = models.iter().find(|m| !m.is_current).expect("切替候補が無い");
-        let estimate = estimate_model_switch(target.file_name.clone()).expect("estimate_model_switch失敗");
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_memory();
+        let estimate =
+            estimate_model_switch_impl(&sys, target.file_name.clone()).expect("estimate_model_switch失敗");
         println!(
-            "切替先={} 見込みVRAM使用率={:.1}% risky={}",
+            "切替先={} 見込み使用率={:.1}% risky={}",
             target.file_name, estimate.projected_vram_percent, estimate.is_risky
         );
     }
@@ -2915,6 +3017,7 @@ pub fn run() {
             get_config,
             set_config,
             restart_llm_services,
+            retry_rag_service,
             restart_app,
             list_available_models,
             estimate_model_switch,
