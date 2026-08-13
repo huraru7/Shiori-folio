@@ -32,7 +32,9 @@ pub fn synthesize_and_play(
     config_path: &Path,
     voice: &VoiceParams,
 ) -> Result<(), String> {
-    let exe = root.join("third_party/piper-plus/src/rust/target/release/piper-plus-cli.exe");
+    let exe = root
+        .join("third_party/piper-plus/src/rust/target/release")
+        .join(crate::exe_name("piper-plus-cli"));
     let tmp_dir = std::env::temp_dir();
     let out_filename = format!("shiori-tts-{}.wav", std::process::id());
     let out_path = tmp_dir.join(&out_filename);
@@ -48,7 +50,7 @@ pub fn synthesize_and_play(
         .arg("--output-file")
         .arg(&out_filename)
         .arg("--device")
-        .arg("cuda")
+        .arg(if cfg!(target_os = "macos") { "coreml" } else { "cuda" })
         .arg("--language")
         .arg("ja")
         .arg("--length-scale")

@@ -250,12 +250,19 @@ pub(crate) fn project_root() -> PathBuf {
 //   マルチコンフィグ)と`bin/`直下(Ninja/Unix Makefiles等のシングルコンフィグ、macOSのMetal
 //   ビルドはこちら)のどちらになるか変わるため、両方試して実在する方を採用する。
 // どちらも存在しない場合(未ビルド等)は`bin/Release/`側のパスを返す(エラーメッセージ表示用)。
-fn resolve_engine_exe(build_dir: &Path, exe_base_name: &str) -> PathBuf {
-    let exe_name = if cfg!(windows) {
-        format!("{exe_base_name}.exe")
+// 実行ファイル名にOSごとの拡張子(Windowsのみ`.exe`)を付与する。third_party配下の
+// サイドカーexeを参照する箇所(resolve_engine_exe、piper_client)で共通利用する
+// (2026-08-13、`.exe`のハードコードが複数箇所に分散していたための共通化)。
+pub(crate) fn exe_name(base: &str) -> String {
+    if cfg!(windows) {
+        format!("{base}.exe")
     } else {
-        exe_base_name.to_string()
-    };
+        base.to_string()
+    }
+}
+
+fn resolve_engine_exe(build_dir: &Path, exe_base_name: &str) -> PathBuf {
+    let exe_name = exe_name(exe_base_name);
     let with_release = build_dir.join("bin/Release").join(&exe_name);
     if with_release.exists() {
         return with_release;
