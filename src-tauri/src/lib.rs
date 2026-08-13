@@ -209,11 +209,39 @@ struct BackendProcesses {
 struct BackendState(Mutex<BackendProcesses>);
 
 // third_party/ 配下のビルド済みexeを使う（開発時はsrc-tauriの親をプロジェクトルートとする）
-pub(crate) fn project_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
+// third_party/models/services/data/config.jsonが並ぶ「ポータブルフォルダ」を、
+// 実行ファイル自身の場所を基準に実行時に求める。以前はenv!("CARGO_MANIFEST_DIR")で
+// ビルド時の絶対パスを焼き込んでいたため、.appを別の場所(USB上の別ドライブや
+// 別フォルダ)に移動すると見つからなくなる問題があった(2026-08-13、Mac移植の
+// 過程で発覚)。
+//
+// 実行ファイルの位置から「固定の階層数だけ上へ」という決め打ちにすると、
+// 開発時(cargo run、<root>/src-tauri/target/debug/<exe>)・リリース版(Windows/Linux、
+// <root>/src-tauri/target/release/<exe>)・macOSの.appバンドル(<root>/<name>.app/
+// Contents/MacOS/<exe>、third_party/models等と同じ階層に.appを置く配布形態を想定)
+// で必要な階層数がそれぞれ異なるだけでなく、`cargo test`のテストバイナリ
+// (target/debug/deps/配下、通常の実行ファイルより1階層深い)でも簡単に狂う。
+// そこで、実行ファイルの場所から上に向かって`config.json`が見つかるところまで
+// 辿る方式にする(git/npmがリポジトリルートを探すのと同じ考え方)。
+fn exe_dir() -> PathBuf {
+    std::env::current_exe()
+        .expect("実行ファイル自身のパス取得に失敗")
         .parent()
-        .expect("project root should exist")
+        .expect("実行ファイルの親ディレクトリ取得に失敗")
         .to_path_buf()
+}
+
+pub(crate) fn project_root() -> PathBuf {
+    let mut dir = exe_dir();
+    loop {
+        if dir.join("config.json").is_file() {
+            return dir;
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent.to_path_buf(),
+            None => return exe_dir(),
+        }
+    }
 }
 
 // third_party配下のエンジンビルド出力(llama-server/whisper-server等)の実行ファイルパスを解決する。
