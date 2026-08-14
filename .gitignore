@@ -23,6 +23,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Claude Codeのランタイム時ロックファイル（実行環境ごとに変わるため管理外）
+.claude/scheduled_tasks.lock
+
 # モデルファイル・データ（容量が大きいためGit管理外）
 models/**/*.gguf
 models/**/*.bin
