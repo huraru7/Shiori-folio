@@ -25,6 +25,16 @@ def _get_model() -> CrossEncoder:
     return _model
 
 
+def warmup() -> None:
+    """CrossEncoderモデルを事前にロードする。初回検索時の遅延ロード
+    (実測約6秒)を、起動画面での待機中(app.pyのstartupイベント)に
+    済ませておくことで、ホーム画面到達後の初回検索が瞬時に返るようにする
+    (2026-08-14、外付けSSD運用時にRAGが「動作していない」ように見えた
+    不具合の調査で発覚)。
+    """
+    _get_model()
+
+
 def rerank(query: str, passages: list[str]) -> list[float]:
     """queryと各passageの関連度スコアを、passagesと同じ順序のリストで返す。
     スコアはCrossEncoderの生の出力(だいたい0〜1の範囲だが確率として正規化

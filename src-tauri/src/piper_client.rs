@@ -44,8 +44,8 @@ pub fn synthesize_and_play(
     let out_filename = format!("shiori-tts-{}.wav", std::process::id());
     let out_path = tmp_dir.join(&out_filename);
 
-    let status = Command::new(&exe)
-        .current_dir(&tmp_dir)
+    let mut cmd = Command::new(&exe);
+    cmd.current_dir(&tmp_dir)
         .arg("--model")
         .arg(model_path)
         .arg("--config")
@@ -63,7 +63,9 @@ pub fn synthesize_and_play(
         .arg("--noise-scale")
         .arg(voice.noise_scale.to_string())
         .arg("--noise-w")
-        .arg(voice.noise_w.to_string())
+        .arg(voice.noise_w.to_string());
+    crate::no_console_window(&mut cmd);
+    let status = cmd
         .status()
         .map_err(|e| format!("piper-plus-cliの起動に失敗: {e}"))?;
 

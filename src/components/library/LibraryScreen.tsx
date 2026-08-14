@@ -4,6 +4,7 @@ import SourceDocumentModal from "../panels/SourceDocumentModal";
 import Book from "./Book";
 import ChunkModal from "./ChunkModal";
 import { CATEGORY_ORDER, getCategoryMeta } from "../../lib/library";
+import { useShioriStore } from "../../store/useShioriStore";
 import type { KnowledgeResult } from "../../types";
 import "./LibraryScreen.css";
 
@@ -24,12 +25,35 @@ function LibraryScreen() {
   const [content, setContent] = useState<string | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
 
+  // DesktopArea(ひいてはLibraryScreen)はStartupScreenの完了を待たず、アプリ
+  // 起動と同時に常時マウントされている(StartupScreenは上乗せのオーバーレイに
+  // 過ぎない)。そのため、ここでバックエンド起動を待たずに即listAllKnowledge()を
+  // 呼ぶと、RAGサーバー(Pythonプロセス)がまだ起動すらしていないタイミングで
+  // 失敗し、リトライ手段が無いためそのまま「蔵書が読み込めない」状態に固まって
+  // しまう不具合があった(2026-08-14、外付けSSD運用の実機確認で発覚)。
+  // ensureBackendServicesStarted()はモジュールスコープの共有Promiseのため、
+  // ここで待ち受けても起動処理自体が重複することはない(App.tsx/StartupScreenの
+  // 呼び出しと同じPromiseに相乗りするだけ)。他サービス(LLM/embedding)の起動
+  // 失敗はここでは無視する(RAG自体は起動できている可能性があるため)。
   useEffect(() => {
-    api
-      .listAllKnowledge()
-      .then((r) => setChunks(r))
-      .catch((err) => setError(String(err)))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    useShioriStore
+      .getState()
+      .ensureBackendServicesStarted()
+      .catch(() => undefined)
+      .then(() => api.listAllKnowledge())
+      .then((r) => {
+        if (!cancelled) setChunks(r);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const filtered = useMemo(() => {

@@ -84,6 +84,7 @@
    見づらくなるのを防ぐため、薄い破線の枠で軽く区切る。 */
 .library-screen__file-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   padding: 5px;
   border-radius: 6px;

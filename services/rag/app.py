@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from embedding_client import get_embedding
-from reranker import rerank
+from reranker import rerank, warmup as warmup_reranker
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 VECTORDB_DIR = PROJECT_ROOT / "data" / "vectordb"
@@ -23,6 +23,16 @@ COLLECTION_NAME = "shiori_knowledge"
 app = FastAPI()
 _chroma_client = chromadb.PersistentClient(path=str(VECTORDB_DIR))
 _http_client = httpx.Client(timeout=30.0)
+
+
+# リランカー(CrossEncoder)は初回呼び出し時に遅延ロードされる設計だが、それだと
+# ユーザーの初回検索が約6秒ブロックされる(2026-08-14、外付けSSD運用時の調査で
+# 発覚)。uvicornはlifespan startupイベントが完了するまでリクエストを受け付けない
+# ため、ここでロードしておくことで/healthが返る時点(=Tauri起動画面の待機処理が
+# 見ているタイミング)には既にロード済みの状態にできる。
+@app.on_event("startup")
+def _warmup_reranker() -> None:
+    warmup_reranker()
 
 
 class SearchRequest(BaseModel):

@@ -18,6 +18,26 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+// Windowsでは、コンソールを持たないGUIサブシステムのshiori-folio.exeから
+// コンソールサブシステムの子プロセス(llama-server.exe/whisper-server.exe/
+// python.exe/piper-plus-cli.exe/nvidia-smi等)をCommand::spawn()すると、
+// デフォルトでは子プロセス用に新しいコンソール窓が生成され、一瞬黒い窓が
+// 表示されてしまう(2026-08-14、外付けSSD運用で「コマンドプロンプトが
+// 繰り返し開いては閉じる」不具合として実機発覚。原因はget_system_infoが
+// 1〜2秒間隔でnvidia-smiを呼ぶたびに窓が生成されていたことだった)。
+// CREATE_NO_WINDOW(0x08000000)を子プロセスの起動フラグに立てることで
+// この窓の生成自体を止める。Windows専用のプロセス起動オプションのため、
+// 他OSでは何もしない。
+#[cfg(windows)]
+pub(crate) fn no_console_window(cmd: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    cmd.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+pub(crate) fn no_console_window(_cmd: &mut Command) {}
+
 // config.json のうちバックエンド起動に必要な部分のみを読む
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -297,9 +317,23 @@ fn resolve_engine_exe(build_dir: &Path, exe_base_name: &str) -> PathBuf {
 
 // フォルダ構成の再編(system/library分離)により、知識データ(library/)は
 // project_root()(system/)の外、その兄弟ディレクトリに置かれている。
+//
+// 【2026-08-13追加】ポータブル版(build-portable.ps1)はlibrary/の実データを
+// project_root()(portable/)直下にコピーする。当初はportable_bin_dir()等と
+// 揃えず、常に「project_root()の親 + library」という開発ツリー前提の解決方法
+// のままになっていたため、portable/をUSB等の別ドライブへ単体で移動すると
+// (system/やlibrary/という兄弟ディレクトリが存在しなくなり)ライブラリ機能・
+// メモ保存機能が壊れることを実機確認した(project_root()自体はconfig.json探索で
+// 正しくportable/を指すが、その親には何も無いため)。project_root()直下に
+// library/が存在する場合(ポータブル版)はそちらを優先し、無い場合(開発ツリー)は
+// 従来通り親ディレクトリを見るフォールバックにする。
 fn library_root() -> PathBuf {
-    project_root()
-        .parent()
+    let root = project_root();
+    let portable_library = root.join("library");
+    if portable_library.is_dir() {
+        return portable_library;
+    }
+    root.parent()
         .expect("system/ should have a parent directory")
         .join("library")
 }
@@ -330,36 +364,55 @@ fn cuda_bin_dir() -> Option<PathBuf> {
     None
 }
 
-fn extended_path() -> String {
+// エンジンexeのDLL探索用PATHを組み立てる。
+// - ポータブル版(bin/<os>/libs-llama, bin/<os>/libs-whisper)が存在する場合はそちらを
+//   最優先でPATH先頭に追加する。libs-*にはCUDA本体のDLL(cudart64_12.dll等)も
+//   同梱済みの前提(build-portable.ps1参照)なので、これだけで自己完結する
+//   (2026-08-13、Windows実機でPATH方式によるDLL解決を確認済み。exeとDLLを
+//   同一フォルダに展開する必要はなく、libs-llama/libs-whisperで別々のまま
+//   問題ない)。
+// - libs_dir_nameがNone、またはポータブル版が存在しない(開発ツリーでの実行)場合は
+//   従来通りcuda_bin_dir()で開発機にグローバルインストールされたCUDA Toolkitを探す。
+fn extended_path(libs_dir_name: Option<&str>) -> String {
     let existing = std::env::var("PATH").unwrap_or_default();
-    match cuda_bin_dir() {
-        Some(cuda_bin) => {
-            let sep = if cfg!(windows) { ';' } else { ':' };
-            format!("{}{sep}{existing}", cuda_bin.display())
+    let sep = if cfg!(windows) { ';' } else { ':' };
+
+    if let Some(name) = libs_dir_name {
+        let portable_libs = portable_bin_dir().join(name);
+        if portable_libs.exists() {
+            return format!("{}{sep}{existing}", portable_libs.display());
         }
+    }
+
+    match cuda_bin_dir() {
+        Some(cuda_bin) => format!("{}{sep}{existing}", cuda_bin.display()),
         None => existing,
     }
 }
 
 // whisper-server(whisper.cpp)は非ASCIIパスのコマンドライン引数を正しく扱えないバグがあるため、
 // モデルファイルのディレクトリをcwdにして相対ファイル名だけを渡す(llama-serverは問題ないが同じ方式で統一)。
+// libs_dir_nameは"libs-llama"/"libs-whisper"のように呼び出し元のエンジンに応じて渡す
+// (extended_path参照)。
 fn spawn_server(
     exe_path: &Path,
     model_path: &Path,
     extra_args: &[&str],
+    libs_dir_name: &str,
 ) -> std::io::Result<Child> {
     let model_dir = model_path.parent().unwrap_or_else(|| Path::new("."));
     let model_filename = model_path
         .file_name()
         .expect("model path must have a filename");
 
-    Command::new(exe_path)
-        .current_dir(model_dir)
+    let mut cmd = Command::new(exe_path);
+    cmd.current_dir(model_dir)
         .arg("--model")
         .arg(model_filename)
         .args(extra_args)
-        .env("PATH", extended_path())
-        .spawn()
+        .env("PATH", extended_path(Some(libs_dir_name)));
+    no_console_window(&mut cmd);
+    cmd.spawn()
 }
 
 fn wait_for_health(port: u16, attempts: u32) -> bool {
@@ -420,7 +473,7 @@ fn start_backend_services_impl(
             &ctx,
             "--jinja",
         ];
-        match spawn_server(&llama_server_exe, &model_path, &args) {
+        match spawn_server(&llama_server_exe, &model_path, &args, "libs-llama") {
             Ok(child) => {
                 procs.llm = Some(child);
                 let healthy = wait_for_health(config.llm.port, 30);
@@ -457,7 +510,7 @@ fn start_backend_services_impl(
             "0",
             "--embedding",
         ];
-        match spawn_server(&llama_server_exe, &model_path, &args) {
+        match spawn_server(&llama_server_exe, &model_path, &args, "libs-llama") {
             Ok(child) => {
                 procs.embedding = Some(child);
                 let healthy = wait_for_health(config.embedding.port, 30);
@@ -513,19 +566,34 @@ fn start_rag_service(
 ) -> ServiceStatus {
     emit_startup_stage(app, "詩織の図書館(検索インデックス)を読み込んでいます");
     let rag_dir = root.join("services/rag");
+    // 【2026-08-13修正】ポータブル版(bin/<os>/rag-venv)はuv python installで
+    // 取得した「venvではない可搬版Python本体」で、Windowsではpython.exeが
+    // 直下に配置される(Scripts/配下にはuv pip installしたパッケージの
+    // コンソールスクリプト(uvicorn.exe等)は入るが、python.exe自体は入らない)。
+    // 一方、開発ツリーのservices/rag/.venvは通常のvenv(python -m venv/uv venv)
+    // なのでScripts/python.exeが正しい。この2つは配置規約が異なるため、
+    // 従来1つの定数(python_rel)を両方に流用していたのが原因で、ポータブル版の
+    // python_exeが存在しないパスに解決され、RAGサーバーがCommand::spawn()の
+    // 段階で静かに起動失敗する不具合があった(実機のportable/移動テストで再現・
+    // 特定)。Windowsのみ両者を分け、Mac/Linuxは元々どちらもbin/python配下で
+    // 一致するため据え置く。
     #[cfg(windows)]
-    let python_rel = "Scripts/python.exe";
+    let portable_python_rel = "python.exe";
     #[cfg(not(windows))]
-    let python_rel = "bin/python";
+    let portable_python_rel = "bin/python";
+    #[cfg(windows)]
+    let dev_python_rel = "Scripts/python.exe";
+    #[cfg(not(windows))]
+    let dev_python_rel = "bin/python";
     // 段階G: portable/パッケージではRAG用のPython環境もbin/<os>/rag-venv/に
     // OS別に配置する(エンジンバイナリのbin/<os>/配置と同じ考え方。venvは
     // コンパイル済みバイナリを含むためOSをまたいで共有できない)。存在すれば
     // こちらを優先し、無ければ開発ツリーのservices/rag/.venvにフォールバックする。
-    let portable_python = portable_bin_dir().join("rag-venv").join(python_rel);
+    let portable_python = portable_bin_dir().join("rag-venv").join(portable_python_rel);
     let python_exe = if portable_python.exists() {
         portable_python
     } else {
-        rag_dir.join(".venv").join(python_rel)
+        rag_dir.join(".venv").join(dev_python_rel)
     };
     let port_str = config.rag.port.to_string();
     let args = [
@@ -537,12 +605,12 @@ fn start_rag_service(
         "--host",
         "127.0.0.1",
     ];
-    match Command::new(&python_exe)
-        .current_dir(&rag_dir)
+    let mut cmd = Command::new(&python_exe);
+    cmd.current_dir(&rag_dir)
         .args(args)
-        .env("PATH", extended_path())
-        .spawn()
-    {
+        .env("PATH", extended_path(None));
+    no_console_window(&mut cmd);
+    match cmd.spawn() {
         Ok(child) => {
             procs.rag = Some(child);
             let healthy = wait_for_health(config.rag.port, 30);
@@ -1119,7 +1187,7 @@ fn switch_model(
         .unwrap_or(0);
 
     // 2. 新モデルで起動
-    match spawn_server(&llama_server_exe, &target_path, &args) {
+    match spawn_server(&llama_server_exe, &target_path, &args, "libs-llama") {
         Ok(child) => {
             procs.llm = Some(child);
             if wait_for_health(config.llm.port, 30) {
@@ -1158,7 +1226,7 @@ fn switch_model(
                     let _ = c.kill();
                     let _ = c.wait();
                 }
-                let rolled_back = match spawn_server(&llama_server_exe, &root.join(&old_model_path), &args) {
+                let rolled_back = match spawn_server(&llama_server_exe, &root.join(&old_model_path), &args, "libs-llama") {
                     Ok(child) => {
                         procs.llm = Some(child);
                         wait_for_health(config.llm.port, 30)
@@ -1174,7 +1242,7 @@ fn switch_model(
             }
         }
         Err(e) => {
-            let rolled_back = match spawn_server(&llama_server_exe, &root.join(&old_model_path), &args) {
+            let rolled_back = match spawn_server(&llama_server_exe, &root.join(&old_model_path), &args, "libs-llama") {
                 Ok(child) => {
                     procs.llm = Some(child);
                     wait_for_health(config.llm.port, 30)
@@ -2009,7 +2077,7 @@ impl SttManager {
             "詩織、ふらる、huraru.com、ポートフォリオ、lab.huraru.com",
             "--carry-initial-prompt",
         ];
-        let child = spawn_server(exe, model_path, &args).map_err(|e| e.to_string())?;
+        let child = spawn_server(exe, model_path, &args, "libs-whisper").map_err(|e| e.to_string())?;
         *guard = Some(child);
         Ok(())
     }

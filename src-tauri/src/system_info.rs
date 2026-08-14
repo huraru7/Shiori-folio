@@ -90,13 +90,13 @@ pub struct SystemInfoDto {
 // `nvidia-smi --query-gpu=... --format=csv,noheader,nounits`の出力例:
 // "NVIDIA GeForce RTX 4060 Laptop GPU, 2954, 8188, 62"
 pub fn query_gpu_info() -> Option<GpuInfo> {
-    let output = Command::new("nvidia-smi")
-        .args([
-            "--query-gpu=name,memory.used,memory.total,temperature.gpu",
-            "--format=csv,noheader,nounits",
-        ])
-        .output()
-        .ok()?;
+    let mut cmd = Command::new("nvidia-smi");
+    cmd.args([
+        "--query-gpu=name,memory.used,memory.total,temperature.gpu",
+        "--format=csv,noheader,nounits",
+    ]);
+    crate::no_console_window(&mut cmd);
+    let output = cmd.output().ok()?;
 
     if !output.status.success() {
         return None;
@@ -122,13 +122,13 @@ pub fn query_gpu_info() -> Option<GpuInfo> {
 // nvidia-smi自体が使えない環境では空のマップを返す(呼び出し元はNone/0扱いにする)。
 pub fn query_process_vram_map() -> HashMap<u32, u64> {
     let mut map = HashMap::new();
-    let Ok(output) = Command::new("nvidia-smi")
-        .args([
-            "--query-compute-apps=pid,used_memory",
-            "--format=csv,noheader,nounits",
-        ])
-        .output()
-    else {
+    let mut cmd = Command::new("nvidia-smi");
+    cmd.args([
+        "--query-compute-apps=pid,used_memory",
+        "--format=csv,noheader,nounits",
+    ]);
+    crate::no_console_window(&mut cmd);
+    let Ok(output) = cmd.output() else {
         return map;
     };
     if !output.status.success() {
