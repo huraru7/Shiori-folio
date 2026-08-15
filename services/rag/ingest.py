@@ -1,6 +1,10 @@
 """library/ 配下(profile/garden/portfolioのサブフォルダを含め再帰的)の
 Markdownをチャンク分割し、embedding-server経由でベクトル化してChromaDBに
-投入する(一度実行するスクリプト)。
+投入する(コレクションを作り直す、手動実行用のフル再構築スクリプト)。
+
+通常の運用では検索リクエストのたびにapp.py側で増分の遅延再インデックス
+(indexing.py、Phase 6)が走るため、このスクリプトを都度実行する必要は無い。
+チャンク分割ロジックの変更等でコレクション全体を作り直したい場合にのみ使う。
 
 実行: .venv\\Scripts\\python.exe ingest.py
 """
@@ -11,8 +15,7 @@ from pathlib import Path
 import chromadb
 import httpx
 
-from chunking import chunk_markdown
-from embedding_client import get_embedding
+from indexing import save_index_state, sync_index
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # system/library分離により、知識データ(library/)はsystem/(PROJECT_ROOT)の
@@ -22,63 +25,30 @@ VECTORDB_DIR = PROJECT_ROOT / "data" / "vectordb"
 COLLECTION_NAME = "shiori_knowledge"
 
 
-def source_category_for(md_path: Path) -> str:
-    """library/直下のサブフォルダ名(profile/garden/portfolio等)をカテゴリとする。
-    サブフォルダ無しでlibrary/直下に置かれたファイルは"uncategorized"扱い。
-    """
-    relative = md_path.relative_to(KNOWLEDGE_DIR)
-    return relative.parts[0] if len(relative.parts) > 1 else "uncategorized"
-
-
 def main() -> None:
     client = chromadb.PersistentClient(path=str(VECTORDB_DIR))
-    # 再実行しても重複投入しないよう、毎回コレクションを作り直す
+    # 再実行しても重複投入しないよう、毎回コレクションを作り直す。
     try:
         client.delete_collection(COLLECTION_NAME)
     except Exception:
         pass
-    collection = client.create_collection(COLLECTION_NAME)
 
-    md_files = sorted(KNOWLEDGE_DIR.rglob("*.md"))
-    if not md_files:
+    if not any(KNOWLEDGE_DIR.rglob("*.md")):
         raise SystemExit(f"Markdownファイルが見つかりません: {KNOWLEDGE_DIR}")
 
-    ids: list[str] = []
-    documents: list[str] = []
-    embeddings: list[list[float]] = []
-    metadatas: list[dict] = []
+    # 同期状態を空にリセットしてから増分同期を呼ぶことで、実質的に全件投入になる
+    # (sync_index自体は増分専用だが、コレクションを空にした直後に呼べば
+    # 「前回の状態が空」=「全ファイルが新規」として扱われる)。
+    save_index_state(VECTORDB_DIR, {})
 
     with httpx.Client(timeout=30.0) as http_client:
-        for md_path in md_files:
-            text = md_path.read_text(encoding="utf-8")
-            category = source_category_for(md_path)
-            chunks = chunk_markdown(text)
-            for i, chunk in enumerate(chunks):
-                chunk_id = f"{category}-{md_path.stem}-{i}"
-                # 見出しには「huraru.comのベースカラー」のように、そのまま質問の
-                # 言い回しに近い言葉が入っていることが多い。本文だけを埋め込むと
-                # その情報が失われ、特に見出しを細かく割った短いチャンクで検索精度が
-                # 落ちるため、見出しを前置きして埋め込む(表示用documentsは本文のまま)。
-                embed_text = (
-                    f"{chunk.heading}: {chunk.text}"
-                    if chunk.heading != "(見出しなし)"
-                    else chunk.text
-                )
-                embedding = get_embedding(embed_text, client=http_client, is_query=False)
-                ids.append(chunk_id)
-                documents.append(chunk.text)
-                embeddings.append(embedding)
-                metadatas.append(
-                    {
-                        "source": md_path.name,
-                        "heading": chunk.heading,
-                        "source_category": category,
-                    }
-                )
-                print(f"投入: {chunk_id} ({chunk.heading})")
+        _collection, changes = sync_index(
+            client, http_client, KNOWLEDGE_DIR, VECTORDB_DIR, COLLECTION_NAME
+        )
 
-    collection.add(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
-    print(f"完了: {len(ids)}件のチャンクを投入しました")
+    for rel in changes["added"]:
+        print(f"投入: {rel}")
+    print(f"完了: {len(changes['added'])}件のファイルを投入しました")
 
 
 if __name__ == "__main__":

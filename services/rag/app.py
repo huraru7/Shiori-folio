@@ -14,9 +14,13 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from embedding_client import get_embedding
+from indexing import sync_index
 from reranker import rerank, warmup as warmup_reranker
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+# system/library分離により、知識データ(library/)はsystem/(PROJECT_ROOT)の
+# 外、その兄弟ディレクトリに置かれている(ingest.pyと同じ解決方法)。
+KNOWLEDGE_DIR = PROJECT_ROOT.parent / "library"
 VECTORDB_DIR = PROJECT_ROOT / "data" / "vectordb"
 COLLECTION_NAME = "shiori_knowledge"
 
@@ -102,7 +106,15 @@ def _retrieve_and_rerank(
     author/type/project等、Ver2.0の保存ルーティング(shiori-save CLI)が
     書き込むフィールドで絞り込む場合に使う。Noneなら絞り込みなし。
     """
-    collection = _chroma_client.get_collection(COLLECTION_NAME)
+    # 遅延再インデックス(Phase 6)。library/配下のファイルmtimeを前回の同期
+    # 状態と比較し、変更があったファイルだけ増分でChromaDBに反映してから
+    # 検索する。shiori-save CLIやClaude Codeの直接ファイル操作でlibrary/が
+    # 更新されても、ingest.pyを手動で再実行する必要が無くなる。変更が無ければ
+    # ファイルの列挙とstat()だけで完了し、embeddingサーバーへの問い合わせは
+    # 発生しない。
+    collection, _changes = sync_index(
+        _chroma_client, _http_client, KNOWLEDGE_DIR, VECTORDB_DIR, COLLECTION_NAME
+    )
     # クエリのフィラー語除去(正規化)はRust側(text_transformエンジン、
     # prompts/transforms/query-normalization.json)で一元化しているため、
     # ここでは受け取ったクエリをそのまま使う。
