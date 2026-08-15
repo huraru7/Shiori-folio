@@ -13,7 +13,13 @@ enumに存在しない値)をVer2.0のtype enumへ書き換えるところまで
 PyYAMLが必要(services/rag/.venvに導入済みのため、そちらのpythonで実行するのが
 簡単: `services/rag/.venv/bin/python scripts/migrate_v1_data.py`)。
 
+--library-root/--shiori-saveを指定すると、開発ツリー以外(ポータブル版・USB上の
+別インストール等)のlibrary/にも同じ移行処理を適用できる(2026-08-15、USB版
+Ver2.0移行で追加)。省略時は開発ツリー(system/の兄弟のlibrary/、および
+src-tauri/target/debug/shiori_save)を対象にする。
+
 実行(system/直下から): python scripts/migrate_v1_data.py [--dry-run]
+                        [--library-root PATH] [--shiori-save PATH]
 """
 from __future__ import annotations
 
@@ -26,7 +32,7 @@ from pathlib import Path
 import yaml
 
 SYSTEM_ROOT = Path(__file__).resolve().parents[1]
-LIBRARY_ROOT = SYSTEM_ROOT.parent / "library"
+DEFAULT_LIBRARY_ROOT = SYSTEM_ROOT.parent / "library"
 
 # 移行元ディレクトリ(library/直下の旧棚)ごとの、Ver2.0でのtype/projectの
 # 割り当てルール。garden/portfolioは調査時点でファイル0件だったが、将来
@@ -87,11 +93,13 @@ def build_v2_frontmatter(fields: dict, migration: dict, fallback_title: str) -> 
     return fm
 
 
-def migrate_file(path: Path, migration: dict, shiori_save: Path, dry_run: bool) -> bool:
+def migrate_file(
+    path: Path, migration: dict, shiori_save: Path, dry_run: bool, library_root: Path
+) -> bool:
     text = path.read_text(encoding="utf-8")
     parsed = parse_frontmatter(text)
     if parsed is None:
-        print(f"[スキップ] frontmatterが見つかりません: {path.relative_to(LIBRARY_ROOT)}")
+        print(f"[スキップ] frontmatterが見つかりません: {path.relative_to(library_root)}")
         return False
     fields, body = parsed
 
@@ -100,7 +108,7 @@ def migrate_file(path: Path, migration: dict, shiori_save: Path, dry_run: bool) 
     new_content = f"---\n{new_frontmatter_yaml}---\n{body.lstrip(chr(10))}"
 
     project_note = f", project={migration['project']}" if migration["project"] else ""
-    print(f"[移行] {path.relative_to(LIBRARY_ROOT)} -> type={migration['type']}{project_note}")
+    print(f"[移行] {path.relative_to(library_root)} -> type={migration['type']}{project_note}")
     if dry_run:
         return True
 
@@ -123,23 +131,31 @@ def resolve_shiori_save_binary() -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true", help="書き換え・移動を行わず対象を表示するだけ")
+    parser.add_argument(
+        "--library-root", type=Path, default=None, help="移行対象のlibrary/(省略時は開発ツリー)"
+    )
+    parser.add_argument(
+        "--shiori-save", type=Path, default=None, help="shiori-save実行ファイル(省略時は開発ツリーのdebugビルド)"
+    )
     args = parser.parse_args()
 
-    shiori_save = resolve_shiori_save_binary()
+    library_root = args.library_root or DEFAULT_LIBRARY_ROOT
+    shiori_save = args.shiori_save or resolve_shiori_save_binary()
     if not args.dry_run and not shiori_save.is_file():
         raise SystemExit(
             f"shiori-saveバイナリが見つかりません: {shiori_save}\n"
-            "先にsrc-tauri/で `cargo build --bin shiori_save` を実行してください。"
+            "先にsrc-tauri/で `cargo build --bin shiori_save` を実行するか、"
+            "--shiori-saveで既存バイナリのパスを指定してください。"
         )
 
     migrated = 0
     skipped = 0
     for migration in MIGRATIONS:
-        src_dir = LIBRARY_ROOT / migration["dir"]
+        src_dir = library_root / migration["dir"]
         if not src_dir.is_dir():
             continue
         for path in sorted(src_dir.glob("*.md")):
-            ok = migrate_file(path, migration, shiori_save, args.dry_run)
+            ok = migrate_file(path, migration, shiori_save, args.dry_run, library_root)
             if ok:
                 migrated += 1
             else:

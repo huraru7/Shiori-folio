@@ -127,7 +127,19 @@ if [ "$TARGET_OS" = "mac" ]; then
   # piper-plus-cliは静的リンク中心でOSフレームワーク以外への依存が無いことを
   # 実機確認済み(otool -Lで@rpath依存なし)、単体コピーで問題ない。
   cp "$SYSTEM_DIR/third_party/piper-plus/src/rust/target/release/piper-plus-cli" "$BIN_DIR/piper-plus-cli"
-  chmod +x "$BIN_DIR/llama-server" "$BIN_DIR/whisper-server" "$BIN_DIR/piper-plus-cli"
+
+  # shiori-save(Ver2.0 Phase 5、保存CLI)もOSフレームワークのみに依存
+  # (otool -Lで確認済み、@rpath依存なし)のため単体コピーで問題ない。
+  # cargo buildの成果物名はshiori_save(アンダースコア)だが、CLIとしての
+  # 呼び出し名(shiori-save)に合わせてコピー時にリネームする。
+  SHIORI_SAVE_SRC="$SYSTEM_DIR/src-tauri/target/release/shiori_save"
+  if [ ! -f "$SHIORI_SAVE_SRC" ]; then
+    echo "エラー: $SHIORI_SAVE_SRC が見つかりません。先に (cd system && npx tauri build) を実行してください。" >&2
+    exit 1
+  fi
+  cp "$SHIORI_SAVE_SRC" "$BIN_DIR/shiori-save"
+
+  chmod +x "$BIN_DIR/llama-server" "$BIN_DIR/whisper-server" "$BIN_DIR/piper-plus-cli" "$BIN_DIR/shiori-save"
 else
   echo "警告: $TARGET_OS 向けのバイナリ配置は未対応のためスキップしました。" >&2
 fi

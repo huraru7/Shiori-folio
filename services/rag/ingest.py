@@ -16,11 +16,12 @@ import chromadb
 import httpx
 
 from indexing import save_index_state, sync_index
+from library_path import resolve_knowledge_dir
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-# system/library分離により、知識データ(library/)はsystem/(PROJECT_ROOT)の
-# 外、その兄弟ディレクトリに置かれている。
-KNOWLEDGE_DIR = PROJECT_ROOT.parent / "library"
+# 開発ツリー/ポータブル版どちらでも正しいlibrary/を指すよう、
+# library_path.resolve_knowledge_dir()に判定を委譲する(詳細はそちら参照)。
+KNOWLEDGE_DIR = resolve_knowledge_dir(PROJECT_ROOT)
 VECTORDB_DIR = PROJECT_ROOT / "data" / "vectordb"
 COLLECTION_NAME = "shiori_knowledge"
 
