@@ -65,6 +65,59 @@ pub fn add_document(
     Ok(())
 }
 
+#[derive(Serialize, Default)]
+pub struct LibrarySearchFilter<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "type")]
+    pub kind: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct SearchLibraryRequest<'a> {
+    query: &'a str,
+    limit: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filter: Option<LibrarySearchFilter<'a>>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct FileHeading {
+    pub heading: String,
+    pub rerank_score: f64,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct SearchLibraryResultItem {
+    pub source: String,
+    pub source_category: String,
+    pub headings: Vec<FileHeading>,
+    pub best_score: f64,
+}
+
+// MCPサーバーのsearch_libraryツール向け(詩織Ver2.0設計指示書v3、9章)。
+// services/rag/app.pyの/search_libraryを呼ぶ。/searchと異なりファイル単位に
+// 集約された結果(本文を含まない)が返る。
+pub fn search_library(
+    port: u16,
+    query: &str,
+    limit: u32,
+    filter: Option<LibrarySearchFilter>,
+) -> Result<Vec<SearchLibraryResultItem>, String> {
+    let url = format!("http://127.0.0.1:{port}/search_library");
+    let body = SearchLibraryRequest { query, limit, filter };
+
+    ureq::post(&url)
+        .timeout(Duration::from_secs(30))
+        .send_json(&body)
+        .map_err(|e| format!("図書館検索に失敗: {e}"))?
+        .into_json()
+        .map_err(|e| format!("図書館検索応答の解析に失敗: {e}"))
+}
+
 #[derive(Deserialize)]
 pub struct ChunkItem {
     pub id: String,

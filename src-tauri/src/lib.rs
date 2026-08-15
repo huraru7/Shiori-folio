@@ -6,7 +6,7 @@ mod llm_client;
 mod models;
 mod piper_client;
 mod prompts;
-mod rag_client;
+pub mod rag_client;
 pub mod shared_daemon;
 mod system_info;
 mod text_transform;
@@ -30,14 +30,14 @@ use serde::{Deserialize, Serialize};
 // この窓の生成自体を止める。Windows専用のプロセス起動オプションのため、
 // 他OSでは何もしない。
 #[cfg(windows)]
-pub(crate) fn no_console_window(cmd: &mut Command) {
+pub fn no_console_window(cmd: &mut Command) {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     cmd.creation_flags(CREATE_NO_WINDOW);
 }
 
 #[cfg(not(windows))]
-pub(crate) fn no_console_window(_cmd: &mut Command) {}
+pub fn no_console_window(_cmd: &mut Command) {}
 
 // config.json のうちバックエンド起動に必要な部分のみを読む
 #[derive(Deserialize)]
@@ -252,7 +252,7 @@ fn exe_dir() -> PathBuf {
         .to_path_buf()
 }
 
-pub(crate) fn project_root() -> PathBuf {
+pub fn project_root() -> PathBuf {
     let mut dir = exe_dir();
     loop {
         if dir.join("config.json").is_file() {
@@ -274,7 +274,7 @@ pub(crate) fn project_root() -> PathBuf {
 // 実行ファイル名にOSごとの拡張子(Windowsのみ`.exe`)を付与する。third_party配下の
 // サイドカーexeを参照する箇所(resolve_engine_exe、piper_client)で共通利用する
 // (2026-08-13、`.exe`のハードコードが複数箇所に分散していたための共通化)。
-pub(crate) fn exe_name(base: &str) -> String {
+pub fn exe_name(base: &str) -> String {
     if cfg!(windows) {
         format!("{base}.exe")
     } else {
@@ -286,7 +286,7 @@ pub(crate) fn exe_name(base: &str) -> String {
 // 含めず、コンパイル済みのエンジンバイナリのみをbin/<os>/にフラットに
 // 配置する。ここが存在すればdevツリー(third_party/.../build/bin)より
 // 優先して使う(USBポータブル版の実行ファイルは常にこちらを見る)。
-pub(crate) fn portable_bin_dir() -> PathBuf {
+pub fn portable_bin_dir() -> PathBuf {
     let os_dir = if cfg!(target_os = "macos") {
         "mac"
     } else if cfg!(windows) {
@@ -297,7 +297,7 @@ pub(crate) fn portable_bin_dir() -> PathBuf {
     project_root().join("bin").join(os_dir)
 }
 
-fn resolve_engine_exe(build_dir: &Path, exe_base_name: &str) -> PathBuf {
+pub fn resolve_engine_exe(build_dir: &Path, exe_base_name: &str) -> PathBuf {
     let exe_name = exe_name(exe_base_name);
 
     let portable = portable_bin_dir().join(&exe_name);
@@ -328,7 +328,7 @@ fn resolve_engine_exe(build_dir: &Path, exe_base_name: &str) -> PathBuf {
 // 正しくportable/を指すが、その親には何も無いため)。project_root()直下に
 // library/が存在する場合(ポータブル版)はそちらを優先し、無い場合(開発ツリー)は
 // 従来通り親ディレクトリを見るフォールバックにする。
-fn library_root() -> PathBuf {
+pub fn library_root() -> PathBuf {
     let root = project_root();
     let portable_library = root.join("library");
     if portable_library.is_dir() {
@@ -339,7 +339,7 @@ fn library_root() -> PathBuf {
         .join("library")
 }
 
-fn load_config(root: &Path) -> Result<AppConfig, String> {
+pub(crate) fn load_config(root: &Path) -> Result<AppConfig, String> {
     let text = std::fs::read_to_string(root.join("config.json"))
         .map_err(|e| format!("config.jsonの読み込みに失敗: {e}"))?;
     serde_json::from_str(&text).map_err(|e| format!("config.jsonの解析に失敗: {e}"))
@@ -374,7 +374,7 @@ fn cuda_bin_dir() -> Option<PathBuf> {
 //   問題ない)。
 // - libs_dir_nameがNone、またはポータブル版が存在しない(開発ツリーでの実行)場合は
 //   従来通りcuda_bin_dir()で開発機にグローバルインストールされたCUDA Toolkitを探す。
-fn extended_path(libs_dir_name: Option<&str>) -> String {
+pub fn extended_path(libs_dir_name: Option<&str>) -> String {
     let existing = std::env::var("PATH").unwrap_or_default();
     let sep = if cfg!(windows) { ';' } else { ':' };
 
@@ -395,11 +395,19 @@ fn extended_path(libs_dir_name: Option<&str>) -> String {
 // モデルファイルのディレクトリをcwdにして相対ファイル名だけを渡す(llama-serverは問題ないが同じ方式で統一)。
 // libs_dir_nameは"libs-llama"/"libs-whisper"のように呼び出し元のエンジンに応じて渡す
 // (extended_path参照)。
-fn spawn_server(
+//
+// quiet_stdioは子プロセスの標準出力・標準エラー出力を破棄するかどうか。GUI
+// (会話UI)は開発時にターミナルでログを見られると便利なため通常falseで呼ぶが、
+// MCPサーバー(mcp_server.rs)はこの子プロセスの標準出力を継承すると、MCP
+// プロトコル通信に使っている自分自身の標準出力にログが混入してJSON-RPCの
+// パースが壊れる(2026-08-14、実機のstdio疎通テストで発覚)。そのためMCP
+// サーバー経由での起動時はtrueを渡し、破棄する。
+pub fn spawn_server(
     exe_path: &Path,
     model_path: &Path,
     extra_args: &[&str],
     libs_dir_name: &str,
+    quiet_stdio: bool,
 ) -> std::io::Result<Child> {
     let model_dir = model_path.parent().unwrap_or_else(|| Path::new("."));
     let model_filename = model_path
@@ -412,11 +420,14 @@ fn spawn_server(
         .arg(model_filename)
         .args(extra_args)
         .env("PATH", extended_path(Some(libs_dir_name)));
+    if quiet_stdio {
+        cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    }
     no_console_window(&mut cmd);
     cmd.spawn()
 }
 
-pub(crate) fn wait_for_health(port: u16, attempts: u32) -> bool {
+pub fn wait_for_health(port: u16, attempts: u32) -> bool {
     let url = format!("http://127.0.0.1:{port}/health");
     for _ in 0..attempts {
         if let Ok(resp) = ureq::get(&url).timeout(Duration::from_secs(2)).call() {
@@ -474,7 +485,7 @@ fn start_backend_services_impl(
             &ctx,
             "--jinja",
         ];
-        match spawn_server(&llama_server_exe, &model_path, &args, "libs-llama") {
+        match spawn_server(&llama_server_exe, &model_path, &args, "libs-llama", false) {
             Ok(child) => {
                 procs.llm = Some(child);
                 let healthy = wait_for_health(config.llm.port, 30);
@@ -499,18 +510,6 @@ fn start_backend_services_impl(
     // Embedding (nomic-embed-text)
     {
         emit_startup_stage(app, "検索用の埋め込みモデルを読み込んでいます");
-        let model_path = root.join(&config.embedding.model_path);
-        let port_str = config.embedding.port.to_string();
-        // VRAM軽量化のためCPU実行にする(埋め込みモデルは軽量なためCPUでも実用速度が出る想定)
-        let args = [
-            "--port",
-            &port_str,
-            "--host",
-            "127.0.0.1",
-            "--n-gpu-layers",
-            "0",
-            "--embedding",
-        ];
         // 詩織Ver2.0: embedding用llama-serverは会話UI・MCPサーバー・保存CLI等から
         // 共有されるデーモンになったため(設計指示書v3、4章)、ヘルスチェック→ロック→
         // 起動の共通ロジック(shared_daemon)を経由する。既に他プロセスが起動済みの
@@ -521,7 +520,7 @@ fn start_backend_services_impl(
             config.embedding.port,
             ".shiori-embed.lock",
             30,
-            || spawn_server(&llama_server_exe, &model_path, &args, "libs-llama"),
+            || build_embedding_command(&root, &config.embedding.model_path, config.embedding.port, false),
         ) {
             Ok(child) => {
                 if let Some(child) = child {
@@ -568,16 +567,38 @@ fn start_backend_services_impl(
     Ok(results)
 }
 
-// RAGサーバー(services/rag、uvicorn)を起動し、ヘルスチェックの結果を含めて返す。
-// start_backend_services_impl(初回起動)とretry_rag_service(起動画面の再試行ボタン)
-// の両方から呼ばれる共通処理として切り出した。
-fn start_rag_service(
-    procs: &mut BackendProcesses,
-    app: Option<&tauri::AppHandle>,
+// embedding用llama-serverを起動するCommandを組み立てる(spawnまで行う)。
+// GUI(start_backend_services_impl)・MCPサーバー(mcp_server.rs)双方から
+// 共有デーモンとして起動できるよう、Tauri固有の型に依存しない形で切り出した。
+// quiet_stdioはspawn_server参照(MCPサーバーからの起動時はtrueを渡すこと)。
+pub fn build_embedding_command(
     root: &Path,
-    config: &AppConfig,
-) -> ServiceStatus {
-    emit_startup_stage(app, "詩織の図書館(検索インデックス)を読み込んでいます");
+    model_path_rel: &str,
+    port: u16,
+    quiet_stdio: bool,
+) -> std::io::Result<Child> {
+    let llama_server_exe = resolve_engine_exe(&root.join("third_party/llama.cpp/build"), "llama-server");
+    let model_path = root.join(model_path_rel);
+    let port_str = port.to_string();
+    // VRAM軽量化のためCPU実行にする(埋め込みモデルは軽量なためCPUでも実用速度が出る想定)
+    let args = [
+        "--port",
+        &port_str,
+        "--host",
+        "127.0.0.1",
+        "--n-gpu-layers",
+        "0",
+        "--embedding",
+    ];
+    spawn_server(&llama_server_exe, &model_path, &args, "libs-llama", quiet_stdio)
+}
+
+// RAG Pythonサーバー(services/rag、uvicorn)を起動するCommandを組み立てる
+// (spawnまで行う)。build_embedding_commandと同じく、GUI・MCPサーバー双方から
+// 共有デーモンとして起動できるようTauri固有の型に依存しない形で切り出した。
+// quiet_stdioはspawn_server参照(MCPサーバーからの起動時はtrueを渡すこと。
+// 理由はこのファイル内のquiet_stdioの説明コメントを参照)。
+pub fn build_rag_command(root: &Path, port: u16, quiet_stdio: bool) -> std::io::Result<Child> {
     let rag_dir = root.join("services/rag");
     // 【2026-08-13修正】ポータブル版(bin/<os>/rag-venv)はuv python installで
     // 取得した「venvではない可搬版Python本体」で、Windowsではpython.exeが
@@ -608,7 +629,7 @@ fn start_rag_service(
     } else {
         rag_dir.join(".venv").join(dev_python_rel)
     };
-    let port_str = config.rag.port.to_string();
+    let port_str = port.to_string();
     let args = [
         "-m",
         "uvicorn",
@@ -618,18 +639,52 @@ fn start_rag_service(
         "--host",
         "127.0.0.1",
     ];
+    let mut cmd = Command::new(&python_exe);
+    cmd.current_dir(&rag_dir).args(args).env("PATH", extended_path(None));
+    if quiet_stdio {
+        cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    }
+    no_console_window(&mut cmd);
+    cmd.spawn()
+}
+
+// MCPサーバー(mcp_server.rs)・保存CLI等、shiori_folio_lib外の別バイナリ向けに
+// config.jsonのうち検索バックエンドの起動に必要な最小限の情報だけを公開する。
+// AppConfig本体(プライベート)を丸ごとpublicにすると変更の影響範囲が広がり
+// すぎるため、専用の薄い構造体に絞って公開する。
+#[derive(Clone)]
+pub struct SearchBackendConfig {
+    pub embedding_port: u16,
+    pub embedding_model_path: String,
+    pub rag_port: u16,
+}
+
+pub fn load_search_backend_config(root: &Path) -> Result<SearchBackendConfig, String> {
+    let config = load_config(root)?;
+    Ok(SearchBackendConfig {
+        embedding_port: config.embedding.port,
+        embedding_model_path: config.embedding.model_path.clone(),
+        rag_port: config.rag.port,
+    })
+}
+
+// RAGサーバー(services/rag、uvicorn)を起動し、ヘルスチェックの結果を含めて返す。
+// start_backend_services_impl(初回起動)とretry_rag_service(起動画面の再試行ボタン)
+// の両方から呼ばれる共通処理として切り出した。
+fn start_rag_service(
+    procs: &mut BackendProcesses,
+    app: Option<&tauri::AppHandle>,
+    root: &Path,
+    config: &AppConfig,
+) -> ServiceStatus {
+    emit_startup_stage(app, "詩織の図書館(検索インデックス)を読み込んでいます");
     // 詩織Ver2.0: RAG Pythonサーバーも会話UI・MCPサーバー・保存CLI等から共有
     // されるデーモンになったため(設計指示書v3、4章)、embedding用llama-serverと
     // 同じくshared_daemon経由で起動する。リランカーのwarmup(services/rag/app.py)
     // 込みで起動に時間がかかりうるため、ヘルスチェックの試行回数はembeddingより
     // 多めに取る。
     match shared_daemon::ensure_daemon_running(root, config.rag.port, ".shiori-rag.lock", 60, || {
-        let mut cmd = Command::new(&python_exe);
-        cmd.current_dir(&rag_dir)
-            .args(args)
-            .env("PATH", extended_path(None));
-        no_console_window(&mut cmd);
-        cmd.spawn()
+        build_rag_command(root, config.rag.port, false)
     }) {
         Ok(child) => {
             if let Some(child) = child {
@@ -1228,7 +1283,7 @@ fn switch_model(
         .unwrap_or(0);
 
     // 2. 新モデルで起動
-    match spawn_server(&llama_server_exe, &target_path, &args, "libs-llama") {
+    match spawn_server(&llama_server_exe, &target_path, &args, "libs-llama", false) {
         Ok(child) => {
             procs.llm = Some(child);
             if wait_for_health(config.llm.port, 30) {
@@ -1267,7 +1322,7 @@ fn switch_model(
                     let _ = c.kill();
                     let _ = c.wait();
                 }
-                let rolled_back = match spawn_server(&llama_server_exe, &root.join(&old_model_path), &args, "libs-llama") {
+                let rolled_back = match spawn_server(&llama_server_exe, &root.join(&old_model_path), &args, "libs-llama", false) {
                     Ok(child) => {
                         procs.llm = Some(child);
                         wait_for_health(config.llm.port, 30)
@@ -1283,7 +1338,7 @@ fn switch_model(
             }
         }
         Err(e) => {
-            let rolled_back = match spawn_server(&llama_server_exe, &root.join(&old_model_path), &args, "libs-llama") {
+            let rolled_back = match spawn_server(&llama_server_exe, &root.join(&old_model_path), &args, "libs-llama", false) {
                 Ok(child) => {
                     procs.llm = Some(child);
                     wait_for_health(config.llm.port, 30)
@@ -2118,7 +2173,7 @@ impl SttManager {
             "詩織、ふらる、huraru.com、ポートフォリオ、lab.huraru.com",
             "--carry-initial-prompt",
         ];
-        let child = spawn_server(exe, model_path, &args, "libs-whisper").map_err(|e| e.to_string())?;
+        let child = spawn_server(exe, model_path, &args, "libs-whisper", false).map_err(|e| e.to_string())?;
         *guard = Some(child);
         Ok(())
     }

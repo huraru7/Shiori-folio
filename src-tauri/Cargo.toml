@@ -31,6 +31,13 @@ hound = "3.5"
 rodio = "0.19"
 sysinfo = "0.32"
 fs4 = { version = "0.13", features = ["sync"] }
+# Ver2.0(セカンドブレイン化)のMCPサーバー(src/bin/mcp_server.rs)向け。
+# GUI本体(shiori-folioバイナリ)は使わないが、同じCargoパッケージ内の別
+# バイナリ(src/bin/*)として実装するため[dependencies]を共有する。
+rmcp = { version = "3", features = ["transport-io"] }
+schemars = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
+anyhow = "1"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
