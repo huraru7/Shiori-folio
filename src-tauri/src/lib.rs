@@ -660,13 +660,25 @@ fn start_rag_service(
 // プロセスが残っていれば(起動はしたがヘルスチェックが通らなかった場合)一旦
 // 終了してから再度起動を試みる。
 #[tauri::command]
-fn retry_rag_service(state: tauri::State<BackendState>, app: tauri::AppHandle) -> Result<ServiceStatus, String> {
+fn retry_rag_service(
+    state: tauri::State<BackendState>,
+    sys: tauri::State<Mutex<sysinfo::System>>,
+    app: tauri::AppHandle,
+) -> Result<ServiceStatus, String> {
     let root = project_root();
     let config = load_config(&root)?;
     let mut procs = state.0.lock().map_err(|e| e.to_string())?;
     if let Some(mut c) = procs.rag.take() {
         let _ = c.kill();
         let _ = c.wait();
+    } else {
+        // 共有デーモン化により、RAGがこのプロセスの管理下に無い(procsに
+        // 保持されていない、外部プロセスが起動した)場合がある。その場合は
+        // ロックファイルに記録されたPIDを頼りにkillする
+        // (2026-08-14、Ver2.0 Phase 2フォローアップ)。
+        let mut sys = sys.lock().map_err(|e| e.to_string())?;
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        shared_daemon::kill_daemon(&sys, &root, ".shiori-rag.lock");
     }
     Ok(start_rag_service(&mut procs, Some(&app), &root, &config))
 }
@@ -730,28 +742,26 @@ fn get_system_info(
             .map(|p| p.memory() / (1024 * 1024))
     };
 
-    let (llm_pid, embedding_pid, rag_pid, llm_running, embedding_running, rag_running) = {
+    let root = project_root();
+
+    let llm_pid = {
         let mut procs = backend.0.lock().map_err(|e| e.to_string())?;
-        let llm_running = procs
-            .llm
-            .as_mut()
-            .map(|c| matches!(c.try_wait(), Ok(None)))
-            .unwrap_or(false);
-        let embedding_running = procs
-            .embedding
-            .as_mut()
-            .map(|c| matches!(c.try_wait(), Ok(None)))
-            .unwrap_or(false);
-        let rag_running = procs
-            .rag
-            .as_mut()
-            .map(|c| matches!(c.try_wait(), Ok(None)))
-            .unwrap_or(false);
-        let llm_pid = procs.llm.as_ref().map(|c| c.id());
-        let embedding_pid = procs.embedding.as_ref().map(|c| c.id());
-        let rag_pid = procs.rag.as_ref().map(|c| c.id());
-        (llm_pid, embedding_pid, rag_pid, llm_running, embedding_running, rag_running)
+        procs.llm.as_mut().and_then(|c| {
+            matches!(c.try_wait(), Ok(None)).then(|| c.id())
+        })
     };
+    let llm_running = llm_pid.is_some();
+
+    // embedding用llama-server・RAG Pythonサーバーは共有デーモン化により
+    // BackendState(procs)に保持されているとは限らない(外部プロセス、例えば
+    // 将来のMCPサーバーが先に起動した場合はNoneのまま)。そのため稼働判定・
+    // PID取得はどちらもshared_daemonのロックファイルに記録されたPIDの生存
+    // 確認を正とする(2026-08-14、Ver2.0 Phase 2フォローアップ)。
+    let embedding_pid = shared_daemon::daemon_pid_if_alive(&sys, &root, ".shiori-embed.lock");
+    let embedding_running = embedding_pid.is_some();
+    let rag_pid = shared_daemon::daemon_pid_if_alive(&sys, &root, ".shiori-rag.lock");
+    let rag_running = rag_pid.is_some();
+
     let stt_pid = stt.pid();
 
     let vram_by_pid = system_info::query_process_vram_map();
@@ -1046,6 +1056,7 @@ fn set_config(update: ConfigUpdate) -> Result<(), String> {
 #[tauri::command]
 fn restart_llm_services(
     state: tauri::State<BackendState>,
+    sys: tauri::State<Mutex<sysinfo::System>>,
     app: tauri::AppHandle,
 ) -> Result<Vec<ServiceStatus>, String> {
     let mut procs = state.0.lock().map_err(|e| e.to_string())?;
@@ -1054,6 +1065,15 @@ fn restart_llm_services(
     }
     if let Some(mut c) = procs.embedding.take() {
         let _ = c.kill();
+    } else {
+        // 共有デーモン化により、embeddingがこのプロセスの管理下に無い
+        // (procsに保持されていない、外部プロセスが起動した)場合がある。
+        // その場合はロックファイルに記録されたPIDを頼りにkillする
+        // (2026-08-14、Ver2.0 Phase 2フォローアップ)。
+        let root = project_root();
+        let mut sys = sys.lock().map_err(|e| e.to_string())?;
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        shared_daemon::kill_daemon(&sys, &root, ".shiori-embed.lock");
     }
     start_backend_services_impl(&mut procs, Some(&app))
 }
@@ -2452,6 +2472,48 @@ mod tests {
             let _ = c.kill();
             let _ = c.wait();
         }
+    }
+
+    // Ver2.0 Phase 2フォローアップ: shared_daemonのロックファイルにPIDが正しく
+    // 記録され、「procsにハンドルを保持していない(=外部プロセスが起動した)」
+    // 想定でもkill_daemonでプロセスを止められることを確認する用。
+    // start_rag_serviceでRAGを起動した直後、procs.ragを意図的に空にして
+    // (外部プロセスが起動した状態を模擬する)、shared_daemon::kill_daemonが
+    // ロックファイルのPID経由で実際にプロセスを終了できるか確認する。
+    // cargo test --lib -- --ignored --nocapture phase_shared_daemon_pid_kill
+    #[test]
+    #[ignore]
+    fn phase_shared_daemon_pid_kill() {
+        let root = project_root();
+        let config = load_config(&root).expect("config.jsonの読み込みに失敗");
+        let mut procs = BackendProcesses::default();
+
+        let status = start_rag_service(&mut procs, None, &root, &config);
+        assert!(status.healthy, "RAGサーバーの起動に失敗: {:?}", status.error);
+
+        // procsのハンドルを手放す(外部プロセスが起動した状態を模擬)。
+        // Child自体をdropしてもプロセスはkillされない(Rust標準ライブラリの仕様)。
+        let detached_pid = procs.rag.take().map(|c| c.id());
+        println!("RAGサーバーPID(detach前): {detached_pid:?}");
+
+        let mut sys = sysinfo::System::new_all();
+        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+        let recorded_pid = shared_daemon::daemon_pid_if_alive(&sys, &root, ".shiori-rag.lock");
+        println!("ロックファイルから読んだPID: {recorded_pid:?}");
+        assert_eq!(
+            recorded_pid, detached_pid,
+            "ロックファイルのPIDが実際に起動したプロセスのPIDと一致しない"
+        );
+
+        let killed = shared_daemon::kill_daemon(&sys, &root, ".shiori-rag.lock");
+        assert!(killed, "kill_daemonがプロセスを終了できなかった");
+
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(
+            !wait_for_health(config.rag.port, 1),
+            "kill_daemon後もRAGサーバーが応答している(終了できていない)"
+        );
+        println!("kill_daemon後、RAGサーバーは正しく終了した");
     }
 
     // list_available_models/estimate_model_switchの動作確認用(実際の切替は行わない)。

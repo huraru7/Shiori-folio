@@ -16,6 +16,7 @@
 //! するだけになる。
 
 use fs4::fs_std::FileExt;
+use std::io::{Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::process::Child;
 use std::time::Duration;
@@ -24,6 +25,48 @@ use crate::wait_for_health;
 
 fn lock_path(root: &Path, lock_file_name: &str) -> PathBuf {
     root.join("data").join(lock_file_name)
+}
+
+/// ロックファイルの中身を起動したプロセスのPIDで上書きする。呼び出し元は
+/// ロックを保持している状態(排他制御下)で呼ぶこと。
+fn write_pid(lock_file: &mut std::fs::File, pid: u32) {
+    let _ = lock_file.set_len(0);
+    let _ = lock_file.seek(SeekFrom::Start(0));
+    let _ = lock_file.write_all(pid.to_string().as_bytes());
+    let _ = lock_file.flush();
+}
+
+/// ロックファイルに記録されたPIDを読む。ファイルが無い/中身が数値でない
+/// 場合はNone(まだ一度も起動されていない、またはPID記録前の旧ロックファイル)。
+pub fn read_daemon_pid(root: &Path, lock_file_name: &str) -> Option<u32> {
+    let path = lock_path(root, lock_file_name);
+    std::fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
+/// ロックファイルに記録されたPIDが実際に生存していればそのPIDを返す。
+/// 稼働判定(get_system_info)・kill対象特定(restart_llm_services/
+/// retry_rag_service)の双方で、プロセスハンドルの保持有無ではなくこちらを
+/// 正とする(2026-08-14、Ver2.0 Phase 2フォローアップ)。`sys`は呼び出し元が
+/// 用意した(refresh_processes済みの)sysinfo::Systemを渡すこと(呼び出しの
+/// たびに新規作成すると全プロセス列挙のコストがかかるため)。
+pub fn daemon_pid_if_alive(sys: &sysinfo::System, root: &Path, lock_file_name: &str) -> Option<u32> {
+    let pid = read_daemon_pid(root, lock_file_name)?;
+    sys.process(sysinfo::Pid::from_u32(pid))?;
+    Some(pid)
+}
+
+/// ロックファイルに記録されたPIDのプロセスをkillする。呼び出し元の
+/// BackendStateがハンドルを保持していない(=外部プロセスが起動した)
+/// デーモンを止めるための手段。生存していない、または記録が無い場合は
+/// 何もせずfalseを返す。
+pub fn kill_daemon(sys: &sysinfo::System, root: &Path, lock_file_name: &str) -> bool {
+    let Some(pid) = daemon_pid_if_alive(sys, root, lock_file_name) else {
+        return false;
+    };
+    match sys.process(sysinfo::Pid::from_u32(pid)) {
+        Some(process) => process.kill(),
+        None => false,
+    }
 }
 
 /// portで`/health`が既に応答するなら何もしない。応答しなければロックファイルを
@@ -56,7 +99,7 @@ pub fn ensure_daemon_running(
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("dataディレクトリの作成に失敗: {e}"))?;
     }
-    let lock_file = std::fs::OpenOptions::new()
+    let mut lock_file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
         .open(&path)
@@ -74,6 +117,7 @@ pub fn ensure_daemon_running(
                 let outcome = match spawn() {
                     Ok(mut child) => {
                         if wait_for_health(port, startup_attempts) {
+                            write_pid(&mut lock_file, child.id());
                             Ok(Some(child))
                         } else {
                             let _ = child.kill();
