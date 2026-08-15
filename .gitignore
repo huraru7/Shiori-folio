@@ -32,6 +32,9 @@ models/**/*.bin
 models/**/*.onnx
 data/vectordb/
 data/shiori.db
+# 共有デーモン(embedding用llama-server・RAG Pythonサーバー)の起動調停用
+# ロックファイル(shared_daemon.rs)。実行環境ごとに生成される一時ファイル。
+data/*.lock
 
 # Rustビルド成果物（OS依存・容量大、Git管理外。docs/setup-third-party.mdの手順で再現）
 src-tauri/target/

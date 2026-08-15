@@ -7,6 +7,7 @@ mod models;
 mod piper_client;
 mod prompts;
 mod rag_client;
+pub mod shared_daemon;
 mod system_info;
 mod text_transform;
 mod whisper_client;
@@ -415,7 +416,7 @@ fn spawn_server(
     cmd.spawn()
 }
 
-fn wait_for_health(port: u16, attempts: u32) -> bool {
+pub(crate) fn wait_for_health(port: u16, attempts: u32) -> bool {
     let url = format!("http://127.0.0.1:{port}/health");
     for _ in 0..attempts {
         if let Ok(resp) = ureq::get(&url).timeout(Duration::from_secs(2)).call() {
@@ -510,15 +511,27 @@ fn start_backend_services_impl(
             "0",
             "--embedding",
         ];
-        match spawn_server(&llama_server_exe, &model_path, &args, "libs-llama") {
+        // 詩織Ver2.0: embedding用llama-serverは会話UI・MCPサーバー・保存CLI等から
+        // 共有されるデーモンになったため(設計指示書v3、4章)、ヘルスチェック→ロック→
+        // 起動の共通ロジック(shared_daemon)を経由する。既に他プロセスが起動済みの
+        // 場合はOk(None)が返り、procs.embeddingはNoneのままになる(=「自分の管理下には
+        // 無いが動いている」ことを表す。詳細はshared_daemon.rsのコメント参照)。
+        match shared_daemon::ensure_daemon_running(
+            &root,
+            config.embedding.port,
+            ".shiori-embed.lock",
+            30,
+            || spawn_server(&llama_server_exe, &model_path, &args, "libs-llama"),
+        ) {
             Ok(child) => {
-                procs.embedding = Some(child);
-                let healthy = wait_for_health(config.embedding.port, 30);
+                if let Some(child) = child {
+                    procs.embedding = Some(child);
+                }
                 results.push(ServiceStatus {
                     name: "embedding".into(),
                     port: config.embedding.port,
                     started: true,
-                    healthy,
+                    healthy: true,
                     error: None,
                 });
             }
@@ -527,7 +540,7 @@ fn start_backend_services_impl(
                 port: config.embedding.port,
                 started: false,
                 healthy: false,
-                error: Some(e.to_string()),
+                error: Some(e),
             }),
         }
     }
@@ -605,20 +618,28 @@ fn start_rag_service(
         "--host",
         "127.0.0.1",
     ];
-    let mut cmd = Command::new(&python_exe);
-    cmd.current_dir(&rag_dir)
-        .args(args)
-        .env("PATH", extended_path(None));
-    no_console_window(&mut cmd);
-    match cmd.spawn() {
+    // 詩織Ver2.0: RAG Pythonサーバーも会話UI・MCPサーバー・保存CLI等から共有
+    // されるデーモンになったため(設計指示書v3、4章)、embedding用llama-serverと
+    // 同じくshared_daemon経由で起動する。リランカーのwarmup(services/rag/app.py)
+    // 込みで起動に時間がかかりうるため、ヘルスチェックの試行回数はembeddingより
+    // 多めに取る。
+    match shared_daemon::ensure_daemon_running(root, config.rag.port, ".shiori-rag.lock", 60, || {
+        let mut cmd = Command::new(&python_exe);
+        cmd.current_dir(&rag_dir)
+            .args(args)
+            .env("PATH", extended_path(None));
+        no_console_window(&mut cmd);
+        cmd.spawn()
+    }) {
         Ok(child) => {
-            procs.rag = Some(child);
-            let healthy = wait_for_health(config.rag.port, 30);
+            if let Some(child) = child {
+                procs.rag = Some(child);
+            }
             ServiceStatus {
                 name: "rag".into(),
                 port: config.rag.port,
                 started: true,
-                healthy,
+                healthy: true,
                 error: None,
             }
         }
@@ -627,7 +648,7 @@ fn start_rag_service(
             port: config.rag.port,
             started: false,
             healthy: false,
-            error: Some(e.to_string()),
+            error: Some(e),
         },
     }
 }

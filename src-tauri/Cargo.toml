@@ -30,6 +30,7 @@ cpal = "0.15"
 hound = "3.5"
 rodio = "0.19"
 sysinfo = "0.32"
+fs4 = { version = "0.13", features = ["sync"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [
