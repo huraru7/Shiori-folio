@@ -3,6 +3,7 @@ import type {
   AppConfigDto,
   AppConfigUpdate,
   KnowledgeResult,
+  LibraryFile,
   ModelInfo,
   ModelSwitchEstimate,
   ModelSwitchResult,
@@ -78,9 +79,10 @@ export const api = {
   getSourceDocument: (sourceCategory: string, source: string) =>
     invoke<string>("get_source_document", { sourceCategory, source }),
 
-  // スタンドアロン図書館UI向け、検索を経由しない蔵書全件の一覧取得
-  // (2026-08-12、図書館ビジョン統合仕様書3-2)。
-  listAllKnowledge: () => invoke<KnowledgeResult[]>("list_all_knowledge"),
+  // スタンドアロン図書館UI向け、検索を経由しない蔵書全件の一覧取得。
+  // Phase 7(1冊=1ファイル表示単位への変更)により、ファイル単位に集約された
+  // 結果を返す(2026-08-12、図書館ビジョン統合仕様書3-2)。
+  listAllKnowledge: () => invoke<LibraryFile[]>("list_all_knowledge"),
 
   // 以下3つはコントロールパネルの「デバッグ」画面向け(v1.0機能2)。
   getTtsFailures: () => invoke<TtsFailure[]>("get_tts_failures"),

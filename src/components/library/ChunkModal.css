@@ -90,6 +90,16 @@
   margin: 0 0 4px;
 }
 
+/* FileModal(Phase 7)の見出し一覧。 */
+.chunk-modal__headings {
+  margin: 0 0 4px;
+  padding-left: 1.2em;
+}
+
+.chunk-modal__headings li {
+  margin-bottom: 6px;
+}
+
 .chunk-modal__source-link {
   color: var(--accent-search);
   cursor: pointer;

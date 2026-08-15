@@ -2,25 +2,27 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../../api/tauri";
 import SourceDocumentModal from "../panels/SourceDocumentModal";
 import Book from "./Book";
-import ChunkModal from "./ChunkModal";
-import { CATEGORY_ORDER, getCategoryMeta } from "../../lib/library";
+import FileModal from "./FileModal";
+import { CATEGORY_ORDER, getCategoryMeta, getFileCallNo, getFileTitle } from "../../lib/library";
 import { useShioriStore } from "../../store/useShioriStore";
-import type { KnowledgeResult } from "../../types";
+import type { LibraryFile } from "../../types";
 import "./LibraryScreen.css";
 
 // 図書館ウィンドウ(2026-08-12、デスクトップ型ウィンドウシステムの本実装3-2)。
 // 以前はスタンドアロンの全画面ビューだったが、OsWindow内のコンパクト版に
 // 作り替えた(開閉・ドラッグ・リサイズ等はOsWindow側が担うため、ここでは
 // 検索バー固定+一覧スクロールの中身だけを持つ)。検索を経由しない蔵書全件を
-// 取得し、カテゴリ別・ファイル単位の棚に並べる。ここでは既に棚に並んでいる
-// ものを自分の意思で見にいくだけなので、KnowledgePanelのgather演出は発動しない。
+// 取得し、カテゴリ別の棚に並べる(Phase 7以降、1冊=1ファイルの表示単位)。
+// ここでは既に棚に並んでいるものを自分の意思で見にいくだけなので、
+// KnowledgePanelのgather演出は発動しない。
 function LibraryScreen() {
-  const [chunks, setChunks] = useState<KnowledgeResult[]>([]);
+  const [files, setFiles] = useState<LibraryFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
 
-  const [selected, setSelected] = useState<KnowledgeResult | null>(null);
+  const [selected, setSelected] = useState<LibraryFile | null>(null);
+  const [selectedCallNo, setSelectedCallNo] = useState("");
   const [sourceOpen, setSourceOpen] = useState(false);
   const [content, setContent] = useState<string | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ function LibraryScreen() {
       .catch(() => undefined)
       .then(() => api.listAllKnowledge())
       .then((r) => {
-        if (!cancelled) setChunks(r);
+        if (!cancelled) setFiles(r);
       })
       .catch((err) => {
         if (!cancelled) setError(String(err));
@@ -58,40 +60,35 @@ function LibraryScreen() {
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    if (!normalized) return chunks;
-    return chunks.filter(
-      (c) =>
-        c.heading.toLowerCase().includes(normalized) ||
-        c.text.toLowerCase().includes(normalized) ||
-        c.source.toLowerCase().includes(normalized),
+    if (!normalized) return files;
+    return files.filter(
+      (f) =>
+        f.source.toLowerCase().includes(normalized) ||
+        f.headings.some((h) => h.toLowerCase().includes(normalized)),
     );
-  }, [chunks, query]);
+  }, [files, query]);
 
-  // カテゴリ別の棚の中でも、由来元のファイル(章)ごとに薄い枠でグルーピングする。
-  // 大量の本が同色で埋め尽くされて見づらくなるのを防ぐため。
+  // カテゴリ別の棚に、1ファイル=1冊として並べる(Phase 7)。
   const grouped = useMemo(() => {
-    const byCategory = new Map<string, Map<string, KnowledgeResult[]>>();
-    for (const chunk of filtered) {
-      const fileMap = byCategory.get(chunk.sourceCategory) ?? new Map<string, KnowledgeResult[]>();
-      const list = fileMap.get(chunk.source) ?? [];
-      list.push(chunk);
-      fileMap.set(chunk.source, list);
-      byCategory.set(chunk.sourceCategory, fileMap);
+    const byCategory = new Map<string, LibraryFile[]>();
+    for (const file of filtered) {
+      const list = byCategory.get(file.sourceCategory) ?? [];
+      list.push(file);
+      byCategory.set(file.sourceCategory, list);
     }
     const orderedKeys = [
       ...CATEGORY_ORDER.filter((c) => byCategory.has(c)),
       ...[...byCategory.keys()].filter((c) => !(CATEGORY_ORDER as readonly string[]).includes(c)),
     ];
     return orderedKeys.map((category) => {
-      const fileMap = byCategory.get(category)!;
-      const fileGroups = [...fileMap.entries()].map(([source, items]) => ({ source, items }));
-      const totalCount = fileGroups.reduce((sum, g) => sum + g.items.length, 0);
-      return { category, fileGroups, totalCount };
+      const items = byCategory.get(category)!;
+      return { category, items };
     });
   }, [filtered]);
 
-  const handleOpenChunk = (result: KnowledgeResult) => {
-    setSelected(result);
+  const handleOpenFile = (file: LibraryFile, callNo: string) => {
+    setSelected(file);
+    setSelectedCallNo(callNo);
     setSourceOpen(false);
   };
 
@@ -125,21 +122,23 @@ function LibraryScreen() {
           <p className="library-screen__status">該当する蔵書が見つかりませんでした。</p>
         )}
 
-        {grouped.map(({ category, fileGroups, totalCount }) => {
+        {grouped.map(({ category, items }) => {
           const meta = getCategoryMeta(category);
           return (
             <div className="library-screen__group" key={category}>
               <div className="library-screen__group-head">
                 <span className="library-screen__swatch" style={{ background: meta.hex }} />
-                {meta.label}({totalCount})
+                {meta.label}({items.length})
               </div>
               <div className="library-screen__shelf">
-                {fileGroups.map(({ source, items }) => (
-                  <div className="library-screen__file-group" key={source} title={source}>
-                    {items.map((item) => (
-                      <Book key={item.id} result={item} size="sm" onClick={() => handleOpenChunk(item)} />
-                    ))}
-                  </div>
+                {items.map((file, i) => (
+                  <Book
+                    key={file.source}
+                    title={getFileTitle(file.source, file.headings)}
+                    sourceCategory={file.sourceCategory}
+                    size="sm"
+                    onClick={() => handleOpenFile(file, getFileCallNo(i, file.sourceCategory))}
+                  />
                 ))}
               </div>
             </div>
@@ -148,8 +147,10 @@ function LibraryScreen() {
       </div>
 
       {selected && (
-        <ChunkModal
-          result={selected}
+        <FileModal
+          file={selected}
+          callNo={selectedCallNo}
+          title={getFileTitle(selected.source, selected.headings)}
           onClose={() => setSelected(null)}
           onOpenSource={handleOpenSource}
         />
@@ -158,7 +159,7 @@ function LibraryScreen() {
       {selected && sourceOpen && (
         <SourceDocumentModal
           title={selected.source}
-          heading={selected.heading}
+          heading={getFileTitle(selected.source, selected.headings)}
           content={content}
           error={sourceError}
           onClose={() => setSourceOpen(false)}

@@ -20,6 +20,14 @@ export interface KnowledgeResult {
   sourceCategory: string;
 }
 
+// スタンドアロン図書館UI(Phase 7、1冊=1ファイルの表示単位)向け。チャンクの
+// 本文は含まず、ファイル内の見出し一覧だけを持つ。
+export interface LibraryFile {
+  source: string;
+  sourceCategory: string;
+  headings: string[];
+}
+
 export type TagVariant = "warm" | "teal" | "cyan";
 
 export interface GpuInfo {

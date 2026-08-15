@@ -1365,6 +1365,14 @@ pub struct KnowledgeResultDto {
     source_category: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryFileDto {
+    source: String,
+    source_category: String,
+    headings: Vec<String>,
+}
+
 // KnowledgePanelの参照情報をクリックした際、元のMarkdownファイル全文を返す
 // (v1.0スコープ機能1: 参照資料の表示モーダル)。source_category/sourceから
 // library/配下のパスを組み立てるが、ユーザー入力(というよりLLM経由の
@@ -1397,20 +1405,18 @@ fn get_source_document(source_category: String, source: String) -> Result<String
         .map_err(|e| format!("参照資料の読み込みに失敗: {e}"))
 }
 
-// スタンドアロン図書館UI(2026-08-12、図書館ビジョン統合仕様書3-2)向け。
-// 検索を経由せず、蔵書(ChromaDBの全チャンク)を一覧として返す。
+// スタンドアロン図書館UI(Phase 7、詩織Ver2.0設計指示書v3、10章)向け。検索を
+// 経由せず、蔵書をファイル単位(1冊=1ファイル)に集約して一覧として返す。
 #[tauri::command]
-fn list_all_knowledge() -> Result<Vec<KnowledgeResultDto>, String> {
+fn list_all_knowledge() -> Result<Vec<LibraryFileDto>, String> {
     let config = app_config()?;
-    let chunks = rag_client::list_all(config.rag.port)?;
-    Ok(chunks
+    let files = rag_client::list_all_library(config.rag.port)?;
+    Ok(files
         .into_iter()
-        .map(|c| KnowledgeResultDto {
-            id: c.id,
-            text: c.text,
-            source: c.source,
-            heading: c.heading,
-            source_category: c.source_category,
+        .map(|f| LibraryFileDto {
+            source: f.source,
+            source_category: f.source_category,
+            headings: f.headings.into_iter().map(|h| h.heading).collect(),
         })
         .collect())
 }

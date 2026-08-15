@@ -79,15 +79,3 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-
-/* 由来元ファイル(章)ごとのグルーピング。大量の本が同色で埋め尽くされて
-   見づらくなるのを防ぐため、薄い破線の枠で軽く区切る。 */
-.library-screen__file-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 5px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.015);
-  border: 0.5px dashed var(--glass-border);
-}

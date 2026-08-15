@@ -139,3 +139,29 @@ pub fn list_all(port: u16) -> Result<Vec<ChunkItem>, String> {
         .into_json()
         .map_err(|e| format!("蔵書一覧の応答解析に失敗: {e}"))
 }
+
+#[derive(Deserialize)]
+pub struct LibraryFileHeading {
+    pub heading: String,
+}
+
+#[derive(Deserialize)]
+pub struct LibraryFileItem {
+    pub source: String,
+    pub source_category: String,
+    pub headings: Vec<LibraryFileHeading>,
+}
+
+// スタンドアロン図書館UI(Phase 7、1冊=1ファイルの表示単位への変更)向け。
+// list_all()と違い、ファイル(source)単位に集約された結果(本文を含まない)が
+// 返る(services/rag/app.pyの/list_all_library)。
+pub fn list_all_library(port: u16) -> Result<Vec<LibraryFileItem>, String> {
+    let url = format!("http://127.0.0.1:{port}/list_all_library");
+
+    ureq::get(&url)
+        .timeout(Duration::from_secs(30))
+        .call()
+        .map_err(|e| format!("蔵書一覧の取得に失敗: {e}"))?
+        .into_json()
+        .map_err(|e| format!("蔵書一覧の応答解析に失敗: {e}"))
+}

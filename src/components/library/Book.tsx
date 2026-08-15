@@ -1,5 +1,4 @@
 import type { CSSProperties } from "react";
-import type { KnowledgeResult } from "../../types";
 import { getBookCategoryClass } from "../../lib/library";
 import "./Book.css";
 
@@ -9,7 +8,11 @@ import "./Book.css";
 type FlyFromVars = CSSProperties & Record<"--fx" | "--fy" | "--fr", string>;
 
 interface Props {
-  result: KnowledgeResult;
+  // 表紙に表示するタイトル。KnowledgePanel(チャンク単位)ではチャンクの
+  // 見出し、LibraryScreen(Phase 7以降、ファイル単位)ではファイルの代表見出し
+  // またはファイル名を渡す(呼び出し側の粒度が異なっても見た目は共通のため)。
+  title: string;
+  sourceCategory: string;
   onClick: () => void;
   // 「司書が持ってくる棚」の集まってくる演出用。gatherDelayMsを指定すると、
   // その分だけ遅れてgatherアニメーションが再生される(本ごとの時間差を出すため)。
@@ -19,14 +22,15 @@ interface Props {
   // ウィンドウ内表示用のサイズ(2026-08-12、デスクトップ型ウィンドウシステムの
   // 本実装)。md=ナレッジウィンドウ(68×92)、sm=図書館ウィンドウ(52×70)。
   // window-contents-concept.htmlのモックアップに合わせ、タイトルのみを表示する
-  // (分類番号・カテゴリラベルはクリック後のチャンクモーダルで確認できるため省略)。
+  // (分類番号・カテゴリラベルはクリック後のモーダルで確認できるため省略)。
   size?: "md" | "sm";
 }
 
 // 図書館UI共通の「本」1冊分の見た目。表紙カード方式。
-// KnowledgePanel・LibraryScreenで共有する。
-function Book({ result, onClick, gathering, gatherDelayMs, flyFrom, size = "md" }: Props) {
-  const categoryClass = getBookCategoryClass(result.sourceCategory);
+// KnowledgePanel(チャンク単位)・LibraryScreen(Phase 7以降、ファイル単位)で
+// 表示粒度は異なるが、見た目のコンポーネントとしては共有する。
+function Book({ title, sourceCategory, onClick, gathering, gatherDelayMs, flyFrom, size = "md" }: Props) {
+  const categoryClass = getBookCategoryClass(sourceCategory);
 
   const style: FlyFromVars | undefined = gathering
     ? {
@@ -42,9 +46,9 @@ function Book({ result, onClick, gathering, gatherDelayMs, flyFrom, size = "md" 
       className={`book book--${size} ${categoryClass} ${gathering ? "book--gathering" : ""}`}
       style={style}
       onClick={onClick}
-      title={result.heading}
+      title={title}
     >
-      <div className="book__title">{result.heading}</div>
+      <div className="book__title">{title}</div>
     </div>
   );
 }

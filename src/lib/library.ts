@@ -59,6 +59,20 @@ export function getCallNo(chunkId: string, sourceCategory: string): string {
   return `${abbr}-${num}`;
 }
 
+// Phase 7(1冊=1ファイルの表示単位)向け。チャンクIDを持たないファイル単位の
+// 一覧のため、カテゴリ棚内での並び順(index)をそのまま番号として使う。
+export function getFileCallNo(index: number, sourceCategory: string): string {
+  const { abbr } = getCategoryMeta(sourceCategory);
+  return `${abbr}-${String(index + 1).padStart(2, "0")}`;
+}
+
+// ファイルの表紙タイトル。先頭の実見出し(chunking.pyの「(見出しなし)」
+// プレースホルダーを除く)があればそれを使い、無ければファイル名を使う。
+export function getFileTitle(source: string, headings: string[]): string {
+  const firstHeading = headings.find((h) => h && h !== "(見出しなし)");
+  return firstHeading ?? source.replace(/\.md$/i, "");
+}
+
 // 「司書が持ってくる棚」(3-1)の集まってくる演出で、本ごとに少しずつ違う方向
 // から飛んでくるように見せるためのオフセットプリセット(library-ui-concept.html
 // のモックアップの値をそのまま移植)。本の数がプリセット数を超えたら周回する。

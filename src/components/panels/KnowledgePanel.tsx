@@ -108,7 +108,8 @@ function KnowledgePanel() {
             {batch.items.map((r, i) => (
               <Book
                 key={r.id}
-                result={r}
+                title={r.heading}
+                sourceCategory={r.sourceCategory}
                 size="md"
                 onClick={() => handleOpenChunk(r)}
                 gathering={idx === 0}

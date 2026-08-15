@@ -232,6 +232,59 @@ def list_all():
     return items
 
 
+class LibraryFileHeading(BaseModel):
+    heading: str
+
+
+class LibraryFileItem(BaseModel):
+    # library/からの相対パス相当(chromadbのmetadata "source"をそのまま使う)。
+    source: str
+    source_category: str
+    # そのファイル内の見出し一覧(登場順、重複なし)。
+    headings: list[LibraryFileHeading]
+
+
+@app.get("/list_all_library", response_model=list[LibraryFileItem])
+def list_all_library():
+    """スタンドアロン図書館UI(Phase 7、1冊=1ファイル表示単位への変更)向け。
+    /list_allと同じくクエリを伴わない全件一覧のため、embedding計算・リランクは
+    行わない。/list_allとの違いはチャンク単位ではなくファイル(source)単位に
+    集約して返す点(search_libraryと同じ集約方針だが、検索ではなく一覧なので
+    スコアは持たない)。
+
+    検索を経由しない一覧である一方、この結果が図書館UIの「本棚」の実体になる
+    ため、shiori-save CLI等でlibrary/に加えられた変更を即座に反映できるよう、
+    /search・/search_libraryと同様にここでも遅延再インデックスを走らせる。
+    """
+    collection, _changes = sync_index(_chroma_client, _http_client, KNOWLEDGE_DIR, VECTORDB_DIR, COLLECTION_NAME)
+    result = collection.get()
+
+    files: dict[str, dict] = {}
+    order: list[str] = []
+    for doc_meta in result["metadatas"]:
+        meta = doc_meta or {}
+        source = meta.get("source", "")
+        if source not in files:
+            files[source] = {
+                "source_category": meta.get("source_category", "uncategorized"),
+                "headings": [],
+            }
+            order.append(source)
+        heading = meta.get("heading", "")
+        existing_headings = files[source]["headings"]
+        if heading and heading not in [h.heading for h in existing_headings]:
+            existing_headings.append(LibraryFileHeading(heading=heading))
+
+    return [
+        LibraryFileItem(
+            source=source,
+            source_category=files[source]["source_category"],
+            headings=files[source]["headings"],
+        )
+        for source in sorted(order)
+    ]
+
+
 @app.post("/search", response_model=list[SearchResultItem])
 def search(req: SearchRequest):
     """会話UI向け。チャンク単位・本文込みで返す(LLMへの文脈注入に使うため)。
