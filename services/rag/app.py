@@ -89,6 +89,65 @@ RERANK_CANDIDATE_POOL_MAX = 200
 RERANK_SCORE_THRESHOLD = 0.3
 
 
+def _retrieve_and_rerank(
+    query: str, where: dict | None = None
+) -> list[tuple[str, str, dict, float, float]]:
+    """クエリに対する候補チャンクを取得しリランクする。/search・/search_libraryの
+    共通処理。返り値はrerank_score降順・RERANK_SCORE_THRESHOLD以上に絞り込んだ
+    (chunk_id, document, metadata, distance, rerank_score)のリスト。件数の
+    絞り込み(何件返すか)は呼び出し元が行う(/searchはチャンク数、
+    /search_libraryはファイル数で数え方が異なるため、ここでは絞り込まない)。
+
+    whereはChromaDBのメタデータフィルタ(collection.query()にそのまま渡す)。
+    author/type/project等、Ver2.0の保存ルーティング(shiori-save CLI)が
+    書き込むフィールドで絞り込む場合に使う。Noneなら絞り込みなし。
+    """
+    collection = _chroma_client.get_collection(COLLECTION_NAME)
+    # クエリのフィラー語除去(正規化)はRust側(text_transformエンジン、
+    # prompts/transforms/query-normalization.json)で一元化しているため、
+    # ここでは受け取ったクエリをそのまま使う。
+    query_embedding = get_embedding(query, client=_http_client, is_query=True)
+    # 埋め込みの第一段階だけで足切りすると、言い回しによっては正解チャンクが
+    # 候補プールにすら入らないことがある(下記コメント参照)ため、コレクション
+    # の実際の総件数を上限として、可能な限り全件をリランカーの判断に委ねる。
+    pool_size = min(collection.count(), RERANK_CANDIDATE_POOL_MAX)
+    query_kwargs: dict = {"query_embeddings": [query_embedding], "n_results": pool_size}
+    if where:
+        query_kwargs["where"] = where
+    result = collection.query(**query_kwargs)
+
+    ids = result["ids"][0]
+    documents = result["documents"][0]
+    metadatas = result["metadatas"][0]
+    distances = result["distances"][0]
+
+    # n_resultsをコレクションの総件数ぎりぎりまで広げると、ChromaDBが
+    # 末尾の枠をmetadata=None等のダミー値で埋めて返すことがある(実測で確認)。
+    # そのような不完全な行は候補から除外する。
+    valid = [
+        (i, d, m, dist)
+        for i, d, m, dist in zip(ids, documents, metadatas, distances)
+        if m is not None and d is not None
+    ]
+    ids = [v[0] for v in valid]
+    documents = [v[1] for v in valid]
+    metadatas = [v[2] for v in valid]
+    distances = [v[3] for v in valid]
+
+    # ingest.py側の埋め込み時と同じ「見出し: 本文」形式でリランカーに渡す。
+    # 見出しの短い言い回しが、質問文とのマッチングの手がかりになるため。
+    passages = [
+        f"{meta.get('heading', '')}: {doc}" if meta.get("heading") != "(見出しなし)" else doc
+        for doc, meta in zip(documents, metadatas)
+    ]
+    rerank_scores = rerank(query, passages)
+
+    candidates = list(zip(ids, documents, metadatas, distances, rerank_scores))
+    candidates.sort(key=lambda c: c[4], reverse=True)
+    candidates = [c for c in candidates if c[4] >= RERANK_SCORE_THRESHOLD]
+    return candidates
+
+
 class AddDocumentRequest(BaseModel):
     id: str
     text: str
@@ -163,48 +222,12 @@ def list_all():
 
 @app.post("/search", response_model=list[SearchResultItem])
 def search(req: SearchRequest):
-    collection = _chroma_client.get_collection(COLLECTION_NAME)
-    # クエリのフィラー語除去(正規化)はRust側(text_transformエンジン、
-    # prompts/transforms/query-normalization.json)で一元化しているため、
-    # ここでは受け取ったクエリをそのまま使う。
-    query_embedding = get_embedding(req.query, client=_http_client, is_query=True)
-    # 埋め込みの第一段階だけで足切りすると、言い回しによっては正解チャンクが
-    # 候補プールにすら入らないことがある(上記コメント参照)ため、コレクション
-    # の総件数を上限として、可能な限り全件をリランカーの判断に委ねる。
-    pool_size = min(collection.count(), RERANK_CANDIDATE_POOL_MAX)
-    pool_size = max(req.top_k, pool_size)
-    result = collection.query(query_embeddings=[query_embedding], n_results=pool_size)
-
-    ids = result["ids"][0]
-    documents = result["documents"][0]
-    metadatas = result["metadatas"][0]
-    distances = result["distances"][0]
-
-    # n_resultsをコレクションの総件数ぎりぎりまで広げると、ChromaDBが
-    # 末尾の枠をmetadata=None等のダミー値で埋めて返すことがある(実測で確認)。
-    # そのような不完全な行は候補から除外する。
-    valid = [
-        (i, d, m, dist)
-        for i, d, m, dist in zip(ids, documents, metadatas, distances)
-        if m is not None and d is not None
-    ]
-    ids = [v[0] for v in valid]
-    documents = [v[1] for v in valid]
-    metadatas = [v[2] for v in valid]
-    distances = [v[3] for v in valid]
-
-    # ingest.py側の埋め込み時と同じ「見出し: 本文」形式でリランカーに渡す。
-    # 見出しの短い言い回しが、質問文とのマッチングの手がかりになるため。
-    passages = [
-        f"{meta.get('heading', '')}: {doc}" if meta.get("heading") != "(見出しなし)" else doc
-        for doc, meta in zip(documents, metadatas)
-    ]
-    rerank_scores = rerank(req.query, passages)
-
-    candidates = list(zip(ids, documents, metadatas, distances, rerank_scores))
-    candidates.sort(key=lambda c: c[4], reverse=True)
-    candidates = [c for c in candidates if c[4] >= RERANK_SCORE_THRESHOLD]
-    candidates = candidates[: req.top_k]
+    """会話UI向け。チャンク単位・本文込みで返す(LLMへの文脈注入に使うため)。
+    識別ガード・メモガード・自発的想起(passive recall)・明示検索
+    (search_knowledgeツール)がいずれもこのエンドポイントを使う。挙動は
+    Ver2.0でも変更しない(/search_libraryとは別に維持する。下記参照)。
+    """
+    candidates = _retrieve_and_rerank(req.query)[: req.top_k]
 
     items: list[SearchResultItem] = []
     for chunk_id, doc, meta, dist, score in candidates:
@@ -220,3 +243,87 @@ def search(req: SearchRequest):
             )
         )
     return items
+
+
+class LibrarySearchFilter(BaseModel):
+    author: str | None = None
+    type: str | None = None
+    project: str | None = None
+
+
+class SearchLibraryRequest(BaseModel):
+    query: str
+    limit: int = 5
+    filter: LibrarySearchFilter | None = None
+
+
+class FileHeading(BaseModel):
+    heading: str
+    rerank_score: float
+
+
+class SearchLibraryResultItem(BaseModel):
+    # library/からの相対パス相当(chromadbのmetadata "source"をそのまま使う)。
+    source: str
+    source_category: str
+    # そのファイル内でヒットした見出しのリスト(スコア降順)。
+    headings: list[FileHeading]
+    # ファイル自体の並び順に使う、ファイル内最高スコア。
+    best_score: float
+
+
+@app.post("/search_library", response_model=list[SearchLibraryResultItem])
+def search_library(req: SearchLibraryRequest):
+    """MCPサーバーのsearch_libraryツール向け(詩織Ver2.0設計指示書v3、9章)。
+    /searchと違い、結果をファイル単位に集約し、本文は含めない(司書は棚の
+    場所(見出し)を教えるだけで、中身を合成しない、という設計方針)。1冊=
+    1ファイルという表示単位(10章)とも整合させている。
+
+    filterのauthor/type/projectは、Ver2.0の保存ルーティング(shiori-save CLI、
+    Phase 5で実装予定)がchromadbのメタデータに実際に書き込むようになって
+    初めて機能する。現行データ(Ver1.0由来、Phase 9の移行スクリプト実行前)は
+    これらのフィールドを持たないため、filter指定時は該当データがヒットしない
+    点に注意(絞り込み自体はここで先に実装しておき、Phase 5/9で自然に効くように
+    しておく)。
+    """
+    where: dict | None = None
+    if req.filter:
+        conditions = []
+        if req.filter.author:
+            conditions.append({"author": req.filter.author})
+        if req.filter.type:
+            conditions.append({"type": req.filter.type})
+        if req.filter.project:
+            conditions.append({"project": req.filter.project})
+        if len(conditions) == 1:
+            where = conditions[0]
+        elif len(conditions) > 1:
+            where = {"$and": conditions}
+
+    candidates = _retrieve_and_rerank(req.query, where)
+
+    # ファイル単位(source)に集約する。candidatesは既にスコア降順のため、
+    # 各ファイルの初出順=そのファイルの最高スコア順になる。
+    files: dict[str, dict] = {}
+    order: list[str] = []
+    for _chunk_id, _doc, meta, _dist, score in candidates:
+        source = meta.get("source", "")
+        if source not in files:
+            files[source] = {
+                "source_category": meta.get("source_category", "uncategorized"),
+                "headings": [],
+                "best_score": score,
+            }
+            order.append(source)
+        files[source]["headings"].append(FileHeading(heading=meta.get("heading", ""), rerank_score=score))
+
+    items = [
+        SearchLibraryResultItem(
+            source=source,
+            source_category=files[source]["source_category"],
+            headings=files[source]["headings"],
+            best_score=files[source]["best_score"],
+        )
+        for source in order
+    ]
+    return items[: req.limit]
