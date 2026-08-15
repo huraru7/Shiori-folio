@@ -1421,6 +1421,304 @@ fn list_all_knowledge() -> Result<Vec<LibraryFileDto>, String> {
         .collect())
 }
 
+// 要確認UI(Phase 8、詩織Ver2.0設計指示書v3)向け。tags.yaml/projects.yamlの
+// status(pending/confirmed/deferredの3値)、およびinboxファイルのfrontmatter
+// review_status(confirmed/deferred、未設定=未着手)を人間がレビューするための
+// 一覧取得・承認/却下/保留コマンド。
+//
+// tags.yaml/projects.yamlは先頭のコメントを人間が書いているため、serde_yamlで
+// パース→丸ごと再シリアライズすると失われてしまう。そのため読み取りはパースで
+// 行うが、書き込みは対象エントリのブロックをテキスト上で探して該当行だけを
+// 書き換える(削除の場合はブロックごと除去する)方式にしている
+// (shiori_save.rsの追記専用方針と同じ思想)。
+
+#[derive(Deserialize)]
+struct YamlProjectEntry {
+    id: String,
+    #[serde(default)]
+    status: String,
+}
+
+#[derive(Deserialize)]
+struct YamlProjectsFile {
+    #[serde(default)]
+    projects: Vec<YamlProjectEntry>,
+}
+
+#[derive(Deserialize)]
+struct YamlTagEntry {
+    canonical: String,
+    #[serde(default)]
+    status: String,
+}
+
+#[derive(Deserialize)]
+struct YamlTagsFile {
+    #[serde(default)]
+    tags: Vec<YamlTagEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingTagDto {
+    canonical: String,
+    status: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingProjectDto {
+    id: String,
+    status: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingInboxItemDto {
+    filename: String,
+    title: Option<String>,
+    reason: Option<String>,
+    review_status: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PendingItemsDto {
+    tags: Vec<PendingTagDto>,
+    projects: Vec<PendingProjectDto>,
+    inbox: Vec<PendingInboxItemDto>,
+}
+
+// inboxファイルのfrontmatterから、要確認UIの表示に必要な最小限の3項目
+// (title/reason/review_status)だけを読み取る。他のfrontmatterフィールド
+// (type/tags/project/author等)は要確認UIの範囲外(人間が直接編集する前提)
+// のため、ここでは扱わない。
+#[derive(Deserialize, Default)]
+struct InboxFrontmatterFields {
+    title: Option<String>,
+    reason: Option<String>,
+    review_status: Option<String>,
+}
+
+fn parse_inbox_frontmatter(content: &str) -> InboxFrontmatterFields {
+    let trimmed = content.trim_start_matches('\u{feff}');
+    let after_first = match trimmed.strip_prefix("---") {
+        Some(rest) => rest,
+        None => return InboxFrontmatterFields::default(),
+    };
+    let end = match after_first.find("\n---") {
+        Some(i) => i,
+        None => return InboxFrontmatterFields::default(),
+    };
+    let yaml_block = &after_first[..end];
+    serde_yaml::from_str(yaml_block).unwrap_or_default()
+}
+
+#[tauri::command]
+fn list_pending_items() -> Result<PendingItemsDto, String> {
+    let root = library_root();
+
+    let tags_path = root.join("_system").join("tags.yaml");
+    let tags_text = std::fs::read_to_string(&tags_path)
+        .map_err(|e| format!("tags.yamlの読み込みに失敗: {e}"))?;
+    let tags_file: YamlTagsFile =
+        serde_yaml::from_str(&tags_text).map_err(|e| format!("tags.yamlの解析に失敗: {e}"))?;
+    let tags = tags_file
+        .tags
+        .into_iter()
+        .filter(|t| t.status == "pending" || t.status == "deferred")
+        .map(|t| PendingTagDto { canonical: t.canonical, status: t.status })
+        .collect();
+
+    let projects_path = root.join("_system").join("projects.yaml");
+    let projects_text = std::fs::read_to_string(&projects_path)
+        .map_err(|e| format!("projects.yamlの読み込みに失敗: {e}"))?;
+    let projects_file: YamlProjectsFile = serde_yaml::from_str(&projects_text)
+        .map_err(|e| format!("projects.yamlの解析に失敗: {e}"))?;
+    let projects = projects_file
+        .projects
+        .into_iter()
+        .filter(|p| p.status == "pending" || p.status == "deferred")
+        .map(|p| PendingProjectDto { id: p.id, status: p.status })
+        .collect();
+
+    let inbox_dir = root.join("00-inbox");
+    let mut inbox = Vec::new();
+    if inbox_dir.is_dir() {
+        let entries = std::fs::read_dir(&inbox_dir)
+            .map_err(|e| format!("00-inbox/の読み込みに失敗: {e}"))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("00-inbox/の読み込みに失敗: {e}"))?;
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            let filename = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n.to_string(),
+                None => continue,
+            };
+            let content = std::fs::read_to_string(&path)
+                .map_err(|e| format!("{filename}の読み込みに失敗: {e}"))?;
+            let fields = parse_inbox_frontmatter(&content);
+            if fields.review_status.as_deref() == Some("confirmed") {
+                continue;
+            }
+            inbox.push(PendingInboxItemDto {
+                filename,
+                title: fields.title,
+                reason: fields.reason,
+                review_status: fields.review_status,
+            });
+        }
+    }
+
+    Ok(PendingItemsDto { tags, projects, inbox })
+}
+
+// tags.yaml/projects.yamlの、`  - {key_field}: {key_value}`で始まるブロックの
+// 行範囲([開始行, 終了行))を返す。終了行は次の`  - `行、または末尾。
+fn find_yaml_list_item_range(lines: &[String], key_field: &str, key_value: &str) -> Option<(usize, usize)> {
+    let marker = format!("- {key_field}:");
+    let mut start = None;
+    for (i, line) in lines.iter().enumerate() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix(&marker) {
+            let value = rest.trim().trim_matches('"').trim_matches('\'');
+            if value == key_value {
+                start = Some(i);
+                break;
+            }
+        }
+    }
+    let start = start?;
+    let mut end = lines.len();
+    for (i, line) in lines.iter().enumerate().skip(start + 1) {
+        if line.trim_start().starts_with("- ") && line.starts_with("  -") {
+            end = i;
+            break;
+        }
+    }
+    Some((start, end))
+}
+
+fn rewrite_yaml_status(path: &Path, key_field: &str, key_value: &str, new_status: &str) -> Result<(), String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("{}の読み込みに失敗: {e}", path.display()))?;
+    let mut lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+    let (start, end) = find_yaml_list_item_range(&lines, key_field, key_value)
+        .ok_or_else(|| "対象のエントリが見つかりませんでした。".to_string())?;
+
+    let status_line_idx = (start..end)
+        .find(|&i| lines[i].trim_start().starts_with("status:"))
+        .ok_or_else(|| "statusフィールドが見つかりませんでした。".to_string())?;
+    let indent_len = lines[status_line_idx].len() - lines[status_line_idx].trim_start().len();
+    lines[status_line_idx] = format!("{}status: {new_status}", " ".repeat(indent_len));
+
+    let mut new_text = lines.join("\n");
+    if text.ends_with('\n') {
+        new_text.push('\n');
+    }
+    std::fs::write(path, new_text).map_err(|e| format!("{}への書き込みに失敗: {e}", path.display()))
+}
+
+fn remove_yaml_list_item(path: &Path, key_field: &str, key_value: &str) -> Result<(), String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("{}の読み込みに失敗: {e}", path.display()))?;
+    let lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+    let (start, end) = find_yaml_list_item_range(&lines, key_field, key_value)
+        .ok_or_else(|| "対象のエントリが見つかりませんでした。".to_string())?;
+
+    let mut remaining: Vec<String> = lines[..start].to_vec();
+    remaining.extend_from_slice(&lines[end..]);
+
+    let mut new_text = remaining.join("\n");
+    if !remaining.is_empty() && text.ends_with('\n') {
+        new_text.push('\n');
+    }
+    std::fs::write(path, new_text).map_err(|e| format!("{}への書き込みに失敗: {e}", path.display()))
+}
+
+fn pending_action_to_status(action: &str) -> Result<&'static str, String> {
+    match action {
+        "confirm" => Ok("confirmed"),
+        "defer" => Ok("deferred"),
+        _ => Err(format!("不明なaction: {action}")),
+    }
+}
+
+#[tauri::command]
+fn resolve_pending_tag(canonical: String, action: String) -> Result<(), String> {
+    let path = library_root().join("_system").join("tags.yaml");
+    if action == "reject" {
+        return remove_yaml_list_item(&path, "canonical", &canonical);
+    }
+    let status = pending_action_to_status(&action)?;
+    rewrite_yaml_status(&path, "canonical", &canonical, status)
+}
+
+#[tauri::command]
+fn resolve_pending_project(id: String, action: String) -> Result<(), String> {
+    let path = library_root().join("_system").join("projects.yaml");
+    if action == "reject" {
+        return remove_yaml_list_item(&path, "id", &id);
+    }
+    let status = pending_action_to_status(&action)?;
+    rewrite_yaml_status(&path, "id", &id, status)
+}
+
+// inboxファイルのfrontmatter内、`review_status:`行を書き換える(無ければ
+// frontmatter終端の直前に追加する)。frontmatter以外の本文には触れない。
+fn rewrite_inbox_review_status(path: &Path, new_status: &str) -> Result<(), String> {
+    let text =
+        std::fs::read_to_string(path).map_err(|e| format!("{}の読み込みに失敗: {e}", path.display()))?;
+    let mut lines: Vec<String> = text.lines().map(|l| l.to_string()).collect();
+
+    if lines.first().map(|l| l.trim()) != Some("---") {
+        return Err("frontmatterが見つかりませんでした。".to_string());
+    }
+    let closing_idx = lines
+        .iter()
+        .enumerate()
+        .skip(1)
+        .find(|(_, l)| l.trim() == "---")
+        .map(|(i, _)| i)
+        .ok_or_else(|| "frontmatterの終端が見つかりませんでした。".to_string())?;
+
+    if let Some(status_idx) = (1..closing_idx).find(|&i| lines[i].starts_with("review_status:")) {
+        lines[status_idx] = format!("review_status: {new_status}");
+    } else {
+        lines.insert(closing_idx, format!("review_status: {new_status}"));
+    }
+
+    let mut new_text = lines.join("\n");
+    if text.ends_with('\n') {
+        new_text.push('\n');
+    }
+    std::fs::write(path, new_text).map_err(|e| format!("{}への書き込みに失敗: {e}", path.display()))
+}
+
+// filenameはUI側がlist_pending_itemsで取得した一覧由来の値のみを渡す前提だが、
+// パストラバーサル対策としてファイル名部分のみであること(区切り文字を含まない)を
+// 念のため検証する。
+fn validate_plain_filename(filename: &str) -> Result<(), String> {
+    if filename.is_empty() || filename.contains('/') || filename.contains('\\') || filename == ".." {
+        return Err("不正なファイル名です。".to_string());
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn resolve_pending_inbox_item(filename: String, action: String) -> Result<(), String> {
+    validate_plain_filename(&filename)?;
+    let path = library_root().join("00-inbox").join(&filename);
+
+    if action == "reject" {
+        return std::fs::remove_file(&path).map_err(|e| format!("{filename}の削除に失敗: {e}"));
+    }
+    let status = pending_action_to_status(&action)?;
+    rewrite_inbox_review_status(&path, status)
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SendMessageReply {
@@ -3179,6 +3477,69 @@ mod tests {
         assert!(!still_healthy, "アイドルタイムアウト後も起動したままだった");
         println!("アイドル自動停止OK");
     }
+
+    // 要確認UI(Phase 8)のtags.yaml/projects.yamlテキスト書き換えが、対象
+    // エントリだけを書き換え、先頭コメントや他のエントリを壊さないことを
+    // 確認する軽量テスト(実ファイルではなくtempdir上のコピーで検証)。
+    fn write_temp_yaml(name: &str, content: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "shiori_test_pending_yaml_{}_{}",
+            name,
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(format!("{name}.yaml"));
+        std::fs::write(&path, content).unwrap();
+        path
+    }
+
+    const SAMPLE_TAGS_YAML: &str = "# ヘッダーコメント1行目\n# ヘッダーコメント2行目\ntags:\n  - canonical: 詩織\n    aliases: [shiori]\n    status: confirmed\n  - canonical: 新タグ\n    aliases: []\n    status: pending\n";
+
+    #[test]
+    fn rewrite_yaml_status_updates_only_target_entry() {
+        let path = write_temp_yaml("rewrite", SAMPLE_TAGS_YAML);
+        rewrite_yaml_status(&path, "canonical", "新タグ", "confirmed").unwrap();
+        let result = std::fs::read_to_string(&path).unwrap();
+        assert!(result.contains("# ヘッダーコメント1行目"), "先頭コメントが保持されていない");
+        assert!(result.contains("canonical: 詩織\n    aliases: [shiori]\n    status: confirmed"), "既存エントリが変化した");
+        assert!(result.contains("canonical: 新タグ\n    aliases: []\n    status: confirmed"), "対象エントリが書き換わっていない");
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn remove_yaml_list_item_removes_only_target_entry() {
+        let path = write_temp_yaml("remove", SAMPLE_TAGS_YAML);
+        remove_yaml_list_item(&path, "canonical", "新タグ").unwrap();
+        let result = std::fs::read_to_string(&path).unwrap();
+        assert!(result.contains("# ヘッダーコメント1行目"), "先頭コメントが保持されていない");
+        assert!(result.contains("canonical: 詩織"), "既存エントリが消えた");
+        assert!(!result.contains("新タグ"), "対象エントリが削除されていない");
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn rewrite_inbox_review_status_inserts_when_absent() {
+        let content = "---\ntitle: テスト\nreason: タグが空でした\n---\n\n本文\n";
+        let path = write_temp_yaml("inbox_insert", content).with_extension("md");
+        std::fs::write(&path, content).unwrap();
+        rewrite_inbox_review_status(&path, "deferred").unwrap();
+        let result = std::fs::read_to_string(&path).unwrap();
+        assert!(result.contains("review_status: deferred"));
+        assert!(result.contains("本文"), "本文が保持されていない");
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn rewrite_inbox_review_status_replaces_when_present() {
+        let content = "---\ntitle: テスト\nreview_status: deferred\n---\n\n本文\n";
+        let path = write_temp_yaml("inbox_replace", content).with_extension("md");
+        std::fs::write(&path, content).unwrap();
+        rewrite_inbox_review_status(&path, "confirmed").unwrap();
+        let result = std::fs::read_to_string(&path).unwrap();
+        assert!(result.contains("review_status: confirmed"));
+        assert!(!result.contains("review_status: deferred"));
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
 }
 
 // ホットキー(Ctrl+Alt+S)押下時の録音トグル処理。開始/停止の実装は`audio`モジュールを
@@ -3302,6 +3663,10 @@ pub fn run() {
             switch_model,
             get_source_document,
             list_all_knowledge,
+            list_pending_items,
+            resolve_pending_tag,
+            resolve_pending_project,
+            resolve_pending_inbox_item,
             get_tts_failures,
             get_passive_recall_stats,
             get_ragas_history

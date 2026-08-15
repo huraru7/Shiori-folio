@@ -28,6 +28,38 @@ export interface LibraryFile {
   headings: string[];
 }
 
+// 要確認UI(Phase 8)向け。tags.yaml/projects.yamlのstatus、inboxファイルの
+// review_statusはいずれも"pending"(未着手)/"deferred"(保留中)のいずれか
+// (confirmed済みのものはバックエンド側で一覧から除外されている)。
+export type PendingStatus = "pending" | "deferred";
+
+export interface PendingTag {
+  canonical: string;
+  status: PendingStatus;
+}
+
+export interface PendingProject {
+  id: string;
+  status: PendingStatus;
+}
+
+export interface PendingInboxItem {
+  filename: string;
+  title: string | null;
+  reason: string | null;
+  reviewStatus: PendingStatus | null;
+}
+
+export interface PendingItems {
+  tags: PendingTag[];
+  projects: PendingProject[];
+  inbox: PendingInboxItem[];
+}
+
+// resolvePendingTag/resolvePendingProject/resolvePendingInboxItem共通のaction。
+// confirm=承認、reject=却下(エントリ/ファイル削除)、defer=保留。
+export type PendingAction = "confirm" | "reject" | "defer";
+
 export type TagVariant = "warm" | "teal" | "cyan";
 
 export interface GpuInfo {

@@ -8,6 +8,8 @@ import type {
   ModelSwitchEstimate,
   ModelSwitchResult,
   PassiveRecallStats,
+  PendingAction,
+  PendingItems,
   RagasHistory,
   SystemInfo,
   TtsFailure,
@@ -83,6 +85,16 @@ export const api = {
   // Phase 7(1冊=1ファイル表示単位への変更)により、ファイル単位に集約された
   // 結果を返す(2026-08-12、図書館ビジョン統合仕様書3-2)。
   listAllKnowledge: () => invoke<LibraryFile[]>("list_all_knowledge"),
+
+  // 要確認UI向け(Phase 8)。pending/deferredなタグ・プロジェクト・inbox記録の
+  // 一覧取得と、承認/却下/保留の反映。
+  listPendingItems: () => invoke<PendingItems>("list_pending_items"),
+  resolvePendingTag: (canonical: string, action: PendingAction) =>
+    invoke<void>("resolve_pending_tag", { canonical, action }),
+  resolvePendingProject: (id: string, action: PendingAction) =>
+    invoke<void>("resolve_pending_project", { id, action }),
+  resolvePendingInboxItem: (filename: string, action: PendingAction) =>
+    invoke<void>("resolve_pending_inbox_item", { filename, action }),
 
   // 以下3つはコントロールパネルの「デバッグ」画面向け(v1.0機能2)。
   getTtsFailures: () => invoke<TtsFailure[]>("get_tts_failures"),
