@@ -163,6 +163,20 @@ Write-Host "--- piper-plus-cli ---"
 $PiperExe = Join-Path $SystemDir "third_party\piper-plus\src\rust\target\release\piper-plus-cli.exe"
 Copy-Item $PiperExe (Join-Path $BinDir "piper-plus-cli.exe") -Force
 
+# shiori-save(Ver2.0 Phase 5、保存CLI)。Mac版(build-portable.sh)と同じく
+# OSフレームワーク以外への依存が無いため単体コピーで問題ない(2026-08-15、
+# Windows実機でCargo.tomlのsrc/bin/*.rs自動検出によりcargo build --binsで
+# ビルドされることを確認済み)。cargo buildの成果物名はshiori_save
+# (アンダースコア)だが、CLIとしての呼び出し名(shiori-save)に合わせて
+# コピー時にリネームする(Mac版と同じ理由)。
+Write-Host "--- shiori-save ---"
+$ShioriSaveExe = Join-Path $SystemDir "src-tauri\target\release\shiori_save.exe"
+if (-not (Test-Path $ShioriSaveExe)) {
+    Write-Error "$ShioriSaveExe が見つかりません。先に (cd system\src-tauri && cargo build --release --bin shiori_save) を実行してください。"
+    exit 1
+}
+Copy-Item $ShioriSaveExe (Join-Path $BinDir "shiori-save.exe") -Force
+
 # --- 3. RAG用の可搬版Python環境(bin/win/rag-venv/) ---
 #
 # Mac版の教訓: uv venvはbin/pythonが移動元への絶対パスシンボリックリンクに

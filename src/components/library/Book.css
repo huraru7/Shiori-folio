@@ -62,17 +62,28 @@
   font-size: 8px;
 }
 
-.book--profile {
+/* Ver2.0(2026-08-17)、library/のディレクトリ体系変更(00-inbox〜90-archive)に
+   合わせて色分けを更新。src/lib/library.tsのCATEGORY_METAと対応させること。 */
+.book--00-inbox {
+  background: linear-gradient(160deg, #a8a196, #8c8577);
+}
+.book--10-log {
+  background: linear-gradient(160deg, #8fb0c9, #6e8fa8);
+}
+.book--20-projects {
+  background: linear-gradient(160deg, #e0b374, #c4914e);
+}
+.book--30-knowledge {
   background: linear-gradient(160deg, #a8ba84, var(--moss));
 }
-.book--garden {
+.book--40-decisions {
+  background: linear-gradient(160deg, #c4a0b3, #a67b8f);
+}
+.book--50-reference {
   background: linear-gradient(160deg, #dda97e, var(--clay));
 }
-.book--portfolio {
-  background: linear-gradient(160deg, #a9cedd, #7fafc4);
-}
-.book--memo {
-  background: linear-gradient(160deg, #d2b8dd, #b08fc4);
+.book--90-archive {
+  background: linear-gradient(160deg, #948e80, #7a7568);
 }
 .book--uncategorized {
   background: linear-gradient(160deg, #cfcfcf, #a3a3a3);

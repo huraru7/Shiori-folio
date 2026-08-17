@@ -109,7 +109,15 @@ def sync_index(
     collection = chroma_client.get_or_create_collection(collection_name)
 
     state = load_index_state(vectordb_dir)
-    md_files = list(knowledge_dir.rglob("*.md"))
+    # library/_system/配下はConversationの保存ルール(CLAUDE.md)・タグ/プロジェクト
+    # 台帳(tags.yaml/projects.yaml)等の設定ファイル置き場であり、蔵書ではない。
+    # 除外せずrglobすると_system/CLAUDE.mdまで検索結果・図書館UIに紛れ込み、
+    # かつsource_category="_system"は図書館UI側の分類マッピングに存在しないため
+    # 「未分類」として表示されてしまう(2026-08-17、Windows実機のVer2.0移行後
+    # 確認で発覚)。
+    md_files = [
+        p for p in knowledge_dir.rglob("*.md") if "_system" not in p.relative_to(knowledge_dir).parts
+    ]
     current_paths = {str(p.relative_to(knowledge_dir)): p for p in md_files}
 
     added: list[str] = []
