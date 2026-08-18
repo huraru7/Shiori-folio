@@ -2138,7 +2138,7 @@ fn parse_memo_intent(text: &str) -> Option<String> {
     }
 }
 
-// 検知したメモ内容を実際に保存する。library/memo/へMarkdownファイルとして
+// 検知したメモ内容を実際に保存する。library/00-inbox/へMarkdownファイルとして
 // 書き出し(ChromaDBが壊れても元データが残るように)、続けてRAGサーバーの
 // /add_documentで即座に埋め込み・ChromaDBへ登録する(passive recallの対象に
 // 即時反映するため、ingest.pyの再実行は不要にしている)。結果をLLMへの強い
@@ -2161,7 +2161,10 @@ fn build_memo_guard_context(
         now.format("%Y-%m-%d")
     );
 
-    let memo_dir = library_root().join("memo");
+    // Ver2.0(00-inbox〜90-archive体系)ではメモは「インボックス」に対応するため
+    // 00-inboxへ保存する(2026-08-17、旧"memo"カテゴリのままだと図書館UI側の
+    // CATEGORY_META(library.ts)に存在せず「未分類」表示になる不整合が発覚)。
+    let memo_dir = library_root().join("00-inbox");
     let write_result = std::fs::create_dir_all(&memo_dir)
         .map_err(|e| format!("メモ保存先ディレクトリの作成に失敗: {e}"))
         .and_then(|_| {
@@ -2177,7 +2180,7 @@ fn build_memo_guard_context(
                 content,
                 &heading,
                 &file_name,
-                "memo",
+                "00-inbox",
             ) {
                 Ok(()) => {
                     *sources_out = Some(vec![KnowledgeResultDto {
@@ -2185,7 +2188,7 @@ fn build_memo_guard_context(
                         text: content.to_string(),
                         source: file_name,
                         heading,
-                        source_category: "memo".to_string(),
+                        source_category: "00-inbox".to_string(),
                     }]);
                     format!("「{content}」という内容をメモとして保存しました。")
                 }
@@ -3196,7 +3199,7 @@ mod tests {
     }
 
     // メモ機能(memo_guard)の確認用: 「〇〇についてメモして」で実際に保存が
-    // 行われるか(sourcesへの反映、library/memo/へのファイル作成)、
+    // 行われるか(sourcesへの反映、library/00-inbox/へのファイル作成)、
     // 保存直後の別会話でpassive recallとして自然に想起されるか(即時反映)を
     // 確認する。想起の可否はembeddingの距離しきい値に左右される既知の限界
     // (docs/voice-consistency-policy.md参照)があるため、そちらは目視確認に
@@ -3213,16 +3216,16 @@ mod tests {
         assert_eq!(reply.detected_mode, "memo", "memo_guardが発火していない");
         assert!(reply.sources.is_some(), "保存したメモがsourcesに反映されていない");
 
-        let memo_dir = library_root().join("memo");
+        let memo_dir = library_root().join("00-inbox");
         let found = std::fs::read_dir(&memo_dir)
-            .expect("library/memo/の読み込みに失敗(ディレクトリが作られていない?)")
+            .expect("library/00-inbox/の読み込みに失敗(ディレクトリが作られていない?)")
             .filter_map(|e| e.ok())
             .any(|e| {
                 std::fs::read_to_string(e.path())
                     .map(|content| content.contains(&unique_marker))
                     .unwrap_or(false)
             });
-        assert!(found, "library/memo/に保存したメモの内容が見つからない");
+        assert!(found, "library/00-inbox/に保存したメモの内容が見つからない");
 
         // 即時反映の確認(目視): 保存直後の別会話でpassive recallが拾うか
         let followup = send_message_impl(

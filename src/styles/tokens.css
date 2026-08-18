@@ -72,11 +72,16 @@
 
   /* 図書館UI(2026-08-12)のカテゴリ色分け。既存のaccent-*と値が重なる部分も
      あるが、「会話モードの強調色」と「蔵書カテゴリの色分け」は意味的に別の
-     概念のため、専用のトークンとして分ける。 */
-  --category-profile: var(--moss);
-  --category-garden: var(--clay);
-  --category-portfolio: #7FAFC4;
-  --category-memo: #B08FC4;
+     概念のため、専用のトークンとして分ける。
+     Ver2.0(2026-08-17)、library/のディレクトリ体系変更に合わせて更新。
+     src/lib/library.tsのCATEGORY_META・Book.cssの.book--*と対応させること。 */
+  --category-00-inbox: #8C8577;
+  --category-10-log: #6E8FA8;
+  --category-20-projects: #C4914E;
+  --category-30-knowledge: var(--moss);
+  --category-40-decisions: #A67B8F;
+  --category-50-reference: var(--clay);
+  --category-90-archive: #7A7568;
 
   --font-display: 'Shippori Mincho', serif;
   --font-body: 'Noto Sans JP', sans-serif;

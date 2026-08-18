@@ -12,11 +12,22 @@ export interface CategoryMeta {
 
 // 3-5節の色分けルール。配色は2026-08-12のUI/UX改善(苔色/テラコッタ基調への
 // 全面転換)に合わせてtokens.cssの--category-*と同じ値にしている。
+//
+// 【2026-08-17更新】Ver2.0(セカンドブレイン化)でlibrary/のディレクトリ体系が
+// 旧(profile/garden/portfolio/memo)から新(00-inbox〜90-archive)へ移行された
+// (services/rag/indexing.py:source_category_for()参照)。ここが旧カテゴリの
+// ままだったため、移行後のWindows実機確認で全ての本が「未分類」表示になる
+// 不具合が発覚した。新カテゴリの配色は苔色(旧profile)・テラコッタ(旧garden)を
+// 意味の近いカテゴリ(30-knowledge・50-reference)に継承しつつ、既存の低彩度
+// トーンに合わせて拡張した。
 const CATEGORY_META: Record<string, CategoryMeta> = {
-  profile: { abbr: "PF", label: "プロフィール", hex: "#8FA06B" },
-  garden: { abbr: "GD", label: "huraru.com ガーデン", hex: "#C68A5E" },
-  portfolio: { abbr: "PT", label: "ポートフォリオ", hex: "#7FAFC4" },
-  memo: { abbr: "MM", label: "メモ", hex: "#B08FC4" },
+  "00-inbox": { abbr: "IB", label: "インボックス", hex: "#8C8577" },
+  "10-log": { abbr: "LG", label: "ログ", hex: "#6E8FA8" },
+  "20-projects": { abbr: "PJ", label: "プロジェクト", hex: "#C4914E" },
+  "30-knowledge": { abbr: "KN", label: "知見", hex: "#8FA06B" },
+  "40-decisions": { abbr: "DC", label: "決定", hex: "#A67B8F" },
+  "50-reference": { abbr: "RF", label: "参照資料", hex: "#C68A5E" },
+  "90-archive": { abbr: "AR", label: "アーカイブ", hex: "#7A7568" },
 };
 
 const FALLBACK_CATEGORY_META: CategoryMeta = {
@@ -30,8 +41,17 @@ export function getCategoryMeta(sourceCategory: string): CategoryMeta {
 }
 
 // スタンドアロン図書館(3-2)の棚を並べる順序。未知のカテゴリ(uncategorized等)は
-// 末尾にまとめる。
-export const CATEGORY_ORDER = ["profile", "garden", "portfolio", "memo"] as const;
+// 末尾にまとめる。ディレクトリの番号プレフィックス順(library/_system/CLAUDE.md
+// の配置ルール1〜4の並びと同じ)。
+export const CATEGORY_ORDER = [
+  "00-inbox",
+  "10-log",
+  "20-projects",
+  "30-knowledge",
+  "40-decisions",
+  "50-reference",
+  "90-archive",
+] as const;
 
 // 16進カラーコードをrgba()文字列に変換する(バッジの半透明背景・枠線用)。
 export function hexToRgba(hex: string, alpha: number): string {

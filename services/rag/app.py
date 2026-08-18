@@ -190,7 +190,11 @@ def add_document(req: AddDocumentRequest):
     形式で埋め込む(検索精度を揃えるため)。同じidで再度呼ぶと上書きになる
     (ChromaDBのadd()はid重複時にエラーになるためupsert()を使う)。
     """
-    collection = _chroma_client.get_collection(COLLECTION_NAME)
+    # get_or_create_collection: 検索系(sync_index)と取得方法を揃える。
+    # get_collection()のままだと、まだ一度も検索が走らずコレクション未作成の
+    # 状態でこのエンドポイントを先に呼んだ場合だけ例外になり、挙動が不揃いに
+    # なっていた(2026-08-17、プロジェクト整合性レビューで発覚)。
+    collection = _chroma_client.get_or_create_collection(COLLECTION_NAME)
     embed_text = f"{req.heading}: {req.text}" if req.heading and req.heading != "(見出しなし)" else req.text
     embedding = get_embedding(embed_text, client=_http_client, is_query=False)
     collection.upsert(
@@ -215,7 +219,7 @@ def list_all():
     全チャンクをそのまま返す。現状の蔵書規模(数十件)なら一括取得で十分
     (件数が大きく増えた場合はページネーションを検討する)。
     """
-    collection = _chroma_client.get_collection(COLLECTION_NAME)
+    collection = _chroma_client.get_or_create_collection(COLLECTION_NAME)
     result = collection.get()
 
     items: list[ChunkItem] = []
