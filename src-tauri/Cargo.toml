@@ -4,6 +4,12 @@ version = "0.1.0"
 description = "詩織（Shiori-folio）"
 authors = ["you"]
 edition = "2021"
+# src/bin/(mcp_server.rs, shiori_save.rs)が増えて同一パッケージ内に複数の
+# バイナリターゲットが存在するようになったため、`cargo tauri build`が
+# GUI本体(shiori-folio、src/main.rs由来)ではなくsrc/bin/側を誤って
+# アプリバンドルの実行ファイルとして選んでしまう不具合が発生した
+# (2026-08-15、USB版Ver2.0更新作業で発覚)。default-runで明示して回避する。
+default-run = "shiori-folio"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
