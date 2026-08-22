@@ -62,25 +62,23 @@
   font-size: 8px;
 }
 
-/* Ver2.0(2026-08-17)、library/のディレクトリ体系変更(00-inbox〜90-archive)に
-   合わせて色分けを更新。src/lib/library.tsのCATEGORY_METAと対応させること。 */
+/* Ver3.0(2026-08-22)、library/のディレクトリ体系変更(10-projects/20-areas/
+   30-resources/40-journal、PARAベース)に合わせて色分けを更新。
+   src/lib/library.tsのCATEGORY_METAと対応させること。 */
 .book--00-inbox {
   background: linear-gradient(160deg, #a8a196, #8c8577);
 }
-.book--10-log {
-  background: linear-gradient(160deg, #8fb0c9, #6e8fa8);
-}
-.book--20-projects {
+.book--10-projects {
   background: linear-gradient(160deg, #e0b374, #c4914e);
 }
-.book--30-knowledge {
-  background: linear-gradient(160deg, #a8ba84, var(--moss));
+.book--20-areas {
+  background: linear-gradient(160deg, #8fb0c9, #6e8fa8);
 }
-.book--40-decisions {
-  background: linear-gradient(160deg, #c4a0b3, #a67b8f);
-}
-.book--50-reference {
+.book--30-resources {
   background: linear-gradient(160deg, #dda97e, var(--clay));
+}
+.book--40-journal {
+  background: linear-gradient(160deg, #c4a0b3, #a67b8f);
 }
 .book--90-archive {
   background: linear-gradient(160deg, #948e80, #7a7568);

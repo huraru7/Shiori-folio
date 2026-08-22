@@ -18,16 +18,18 @@ use std::path::{Path, PathBuf};
 
 use shiori_folio_lib::{library_root, load_search_backend_config, project_root, rag_client};
 
-const VALID_TYPES: &[&str] = &[
-    "project-log",
-    "task",
-    "decision",
-    "principle",
-    "insight",
-    "experience",
-    "glossary",
-    "reference",
-];
+// 詩織Ver3.0(データ管理法見直し2-2節)。旧enum(project-log/task/decision/
+// principle/insight/experience/glossary/reference)を廃止し、新フォルダ構成
+// (10-projects/20-areas/30-resources/40-journal)と1対1対応させた。
+const VALID_TYPES: &[&str] = &["project", "area", "resource", "journal"];
+
+fn default_index() -> bool {
+    true
+}
+
+fn default_status() -> String {
+    "new".to_string()
+}
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 struct Frontmatter {
@@ -39,12 +41,24 @@ struct Frontmatter {
     tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     project: Option<String>,
+    // 本文とは別の1〜2文の要約(検索結果表示・rerank精度向上に使う)。
+    // 必須化はしない(無い場合は単に空欄のまま)。
     #[serde(skip_serializing_if = "Option::is_none")]
-    author: Option<String>,
+    summary: Option<String>,
+    // 検索対象に含めるか(services/rag/indexing.py側で参照する)。デフォルトtrue。
+    #[serde(default = "default_index")]
+    index: bool,
+    // draft/new/outdated/deprecated/disputedの5値を想定するが、typeと違い
+    // 判断を誤っても実害が小さいためCLI側でのenumバリデーションはしない。
+    #[serde(default = "default_status")]
+    status: String,
+    // 内部的に関連する他記事へのリンク(将来のリンクグラフの元データ)。
+    #[serde(default)]
+    related: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
-    // title/type/tags/project/author/reason以外のfrontmatterフィールドは
-    // 検証・ルーティングの対象外だが、保存時に消さず維持する。
+    // 上記以外のfrontmatterフィールドは検証・ルーティングの対象外だが、
+    // 保存時に消さず維持する。
     #[serde(flatten)]
     extra: BTreeMap<String, serde_yaml::Value>,
 }
@@ -58,8 +72,6 @@ struct ProjectsFile {
 #[derive(Debug, Deserialize)]
 struct ProjectEntry {
     id: String,
-    #[serde(default)]
-    domain: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -168,42 +180,48 @@ fn validate(fm: &Frontmatter) -> Option<String> {
     }
 }
 
-// library/_system/CLAUDE.mdの「配置先の決め方」1〜4を実装する
-// (5の日次ログ/セッション記録はfrontmatterのtype enumに対応する値が
-// 定義されていないため、このCLIのスコープ外。GUI側の既存メモ保存機能
-// との役割分担は別途要確認)。
+// library/_system/CLAUDE.mdの「配置先の決め方」を実装する(詩織Ver3.0、
+// データ管理法見直し2-2節)。typeの判定・付与自体はこのCLIの役目ではなく、
+// 書き込みを行うAI(Claude Code)が自律的に行う前提(人間はtypeの値を直接
+// 参照・指定しない)。このCLIは決定されたtypeを機械的にフォルダへ変換する
+// だけの決定的ロジックを担う。
 fn decide_destination(root: &Path, fm: &Frontmatter, projects_yaml: &Path) -> Result<PathBuf> {
     let project = fm.project.as_deref().map(str::trim).filter(|p| !p.is_empty());
 
     match fm.kind.as_deref().expect("validateを通過済みのためSome") {
-        "decision" => Ok(root.join("40-decisions")),
-
-        "project-log" | "task" => match project {
+        // 期限・ゴールのある進行中の取り組み。
+        "project" => match project {
             Some(p) => {
                 ensure_project_registered(projects_yaml, p)?;
-                Ok(root.join("20-projects").join(p))
+                Ok(root.join("10-projects").join(p))
             }
             None => Ok(root.join("00-inbox")),
         },
 
-        "principle" | "insight" | "experience" | "glossary" => {
-            let domain = match project {
-                Some(p) => ensure_project_registered(projects_yaml, p)?,
-                None => None,
-            };
-            Ok(root.join("30-knowledge").join(domain.unwrap_or_else(|| "general".to_string())))
-        }
-
-        "reference" => match project {
-            Some(p @ ("profile" | "garden" | "portfolio")) => Ok(root.join("50-reference").join(p)),
+        // 終わりのない継続的関心領域。projectフィールドを識別子として流用する
+        // (huraru.com運営・詩織開発等、type: projectと同じ命名空間で管理する)。
+        "area" => match project {
             Some(p) => {
                 ensure_project_registered(projects_yaml, p)?;
-                Ok(root.join("50-reference").join(p))
+                Ok(root.join("20-areas").join(p))
             }
-            // projectが空のreferenceは配置先を機械的に決められないため、
-            // 他の不備ケースと同様inboxへ退避する。
             None => Ok(root.join("00-inbox")),
         },
+
+        // 確立された知識・参考資料・意思決定の記録(旧40-decisions/50-reference/
+        // 30-knowledgeを統合)。project別サブフォルダ構成は維持しつつ、
+        // projectが空でも(旧referenceと異なり)inboxへ逃がさず直下に置ける
+        // 一般知識として扱う。
+        "resource" => match project {
+            Some(p) => {
+                ensure_project_registered(projects_yaml, p)?;
+                Ok(root.join("30-resources").join(p))
+            }
+            None => Ok(root.join("30-resources")),
+        },
+
+        // 日々の記録・ログ(旧10-logの後継)。project等での分岐はない。
+        "journal" => Ok(root.join("40-journal")),
 
         _ => unreachable!("validateで許可値のみ通過しているはず"),
     }
@@ -215,30 +233,28 @@ fn yaml_scalar(s: &str) -> Result<String> {
     Ok(serde_yaml::to_string(s)?.trim_end().to_string())
 }
 
-// projects.yamlに指定idが存在するかを調べ、存在すればdomainを返す
-// (domain未設定ならNone)。存在しなければ末尾にstatus: pendingで追記登録する。
-// 既存ファイルの先頭コメント等を保つため、パース→丸ごと再シリアライズは
-// せず、追記のみで済ませる。
-fn ensure_project_registered(projects_yaml: &Path, id: &str) -> Result<Option<String>> {
+// projects.yamlに指定idが存在するかを調べる。存在しなければ末尾に
+// status: pendingで追記登録する。既存ファイルの先頭コメント等を保つため、
+// パース→丸ごと再シリアライズはせず、追記のみで済ませる。
+//
+// 【Ver3.0で変更】旧30-knowledgeのdomain逆引きが不要になった(30-resourcesは
+// project別サブフォルダ構成のため)ため、戻り値のdomainは廃止した。
+fn ensure_project_registered(projects_yaml: &Path, id: &str) -> Result<()> {
     let text = std::fs::read_to_string(projects_yaml)
         .with_context(|| format!("{}の読み込みに失敗", projects_yaml.display()))?;
     let parsed: ProjectsFile = serde_yaml::from_str(&text)
         .with_context(|| format!("{}の解析に失敗", projects_yaml.display()))?;
 
-    if let Some(entry) = parsed.projects.iter().find(|p| p.id == id) {
-        return Ok(entry.domain.clone());
+    if parsed.projects.iter().any(|p| p.id == id) {
+        return Ok(());
     }
 
     let mut f = std::fs::OpenOptions::new()
         .append(true)
         .open(projects_yaml)
         .with_context(|| format!("{}への追記オープンに失敗", projects_yaml.display()))?;
-    writeln!(
-        f,
-        "  - id: {}\n    domain: null\n    status: pending",
-        yaml_scalar(id)?
-    )?;
-    Ok(None)
+    writeln!(f, "  - id: {}\n    status: pending", yaml_scalar(id)?)?;
+    Ok(())
 }
 
 // tags.yamlのcanonical/aliasesと照合し、一致すればcanonical表記を返す。

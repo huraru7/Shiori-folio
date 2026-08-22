@@ -7,6 +7,7 @@ ingest.py(手動でのコレクション全体再構築)とapp.py(検索リク�
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import chromadb
@@ -16,6 +17,24 @@ from chunking import chunk_markdown
 from embedding_client import get_embedding
 
 INDEX_STATE_FILENAME = ".index_state.json"
+
+# frontmatterのindexフィールド(詩織Ver3.0、データ管理法見直し2-2節)。
+# 厳密なYAMLパースは行わず、正規表現でindex: falseの1行だけを検知する
+# 軽量な実装にしている(pyyaml等の追加依存を避けるため。frontmatter全体を
+# 解析する必要が出てきたら見直すこと)。
+_FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
+_INDEX_FALSE_RE = re.compile(r"^index:\s*false\s*$", re.MULTILINE | re.IGNORECASE)
+
+
+def _is_indexable(text: str) -> bool:
+    """frontmatterのindexフィールドがfalseなら検索対象から除外する。
+    フィールドが無い・frontmatter自体が無い場合はデフォルトのtrue
+    (検索対象)として扱う。
+    """
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return True
+    return not _INDEX_FALSE_RE.search(m.group(1))
 
 
 def source_category_for(md_path: Path, knowledge_dir: Path) -> str:
@@ -51,7 +70,8 @@ def _embed_file(
     """1ファイル分のチャンクを埋め込んでChromaDBへ反映する。チャンク数が前回
     から変わっている可能性があるため、まず同じsource(ファイル名)の既存チャンクを
     すべて削除してから、あらためて全チャンクを追加し直す。戻り値は投入した
-    チャンク数(0ならファイルが空、または見出し・本文が無い)。
+    チャンク数(0ならファイルが空・見出し/本文が無い、またはindex: falseで
+    検索対象から除外されている)。
     """
     stem = md_path.stem
     existing = collection.get(where={"source": md_path.name})
@@ -59,6 +79,8 @@ def _embed_file(
         collection.delete(ids=existing["ids"])
 
     text = md_path.read_text(encoding="utf-8")
+    if not _is_indexable(text):
+        return 0
     chunks = chunk_markdown(text)
     if not chunks:
         return 0
