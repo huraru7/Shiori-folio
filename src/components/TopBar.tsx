@@ -30,11 +30,17 @@ function formatDate(now: Date, cfg: DateDisplayConfig): string {
   return numeric ? `${numeric}${weekday}` : weekday;
 }
 
+interface Props {
+  leftCollapsed: boolean;
+  onToggleLeftCollapsed: () => void;
+}
+
 // ヘッダー(2026-08-12、UI/UX改善指示書2章、2026-08-13ロゴ実装で仮置きから差し替え)。
 // 挨拶文・今日の手入れ件数の表示は廃止し、ロゴマークに置き換えた。図書館・設定への
 // 導線もヘッダーから削除し、タスクバー(Dock)側に統合している(App.tsx参照)。
 // 日付の年/月/日/曜日の表示・非表示は設定画面(詳細設定)から切り替えられる。
-function TopBar() {
+// 左ゾーン(会話UI)の折りたたみトグル(詩織Ver3.0、UI改善4-3節)もここに配置する。
+function TopBar({ leftCollapsed, onToggleLeftCollapsed }: Props) {
   const [now, setNow] = useState(new Date());
   const [dateConfig, setDateConfig] = useState<DateDisplayConfig>(DEFAULT_DATE_CONFIG);
 
@@ -68,6 +74,14 @@ function TopBar() {
     <header className="top-bar">
       <div className="top-bar__logo">
         <img src={shioriMark} className="top-bar__logo-mark" alt="詩織" />
+        <button
+          className="top-bar__collapse-btn"
+          onClick={onToggleLeftCollapsed}
+          title={leftCollapsed ? "会話エリアを表示" : "会話エリアを折りたたむ"}
+          aria-label={leftCollapsed ? "会話エリアを表示" : "会話エリアを折りたたむ"}
+        >
+          {leftCollapsed ? "▶" : "◀"}
+        </button>
       </div>
       <div className="top-bar__datetime">
         <div className="top-bar__date">{formatDate(now, dateConfig)}</div>

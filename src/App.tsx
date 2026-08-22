@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import TopBar from "./components/TopBar";
+import { getLeftCollapsed, setLeftCollapsed } from "./lib/leftCollapsed";
 import ActivityIndicator from "./components/ActivityIndicator";
 import VoiceBar from "./components/VoiceBar";
 import ConversationLog from "./components/ConversationLog";
@@ -21,6 +22,15 @@ import "./App.css";
 function App() {
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [showStartup, setShowStartup] = useState(true);
+  const [leftCollapsed, setLeftCollapsedState] = useState(getLeftCollapsed);
+
+  const toggleLeftCollapsed = () => {
+    setLeftCollapsedState((prev) => {
+      const next = !prev;
+      setLeftCollapsed(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     // ホットキー(Ctrl+Alt+S)経由のRustイベントを購読し、
@@ -55,9 +65,9 @@ function App() {
     <>
       {showStartup && <StartupScreen onFinished={() => setShowStartup(false)} />}
       <div className="app">
-        <TopBar />
+        <TopBar leftCollapsed={leftCollapsed} onToggleLeftCollapsed={toggleLeftCollapsed} />
         <div className="app__body">
-          <section className="app__left">
+          <section className={`app__left${leftCollapsed ? " app__left--collapsed" : ""}`}>
             <ConversationLog />
             <div className="app__left-bottom">
               <ActivityIndicator />
