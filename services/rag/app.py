@@ -105,17 +105,26 @@ RERANK_SCORE_THRESHOLD = 0.3
 
 
 def _retrieve_and_rerank(
-    query: str, where: dict | None = None
+    query: str, where: dict | None = None, apply_threshold: bool = True
 ) -> list[tuple[str, str, dict, float, float]]:
     """クエリに対する候補チャンクを取得しリランクする。/search・/search_libraryの
-    共通処理。返り値はrerank_score降順・RERANK_SCORE_THRESHOLD以上に絞り込んだ
-    (chunk_id, document, metadata, distance, rerank_score)のリスト。件数の
-    絞り込み(何件返すか)は呼び出し元が行う(/searchはチャンク数、
-    /search_libraryはファイル数で数え方が異なるため、ここでは絞り込まない)。
+    共通処理。返り値はrerank_score降順(chunk_id, document, metadata, distance,
+    rerank_score)のリスト。件数の絞り込み(何件返すか)は呼び出し元が行う
+    (/searchはチャンク数、/search_libraryはファイル数で数え方が異なるため、
+    ここでは絞り込まない)。
 
     whereはChromaDBのメタデータフィルタ(collection.query()にそのまま渡す)。
     author/type/project等、Ver2.0の保存ルーティング(shiori-save CLI)が
     書き込むフィールドで絞り込む場合に使う。Noneなら絞り込みなし。
+
+    apply_thresholdはRERANK_SCORE_THRESHOLDによる足切りを行うかどうか。
+    【Ver3.0で変更】MCP検索(/search_library)は最終消費者がAI(Claude Code)で
+    あり、上位から順に読み進めて必要な情報が見つかるまで掘り進められるため、
+    「精緻な順位付け」より「関連しうる情報を漏らさず返す(recall重視)」を
+    優先する方針に転換した(データ管理法見直し3-1節)。そのため/search_library
+    はFalseを渡して閾値を無効化する。/search(会話UI向け、本文をそのまま
+    文脈に注入する用途)は無関係な候補が混入する副作用が大きいため、
+    従来通りTrue(閾値あり)のままにする。
     """
     # 【Ver3.0で変更】検索の都度の全件mtimeスキャン(sync_index)は廃止した。
     # 書き込み時フック(/reindex_file)+起動時1回だけの全件スキャンに切り替えた
@@ -163,7 +172,8 @@ def _retrieve_and_rerank(
 
     candidates = list(zip(ids, documents, metadatas, distances, rerank_scores))
     candidates.sort(key=lambda c: c[4], reverse=True)
-    candidates = [c for c in candidates if c[4] >= RERANK_SCORE_THRESHOLD]
+    if apply_threshold:
+        candidates = [c for c in candidates if c[4] >= RERANK_SCORE_THRESHOLD]
     return candidates
 
 
@@ -352,7 +362,12 @@ class LibrarySearchFilter(BaseModel):
 
 class SearchLibraryRequest(BaseModel):
     query: str
-    limit: int = 5
+    # 【Ver3.0で変更】5→20。ページング方式導入に伴うデフォルト件数の見直し
+    # (データ管理法見直し3-3節)。
+    limit: int = 20
+    # ページングの開始位置(ファイル単位の並びに対するオフセット)。
+    # 1回目はoffset=0、続きが欲しければoffset=20, 40...と増やして再クエリする。
+    offset: int = 0
     filter: LibrarySearchFilter | None = None
 
 
@@ -378,12 +393,16 @@ def search_library(req: SearchLibraryRequest):
     場所(見出し)を教えるだけで、中身を合成しない、という設計方針)。1冊=
     1ファイルという表示単位(10章)とも整合させている。
 
-    filterのauthor/type/projectは、Ver2.0の保存ルーティング(shiori-save CLI、
-    Phase 5で実装予定)がchromadbのメタデータに実際に書き込むようになって
-    初めて機能する。現行データ(Ver1.0由来、Phase 9の移行スクリプト実行前)は
-    これらのフィールドを持たないため、filter指定時は該当データがヒットしない
-    点に注意(絞り込み自体はここで先に実装しておき、Phase 5/9で自然に効くように
-    しておく)。
+    filterのauthor/type/projectは、Ver2.0の保存ルーティング(shiori-save CLI)が
+    chromadbのメタデータに実際に書き込むフィールドで絞り込む(authorは
+    Ver3.0で書き込み自体を廃止したため、現行データでは該当なしになる)。
+
+    【Ver3.0で変更】RERANK_SCORE_THRESHOLDによる足切りを行わず(recall重視の
+    方針、_retrieve_and_rerank参照)、offset+limitのページング方式で返す件数を
+    制御する(データ管理法見直し3-3節)。呼び出し側(Claude Code)は1回目
+    offset=0で呼び、欲しい情報が見つからなければoffset=20,40...と増やして
+    再クエリする。候補プール(最大200件)の終端に達しlimit件に満たない結果が
+    返れば「これ以上情報がない」という終了シグナルになる。
     """
     where: dict | None = None
     if req.filter:
@@ -399,7 +418,7 @@ def search_library(req: SearchLibraryRequest):
         elif len(conditions) > 1:
             where = {"$and": conditions}
 
-    candidates = _retrieve_and_rerank(req.query, where)
+    candidates = _retrieve_and_rerank(req.query, where, apply_threshold=False)
 
     # ファイル単位(source)に集約する。candidatesは既にスコア降順のため、
     # 各ファイルの初出順=そのファイルの最高スコア順になる。
@@ -425,4 +444,4 @@ def search_library(req: SearchLibraryRequest):
         )
         for source in order
     ]
-    return items[: req.limit]
+    return items[req.offset : req.offset + req.limit]

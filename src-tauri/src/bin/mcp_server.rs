@@ -33,9 +33,15 @@ use shiori_folio_lib::{
 struct SearchLibraryArgs {
     /// 検索クエリ(日本語可)
     query: String,
-    /// 返すファイル数の上限
+    /// 返すファイル数の上限(1回あたり)。スコア閾値による足切りは行わないため、
+    /// 欲しい情報が見つからなければoffsetを増やして同じクエリで再検索すること
     #[serde(default = "default_limit")]
     limit: u32,
+    /// ページングの開始位置。1回目は省略(0)、続きが欲しければ前回の
+    /// offset+limitを指定して再検索する。返却件数がlimit未満ならそれ以上
+    /// 候補が無いことを意味する
+    #[serde(default)]
+    offset: u32,
     /// frontmatterのauthor(human/claude-code)で絞り込む。省略可
     #[serde(default)]
     author: Option<String>,
@@ -48,7 +54,7 @@ struct SearchLibraryArgs {
 }
 
 fn default_limit() -> u32 {
-    5
+    20
 }
 
 #[derive(Clone)]
@@ -94,7 +100,7 @@ impl ShioriLibrary {
     }
 
     #[tool(
-        description = "詩織のライブラリ(library/)をクエリで検索し、ファイル単位に集約した見出し一覧を返す(本文は含まない。棚の場所を教えるだけで内容の合成はしない)"
+        description = "詩織のライブラリ(library/)をクエリで検索し、ファイル単位に集約した見出し一覧を返す(本文は含まない。棚の場所を教えるだけで内容の合成はしない)。スコアによる足切りは行わないため、返却件数がlimit未満になるまでoffsetを増やして同じクエリで呼び直すと、関連しうる候補を漏らさず確認できる"
     )]
     async fn search_library(
         &self,
@@ -136,8 +142,9 @@ impl ShioriLibrary {
             None
         };
 
-        let results = rag_client::search_library(backend.rag_port, &args.query, args.limit, filter)
-            .map_err(|e| McpError::internal_error(e, None))?;
+        let results =
+            rag_client::search_library(backend.rag_port, &args.query, args.limit, args.offset, filter)
+                .map_err(|e| McpError::internal_error(e, None))?;
 
         let json = serde_json::to_string_pretty(&results)
             .map_err(|e| McpError::internal_error(format!("結果のJSON化に失敗: {e}"), None))?;

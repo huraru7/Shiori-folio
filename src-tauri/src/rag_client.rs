@@ -108,6 +108,7 @@ pub struct LibrarySearchFilter<'a> {
 struct SearchLibraryRequest<'a> {
     query: &'a str,
     limit: u32,
+    offset: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     filter: Option<LibrarySearchFilter<'a>>,
 }
@@ -129,14 +130,19 @@ pub struct SearchLibraryResultItem {
 // MCPサーバーのsearch_libraryツール向け(詩織Ver2.0設計指示書v3、9章)。
 // services/rag/app.pyの/search_libraryを呼ぶ。/searchと異なりファイル単位に
 // 集約された結果(本文を含まない)が返る。
+//
+// 【Ver3.0で変更】スコア閾値による足切りを廃止し、offset+limitのページング
+// 方式に変更した(データ管理法見直し3-3節)。呼び出し側は1回目offset=0で呼び、
+// 欲しい情報が見つからなければoffsetを増やして(20, 40...)再クエリする。
 pub fn search_library(
     port: u16,
     query: &str,
     limit: u32,
+    offset: u32,
     filter: Option<LibrarySearchFilter>,
 ) -> Result<Vec<SearchLibraryResultItem>, String> {
     let url = format!("http://127.0.0.1:{port}/search_library");
-    let body = SearchLibraryRequest { query, limit, filter };
+    let body = SearchLibraryRequest { query, limit, offset, filter };
 
     ureq::post(&url)
         .timeout(Duration::from_secs(30))
