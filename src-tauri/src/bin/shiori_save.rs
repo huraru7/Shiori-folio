@@ -16,7 +16,7 @@ use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use shiori_folio_lib::library_root;
+use shiori_folio_lib::{library_root, load_search_backend_config, project_root, rag_client};
 
 const VALID_TYPES: &[&str] = &[
     "project-log",
@@ -123,6 +123,26 @@ fn main() -> Result<()> {
         .with_context(|| format!("{}への書き込みに失敗", dest_path.display()))?;
     std::fs::remove_file(&source)
         .with_context(|| format!("移動元{}の削除に失敗", source.display()))?;
+
+    // 書き込み時フック(詩織Ver3.0、データ管理法見直し2-5節)。RAGサーバーが
+    // すでに起動していれば即座にこのファイルだけre-indexし、検索の都度の
+    // 全件スキャンを待たず保存直後から検索対象にする。未起動時はここで
+    // 起動を試みない(起動待ちでCLIの応答を遅らせないため)。次回のRAGサーバー
+    // 起動時に行われる全件mtimeスキャンが安全網として拾う。
+    if let Ok(relative) = dest_path.strip_prefix(&root) {
+        let relative_str = relative.to_string_lossy();
+        match load_search_backend_config(&project_root()) {
+            Ok(backend) if rag_client::is_running(backend.rag_port) => {
+                if let Err(e) = rag_client::reindex_file(backend.rag_port, &relative_str) {
+                    eprintln!(
+                        "警告: 即時re-indexに失敗しました({e})。次回のRAGサーバー起動時に反映されます。"
+                    );
+                }
+            }
+            Ok(_) => {}
+            Err(e) => eprintln!("警告: 検索バックエンド設定の読み込みに失敗しました({e})。"),
+        }
+    }
 
     let result = serde_json::json!({
         "destination": dest_path.display().to_string(),

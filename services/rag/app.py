@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from embedding_client import get_embedding
-from indexing import sync_index
+from indexing import reindex_single_file, sync_index
 from library_path import resolve_knowledge_dir
 from reranker import rerank, warmup as warmup_reranker
 
@@ -38,6 +38,16 @@ _http_client = httpx.Client(timeout=30.0)
 @app.on_event("startup")
 def _warmup_reranker() -> None:
     warmup_reranker()
+
+
+# 検索の都度の全件mtimeスキャン(旧・遅延再インデックス方式)を廃止し、書き込み
+# 時フック(/reindex_file、shiori-save CLI等が保存直後に呼ぶ)を主軸にする
+# (詩織Ver3.0、データ管理法見直し2-5節)。起動時にはここで1回だけ全件スキャンを
+# 行い、フックの取りこぼしやポータブルSSDを別マシンで直接編集したケースを
+# 補完する安全網とする。
+@app.on_event("startup")
+def _initial_index_sync() -> None:
+    sync_index(_chroma_client, _http_client, KNOWLEDGE_DIR, VECTORDB_DIR, COLLECTION_NAME)
 
 
 class SearchRequest(BaseModel):
@@ -107,15 +117,11 @@ def _retrieve_and_rerank(
     author/type/project等、Ver2.0の保存ルーティング(shiori-save CLI)が
     書き込むフィールドで絞り込む場合に使う。Noneなら絞り込みなし。
     """
-    # 遅延再インデックス(Phase 6)。library/配下のファイルmtimeを前回の同期
-    # 状態と比較し、変更があったファイルだけ増分でChromaDBに反映してから
-    # 検索する。shiori-save CLIやClaude Codeの直接ファイル操作でlibrary/が
-    # 更新されても、ingest.pyを手動で再実行する必要が無くなる。変更が無ければ
-    # ファイルの列挙とstat()だけで完了し、embeddingサーバーへの問い合わせは
-    # 発生しない。
-    collection, _changes = sync_index(
-        _chroma_client, _http_client, KNOWLEDGE_DIR, VECTORDB_DIR, COLLECTION_NAME
-    )
+    # 【Ver3.0で変更】検索の都度の全件mtimeスキャン(sync_index)は廃止した。
+    # 書き込み時フック(/reindex_file)+起動時1回だけの全件スキャンに切り替えた
+    # ため、ここでは単にコレクションを取得するだけでよい(データ管理法見直し
+    # 2-5節)。
+    collection = _chroma_client.get_or_create_collection(COLLECTION_NAME)
     # クエリのフィラー語除去(正規化)はRust側(text_transformエンジン、
     # prompts/transforms/query-normalization.json)で一元化しているため、
     # ここでは受け取ったクエリをそのまま使う。
@@ -212,6 +218,28 @@ def add_document(req: AddDocumentRequest):
     return {"status": "ok"}
 
 
+class ReindexFileRequest(BaseModel):
+    # KNOWLEDGE_DIR(library/)からの相対パス。
+    path: str
+
+
+@app.post("/reindex_file")
+def reindex_file(req: ReindexFileRequest):
+    """書き込み時フック(詩織Ver3.0、データ管理法見直し2-5節)向け。shiori-save
+    CLI等がlibrary/へ新規保存した直後に呼ばれ、検索の都度の全件スキャンを
+    待たず対象ファイル1件だけを即座に埋め込む。呼び出し側(shiori-save CLI)は
+    RAGサーバーが起動していない場合はそもそもこのエンドポイントを呼ばない
+    設計のため、ここでは通信断のケースは考慮しない(ファイル不在のみ考慮する)。
+    """
+    try:
+        count = reindex_single_file(
+            _chroma_client, _http_client, KNOWLEDGE_DIR, VECTORDB_DIR, COLLECTION_NAME, req.path
+        )
+    except FileNotFoundError:
+        return {"status": "not_found", "chunks": 0}
+    return {"status": "ok", "chunks": count}
+
+
 @app.get("/list_all", response_model=list[ChunkItem])
 def list_all():
     """スタンドアロン図書館UI(2026-08-12、図書館ビジョン統合仕様書3-2)向け。
@@ -257,11 +285,12 @@ def list_all_library():
     集約して返す点(search_libraryと同じ集約方針だが、検索ではなく一覧なので
     スコアは持たない)。
 
-    検索を経由しない一覧である一方、この結果が図書館UIの「本棚」の実体になる
-    ため、shiori-save CLI等でlibrary/に加えられた変更を即座に反映できるよう、
-    /search・/search_libraryと同様にここでも遅延再インデックスを走らせる。
+    【Ver3.0で変更】以前はここで遅延再インデックス(sync_index)を走らせていたが、
+    書き込み時フック(/reindex_file)+起動時1回だけの全件スキャンに切り替えた
+    ため、ここでは単にコレクションを取得するだけでよい(データ管理法見直し
+    2-5節)。
     """
-    collection, _changes = sync_index(_chroma_client, _http_client, KNOWLEDGE_DIR, VECTORDB_DIR, COLLECTION_NAME)
+    collection = _chroma_client.get_or_create_collection(COLLECTION_NAME)
     result = collection.get()
 
     files: dict[str, dict] = {}

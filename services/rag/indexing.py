@@ -90,6 +90,34 @@ def _remove_file(collection, source_name: str) -> None:
         collection.delete(ids=existing["ids"])
 
 
+def reindex_single_file(
+    chroma_client: chromadb.ClientAPI,
+    http_client: httpx.Client,
+    knowledge_dir: Path,
+    vectordb_dir: Path,
+    collection_name: str,
+    relative_path: str,
+) -> int:
+    """書き込み時フック(shiori-save CLI等)向け。検索の都度の全件mtimeスキャンを
+    待たず、保存直後のファイル1件だけを即座に埋め込み直す(詩織Ver3.0、
+    データ管理法見直し2-5節)。.index_state.jsonのmtimeもここで更新しておく
+    ことで、次回起動時の全件スキャン(sync_index)がこのファイルを「変更あり」
+    と誤検知して二重に埋め込み直すのを防ぐ。戻り値は投入したチャンク数。
+    """
+    collection = chroma_client.get_or_create_collection(collection_name)
+    md_path = knowledge_dir / relative_path
+    if not md_path.is_file():
+        raise FileNotFoundError(relative_path)
+
+    category = source_category_for(md_path, knowledge_dir)
+    count = _embed_file(collection, http_client, md_path, category)
+
+    state = load_index_state(vectordb_dir)
+    state[relative_path] = md_path.stat().st_mtime
+    save_index_state(vectordb_dir, state)
+    return count
+
+
 def sync_index(
     chroma_client: chromadb.ClientAPI,
     http_client: httpx.Client,

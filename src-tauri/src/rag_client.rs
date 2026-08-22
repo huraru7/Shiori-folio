@@ -65,6 +65,34 @@ pub fn add_document(
     Ok(())
 }
 
+#[derive(Serialize)]
+struct ReindexFileRequest<'a> {
+    path: &'a str,
+}
+
+// 書き込み時フック(詩織Ver3.0、データ管理法見直し2-5節)向け。shiori-save CLI
+// 等がlibrary/への保存直後に呼び、検索の都度の全件スキャンを待たず対象
+// ファイル1件だけを即座に埋め込む(services/rag/app.pyの/reindex_file)。
+pub fn reindex_file(port: u16, relative_path: &str) -> Result<(), String> {
+    let url = format!("http://127.0.0.1:{port}/reindex_file");
+    let body = ReindexFileRequest { path: relative_path };
+
+    ureq::post(&url)
+        .timeout(Duration::from_secs(30))
+        .send_json(&body)
+        .map_err(|e| format!("即時re-indexに失敗: {e}"))?;
+    Ok(())
+}
+
+// RAGサーバーが応答するかを短いタイムアウトで確認する。shiori-save CLIのような
+// 書き込み系CLIが、未起動のRAGサーバーの起動待ちで応答を止めてしまわないよう、
+// 起動を試みる前にこれで疎通確認する用途(未起動なら即時re-indexを諦め、次回の
+// RAGサーバー起動時の全件スキャンに任せる)。
+pub fn is_running(port: u16) -> bool {
+    let url = format!("http://127.0.0.1:{port}/health");
+    ureq::get(&url).timeout(Duration::from_millis(500)).call().is_ok()
+}
+
 #[derive(Serialize, Default)]
 pub struct LibrarySearchFilter<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
