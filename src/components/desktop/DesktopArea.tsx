@@ -2,12 +2,15 @@ import { useRef } from "react";
 import OsWindow from "./OsWindow";
 import KnowledgePanel from "../panels/KnowledgePanel";
 import LibraryScreen from "../library/LibraryScreen";
+import LibraryBrowseScreen from "../library/LibraryBrowseScreen";
 import ControlPanel from "../controlpanel/ControlPanel";
 import "./DesktopArea.css";
 
 // デスクトップ型フリースペースの土台(2026-08-12、デスクトップ型ウィンドウ
-// システムの本実装)。ナレッジ・図書館・設定の3ウィンドウをここに登録する
-// (デバッグは対象外、引き続き独立した全画面表示のまま)。
+// システムの本実装)。ナレッジ・図書館・全件閲覧・設定の4ウィンドウを
+// ここに登録する(デバッグは対象外、引き続き独立した全画面表示のまま)。
+// 全件閲覧(library-browse)はVer3.0のUI改善4-2節で新設した、図書館ウィンドウ
+// (検索結果ベースのUIに刷新)とは別のFinder風エクスプローラー画面。
 function DesktopArea() {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -40,6 +43,21 @@ function DesktopArea() {
         fillBody
       >
         <LibraryScreen />
+      </OsWindow>
+
+      <OsWindow
+        id="library-browse"
+        title="全件閲覧"
+        defaultX={140}
+        defaultY={80}
+        defaultWidth={460}
+        defaultHeight={420}
+        minWidth={300}
+        minHeight={240}
+        containerRef={containerRef}
+        fillBody
+      >
+        <LibraryBrowseScreen />
       </OsWindow>
 
       <OsWindow

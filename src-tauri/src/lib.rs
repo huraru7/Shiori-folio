@@ -1421,6 +1421,125 @@ fn list_all_knowledge() -> Result<Vec<LibraryFileDto>, String> {
         .collect())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchLibraryHeadingDto {
+    heading: String,
+    rerank_score: f64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchLibraryResultDto {
+    source: String,
+    source_category: String,
+    headings: Vec<SearchLibraryHeadingDto>,
+    best_score: f64,
+}
+
+// ライブラリウィンドウの検索結果ベースUI(詩織Ver3.0、UI改善4-2節)向け。
+// MCPサーバー(mcp_server.rs)のsearch_libraryツールと同じ共有ロジック
+// (rag_client::search_library)をGUI側からも呼べるようにするだけの薄いラッパー。
+// author/type/projectでの絞り込みはGUI側の検索UIでは今回使わないため、
+// filterは常にNoneで呼ぶ。
+#[tauri::command]
+fn search_library(query: String, limit: u32, offset: u32) -> Result<Vec<SearchLibraryResultDto>, String> {
+    let config = app_config()?;
+    let results = rag_client::search_library(config.rag.port, &query, limit, offset, None)?;
+    Ok(results
+        .into_iter()
+        .map(|r| SearchLibraryResultDto {
+            source: r.source,
+            source_category: r.source_category,
+            headings: r
+                .headings
+                .into_iter()
+                .map(|h| SearchLibraryHeadingDto { heading: h.heading, rerank_score: h.rerank_score })
+                .collect(),
+            best_score: r.best_score,
+        })
+        .collect())
+}
+
+// frontmatterの必要フィールドのみを読み取る表示専用構造体。書き込み側
+// (shiori_save.rs)のFrontmatter構造体とは目的が異なる(こちらは表示専用の
+// 読み取りのみ)ため、意図的に別構造体として持つ。
+#[derive(Debug, Default, Deserialize)]
+struct DisplayFrontmatter {
+    #[serde(default)]
+    title: Option<String>,
+    #[serde(rename = "type", default)]
+    kind: Option<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    project: Option<String>,
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(default = "default_display_index")]
+    index: bool,
+    #[serde(default = "default_display_status")]
+    status: String,
+    #[serde(default)]
+    related: Vec<String>,
+}
+
+fn default_display_index() -> bool {
+    true
+}
+
+fn default_display_status() -> String {
+    "new".to_string()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SourceFrontmatterDto {
+    title: Option<String>,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    tags: Vec<String>,
+    project: Option<String>,
+    summary: Option<String>,
+    index: bool,
+    status: String,
+    related: Vec<String>,
+}
+
+// 先頭`---`〜次の`---`をfrontmatterとしてパースする。shiori_save.rsの
+// split_frontmatterと同種のロジックだが、bin側のためlib.rsから直接
+// 呼べず、表示専用の軽量版としてここに個別実装している。
+fn parse_display_frontmatter(content: &str) -> Result<DisplayFrontmatter, String> {
+    let content = content.strip_prefix('\u{feff}').unwrap_or(content);
+    let rest = content
+        .strip_prefix("---\r\n")
+        .or_else(|| content.strip_prefix("---\n"))
+        .ok_or_else(|| "frontmatter(先頭の---)が見つかりません".to_string())?;
+    let end = rest
+        .find("\n---")
+        .ok_or_else(|| "frontmatterの終端(---)が見つかりません".to_string())?;
+    serde_yaml::from_str(&rest[..end]).map_err(|e| format!("frontmatterの解析に失敗: {e}"))
+}
+
+// 記事詳細画面(詩織Ver3.0、UI改善4-2節)向け。get_source_documentは生
+// Markdown全体(frontmatter込み)を返すのみのため、frontmatterだけを
+// 構造化JSONで返す専用コマンドを別途用意する。
+#[tauri::command]
+fn get_source_frontmatter(source_category: String, source: String) -> Result<SourceFrontmatterDto, String> {
+    let content = get_source_document(source_category, source)?;
+    let fm = parse_display_frontmatter(&content)?;
+    Ok(SourceFrontmatterDto {
+        title: fm.title,
+        kind: fm.kind,
+        tags: fm.tags,
+        project: fm.project,
+        summary: fm.summary,
+        index: fm.index,
+        status: fm.status,
+        related: fm.related,
+    })
+}
+
 // 要確認UI(Phase 8、詩織Ver2.0設計指示書v3)向け。tags.yaml/projects.yamlの
 // status(pending/confirmed/deferredの3値)、およびinboxファイルのfrontmatter
 // review_status(confirmed/deferred、未設定=未着手)を人間がレビューするための
@@ -3666,6 +3785,8 @@ pub fn run() {
             switch_model,
             get_source_document,
             list_all_knowledge,
+            search_library,
+            get_source_frontmatter,
             list_pending_items,
             resolve_pending_tag,
             resolve_pending_project,

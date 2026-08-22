@@ -11,6 +11,8 @@ import type {
   PendingAction,
   PendingItems,
   RagasHistory,
+  SearchLibraryResult,
+  SourceFrontmatter,
   SystemInfo,
   TtsFailure,
 } from "../types";
@@ -85,6 +87,16 @@ export const api = {
   // Phase 7(1冊=1ファイル表示単位への変更)により、ファイル単位に集約された
   // 結果を返す(2026-08-12、図書館ビジョン統合仕様書3-2)。
   listAllKnowledge: () => invoke<LibraryFile[]>("list_all_knowledge"),
+
+  // ライブラリウィンドウの検索結果ベースUI向け(Ver3.0、UI改善4-2節)。
+  // スコア閾値による足切りは行わないため、offsetを増やして同じクエリで
+  // 呼び直すことでページングする(返却件数がlimit未満なら候補打ち止め)。
+  searchLibrary: (query: string, limit: number, offset: number) =>
+    invoke<SearchLibraryResult[]>("search_library", { query, limit, offset }),
+
+  // 記事詳細画面向け(Ver3.0、UI改善4-2節)。frontmatterの構造化フィールドを返す。
+  getSourceFrontmatter: (sourceCategory: string, source: string) =>
+    invoke<SourceFrontmatter>("get_source_frontmatter", { sourceCategory, source }),
 
   // 要確認UI向け(Phase 8)。pending/deferredなタグ・プロジェクト・inbox記録の
   // 一覧取得と、承認/却下/保留の反映。

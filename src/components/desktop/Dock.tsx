@@ -62,6 +62,13 @@ function Dock({ onOpenDebug }: Props) {
         <div className="dock__icon" title="詩織の図書館" onClick={() => toggleWindow("library")}>
           📚
         </div>
+        <div
+          className="dock__icon"
+          title="全件閲覧"
+          onClick={() => toggleWindow("library-browse")}
+        >
+          🗄
+        </div>
         <div className="dock__icon" title="要確認の記録" onClick={() => setPendingOpen(true)}>
           🗂
           {pendingCount > 0 && <span className="dock__badge">{pendingCount}</span>}

@@ -28,6 +28,33 @@ export interface LibraryFile {
   headings: string[];
 }
 
+// ライブラリウィンドウの検索結果ベースUI(Ver3.0、UI改善4-2節)向け。
+// search_libraryはファイル単位に集約された、ヒットした見出しとスコアの
+// リストを返す(本文は含まない)。
+export interface SearchLibraryHeading {
+  heading: string;
+  rerankScore: number;
+}
+
+export interface SearchLibraryResult {
+  source: string;
+  sourceCategory: string;
+  headings: SearchLibraryHeading[];
+  bestScore: number;
+}
+
+// 記事詳細画面(Ver3.0、UI改善4-2節)向け。frontmatterの構造化フィールド。
+export interface SourceFrontmatter {
+  title: string | null;
+  type: string | null;
+  tags: string[];
+  project: string | null;
+  summary: string | null;
+  index: boolean;
+  status: string;
+  related: string[];
+}
+
 // 要確認UI(Phase 8)向け。tags.yaml/projects.yamlのstatus、inboxファイルの
 // review_statusはいずれも"pending"(未着手)/"deferred"(保留中)のいずれか
 // (confirmed済みのものはバックエンド側で一覧から除外されている)。

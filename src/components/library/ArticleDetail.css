@@ -1,0 +1,147 @@
+/* 記事詳細ビュー(Ver3.0、UI改善4-2節)。LibraryScreen内で検索結果一覧と
+   入れ替わりに表示される(モーダルの重ね表示ではない)ため、backdrop等は
+   持たず、library-screen__scroll相当の領域をそのまま占有する。 */
+.article-detail {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.article-detail__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px 10px;
+  flex-shrink: 0;
+}
+
+.article-detail__back {
+  background: none;
+  border: none;
+  color: var(--paper-dim);
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.article-detail__back:hover {
+  color: var(--paper);
+}
+
+.article-detail__header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.article-detail__callno {
+  font-family: var(--font-body);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+}
+
+.article-detail__tag {
+  font-family: var(--font-body);
+  font-size: 10px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.article-detail__scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 14px;
+}
+
+.article-detail__title {
+  font-family: var(--font-display);
+  color: var(--paper);
+  font-size: 1.1rem;
+  margin: 0 0 10px;
+}
+
+.article-detail__frontmatter {
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+}
+
+.article-detail__summary {
+  color: var(--paper);
+  margin: 0 0 8px;
+}
+
+.article-detail__meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.article-detail__status {
+  color: var(--paper-dim);
+}
+
+.article-detail__tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.article-detail__tag-chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 2px 8px;
+  color: var(--paper-dim);
+}
+
+.article-detail__related {
+  margin-top: 6px;
+  color: var(--paper-dim);
+  font-size: 0.75rem;
+}
+
+.article-detail__loading {
+  color: var(--paper-dim);
+  font-size: 0.85rem;
+}
+
+.article-detail__error {
+  color: var(--danger);
+  padding: 0 14px;
+}
+
+.article-detail__body {
+  color: var(--paper);
+  font-family: var(--font-body);
+  line-height: 1.8;
+  font-size: 0.85rem;
+}
+
+.article-detail__body h1,
+.article-detail__body h2,
+.article-detail__body h3 {
+  color: var(--paper);
+  margin-top: 1.2em;
+}
+
+.article-detail__source-heading {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  color: var(--paper-dim);
+  margin: 18px 0 6px;
+}
+
+.article-detail__source {
+  color: var(--paper-dim);
+  font-size: 0.8rem;
+  word-break: break-all;
+}

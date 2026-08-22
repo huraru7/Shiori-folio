@@ -1,17 +1,17 @@
-.library-screen {
+.library-browse-screen {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
   /* min-width:0が無いと、flexアイテムであるこのコンテナ自体が中身の幅より
-     縮まなくなり、下位の.library-screen__shelfのflex-wrapが実質効かず
-     ウィンドウ端で見切れる原因になる(2026-08-12、表示崩れ修正)。 */
+     縮まなくなり、下位の__shelfのflex-wrapが実質効かずウィンドウ端で
+     見切れる原因になる(LibraryScreen.cssと同じ教訓)。 */
   min-width: 0;
   color: var(--paper);
   font-family: var(--font-body);
 }
 
-.library-screen__search {
+.library-browse-screen__search {
   flex-shrink: 0;
   margin: 12px 14px 10px;
   display: flex;
@@ -23,7 +23,7 @@
   padding: 7px 12px;
 }
 
-.library-screen__search input {
+.library-browse-screen__search input {
   flex: 1;
   min-width: 0;
   background: none;
@@ -33,11 +33,11 @@
   font-size: 11px;
 }
 
-.library-screen__search input::placeholder {
+.library-browse-screen__search input::placeholder {
   color: var(--paper-dim);
 }
 
-.library-screen__scroll {
+.library-browse-screen__scroll {
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
@@ -45,19 +45,19 @@
   padding: 0 14px 14px;
 }
 
-.library-screen__status {
+.library-browse-screen__status {
   color: var(--paper-dim);
   font-size: 0.8rem;
 }
 
-.library-screen__status--error {
+.library-browse-screen__status--error {
   color: var(--danger);
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.library-screen__retry-btn {
+.library-browse-screen__retry-btn {
   flex-shrink: 0;
   padding: 4px 12px;
   border: 1px solid var(--danger);
@@ -69,26 +69,28 @@
   cursor: pointer;
 }
 
-.library-screen__shelf {
+.library-browse-screen__group {
+  margin-bottom: 16px;
+}
+
+.library-browse-screen__group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  color: var(--paper-dim);
+  margin-bottom: 8px;
+}
+
+.library-browse-screen__swatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+}
+
+.library-browse-screen__shelf {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.library-screen__load-more {
-  display: block;
-  margin: 14px auto 0;
-  padding: 6px 16px;
-  border: 1px solid var(--glass-border);
-  border-radius: 8px;
-  background: transparent;
-  color: var(--paper-dim);
-  font-family: var(--font-body);
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.library-screen__load-more:hover {
-  color: var(--paper);
-  border-color: var(--paper-dim);
 }
