@@ -1,0 +1,822 @@
+<title>詩織 動作原理リファレンス</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;600&family=Noto+Sans+JP:wght@300;400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  /* ============ トークン ============
+     詩織アプリ本体(src/styles/tokens.css)の配色をそのまま踏襲する。
+     このページは「詩織についての参照資料」であり、アプリ自身がライトモードを
+     持たない単一の夜/苔色トーンで設計されているため、このページも意図的に
+     単一テーマ(ダーク基調)に固定する(手抜きではなく、対象への忠実さを優先した判断)。 */
+  :root {
+    --bg: #17150F;
+    --bg-deep: #100F0A;
+    --surface: #1E1B14;
+    --surface-raised: #262219;
+    --paper: #EDE6D6;
+    --paper-dim: #A79E8C;
+    --paper-faint: #6E6A5C;
+    --moss: #8FA06B;
+    --moss-deep: #6E7F4F;
+    --moss-glow: rgba(143, 160, 107, 0.35);
+    --clay: #C68A5E;
+    --task-blue: #7FAFC4;
+    --chat-violet: #B08FC4;
+    --border: rgba(237, 230, 214, 0.10);
+    --border-strong: rgba(237, 230, 214, 0.22);
+
+    --font-display: 'Shippori Mincho', serif;
+    --font-body: 'Noto Sans JP', sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--paper);
+    font-family: var(--font-body);
+    line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+
+  ::selection { background: var(--moss-glow); color: var(--paper); }
+
+  /* ============ セクション1: ホーム ============ */
+  .home {
+    min-height: 100svh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 6vh 24px;
+    position: relative;
+    background:
+      radial-gradient(ellipse 900px 500px at 50% 20%, rgba(143,160,107,0.08), transparent 65%),
+      linear-gradient(180deg, var(--bg-deep) 0%, var(--bg) 60%);
+  }
+
+  .home__mark {
+    font-family: var(--font-display);
+    font-size: clamp(2.6rem, 7vw, 4.6rem);
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    margin: 0;
+    color: var(--paper);
+    text-wrap: balance;
+  }
+
+  .home__mark span {
+    display: block;
+    font-size: 0.32em;
+    font-weight: 400;
+    letter-spacing: 0.5em;
+    color: var(--moss);
+    margin-bottom: 0.9em;
+    font-family: var(--font-body);
+  }
+
+  .home__lede {
+    max-width: 42em;
+    margin: 1.6em auto 0;
+    font-size: clamp(0.98rem, 1.6vw, 1.12rem);
+    color: var(--paper-dim);
+    text-wrap: balance;
+  }
+
+  .home__meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 2.4em;
+  }
+
+  .home__chip {
+    font-family: var(--font-mono);
+    font-size: 0.74rem;
+    letter-spacing: 0.02em;
+    color: var(--paper-dim);
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    padding: 0.5em 0.9em;
+    border-radius: 999px;
+  }
+
+  .home__chip b { color: var(--moss); font-weight: 500; }
+
+  .home__scroll {
+    position: absolute;
+    bottom: 6vh;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    color: var(--paper-faint);
+    font-size: 0.72rem;
+    letter-spacing: 0.16em;
+    text-decoration: none;
+  }
+
+  .home__scroll svg { animation: bob 2.2s ease-in-out infinite; }
+  @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(6px); } }
+  @media (prefers-reduced-motion: reduce) { .home__scroll svg { animation: none; } }
+
+  /* ============ セクション2: 図解 ============ */
+  .diagram-section {
+    padding: 8vh 5vw 14vh;
+    max-width: 1320px;
+    margin: 0 auto;
+  }
+
+  .diagram-section__head {
+    max-width: 46em;
+    margin: 0 auto 3em;
+    text-align: center;
+  }
+
+  .diagram-section__eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    color: var(--moss);
+    text-transform: uppercase;
+  }
+
+  .diagram-section__title {
+    font-family: var(--font-display);
+    font-size: clamp(1.5rem, 3vw, 2.1rem);
+    font-weight: 600;
+    margin: 0.5em 0 0.4em;
+    text-wrap: balance;
+  }
+
+  .diagram-section__desc {
+    color: var(--paper-dim);
+    font-size: 0.94rem;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 18px;
+    margin: 1.6em 0 0;
+    font-size: 0.78rem;
+    color: var(--paper-dim);
+  }
+  .legend__item { display: flex; align-items: center; gap: 7px; }
+  .legend__swatch { width: 22px; height: 0; border-top: 2px solid var(--paper-dim); }
+  .legend__swatch--dashed { border-top-style: dashed; }
+  .legend__dot { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  .diagram-wrap {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 14px;
+    padding: clamp(12px, 2.4vw, 28px);
+    overflow-x: auto;
+  }
+
+  .diagram-wrap svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-width: 900px;
+  }
+
+  figcaption {
+    max-width: 46em;
+    margin: 1.2em auto 0;
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--paper-faint);
+  }
+
+  /* ---- ノード共通スタイル ---- */
+  .node rect {
+    fill: var(--surface-raised);
+    stroke: var(--border-strong);
+    stroke-width: 1.2;
+    transition: stroke 0.15s ease, fill 0.15s ease, transform 0.15s ease;
+  }
+  .node text { fill: var(--paper); font-family: var(--font-body); }
+  .node .node__sub { fill: var(--paper-faint); font-family: var(--font-mono); }
+  .node { cursor: pointer; }
+  .node:hover rect, .node:focus-visible rect {
+    stroke: var(--moss);
+    fill: #2A2618;
+  }
+  .node:focus-visible { outline: none; }
+  .node:focus-visible rect { stroke-width: 2; }
+
+  .node--accent-moss rect { stroke: var(--moss-deep); }
+  .node--accent-clay rect { stroke: var(--clay); }
+  .node--accent-task rect { stroke: var(--task-blue); }
+  .node--accent-chat rect { stroke: var(--chat-violet); }
+  .node--external rect { stroke-dasharray: 4 3; fill: transparent; }
+
+  .zone-label {
+    fill: var(--paper-faint);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .zone-box {
+    fill: none;
+    stroke: var(--border);
+    stroke-dasharray: 2 4;
+  }
+
+  .flow-line { stroke: var(--paper-dim); stroke-width: 1.4; fill: none; }
+  .flow-line--dashed { stroke-dasharray: 5 4; }
+  .flow-line--priority { stroke: var(--moss); stroke-width: 1.6; }
+  .flow-label {
+    fill: var(--paper-faint);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+  }
+  .flow-label__bg { fill: var(--surface); }
+
+  /* ---- モーダル ---- */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(9, 8, 5, 0.72);
+    backdrop-filter: blur(2px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 50;
+  }
+  .modal-backdrop.is-open { display: flex; }
+
+  .modal {
+    width: min(560px, 100%);
+    max-height: min(80vh, 640px);
+    overflow-y: auto;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    padding: 28px 30px 30px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+
+  .modal__eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.14em;
+    color: var(--moss);
+    text-transform: uppercase;
+    margin: 0 0 0.6em;
+  }
+
+  .modal__title {
+    font-family: var(--font-display);
+    font-size: 1.34rem;
+    font-weight: 600;
+    margin: 0 0 0.7em;
+    text-wrap: balance;
+  }
+
+  .modal__body p { color: var(--paper-dim); font-size: 0.93rem; margin: 0 0 1em; }
+  .modal__body p:last-child { margin-bottom: 0; }
+  .modal__body strong { color: var(--paper); font-weight: 500; }
+
+  .modal__paths {
+    list-style: none;
+    margin: 1.2em 0 0;
+    padding: 0.9em 1em;
+    background: var(--bg-deep);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .modal__paths li {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--paper-dim);
+    word-break: break-all;
+  }
+  .modal__paths li b { color: var(--moss); font-weight: 500; }
+
+  .modal__close {
+    position: absolute;
+    top: 18px;
+    right: 18px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border-strong);
+    background: transparent;
+    color: var(--paper-dim);
+    font-size: 1rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal__close:hover { color: var(--paper); border-color: var(--moss); }
+  .modal { position: relative; }
+
+  footer.note {
+    text-align: center;
+    color: var(--paper-faint);
+    font-size: 0.76rem;
+    padding: 3em 24px 5em;
+  }
+</style>
+
+<div class="home">
+  <h1 class="home__mark"><span>SHIORI-FOLIO / SYSTEM REFERENCE</span>詩織 動作原理リファレンス</h1>
+  <p class="home__lede">
+    声で話しかけると応答し、会話の中身をセカンドブレインとして自分の書庫に育てていく、
+    ローカル完結の常駐AI。このページは実装から起こした「今、実際にどう動いているか」の見取り図。
+  </p>
+  <div class="home__meta">
+    <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
+    <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
+    <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
+    <span class="home__chip"><b>世代</b> Ver2.0 セカンドブレイン化 / Ver3.0 UI改善進行中</span>
+  </div>
+  <a class="home__scroll" href="#diagram">
+    仕組みを見る
+    <svg width="14" height="20" viewBox="0 0 14 20" fill="none" aria-hidden="true">
+      <path d="M7 1v17M1 12l6 6 6-6" stroke="currentColor" stroke-width="1.4"/>
+    </svg>
+  </a>
+</div>
+
+<section class="diagram-section" id="diagram">
+  <div class="diagram-section__head">
+    <p class="diagram-section__eyebrow">Architecture</p>
+    <h2 class="diagram-section__title">詩織はこう動いている</h2>
+    <p class="diagram-section__desc">
+      各部品をクリックすると、実装上の役割・関連ファイル・呼び出しタイミングを表示します。
+    </p>
+    <div class="legend">
+      <span class="legend__item"><span class="legend__swatch"></span>制御フロー・データの受け渡し</span>
+      <span class="legend__item"><span class="legend__swatch legend__swatch--dashed"></span>共有・非同期・条件付き経路</span>
+      <span class="legend__item"><span class="legend__dot" style="background:var(--moss)"></span>優先判定(該当したら以降をスキップ)</span>
+      <span class="legend__item"><span class="legend__dot" style="background:transparent;border:1px dashed var(--paper-dim)"></span>アプリ外のアクター</span>
+    </div>
+  </div>
+
+  <figure class="diagram-wrap">
+    <svg viewBox="0 0 1180 1250" role="img" aria-label="詩織の内部構成図。音声入力からSTT・会話判定ロジック・LLM・TTSに至る会話フロー、library配下のセカンドブレインを支えるRAGサーバーとChromaDB・reranker・共有埋め込みデーモン、Claude CodeからのMCPサーバー/shiori-save経由の連携、デスクトップUIの4系統を示す。">
+      <defs>
+        <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L8,4 L0,8 z" fill="var(--paper-dim)"></path>
+        </marker>
+        <marker id="arrow-moss" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L8,4 L0,8 z" fill="var(--moss)"></path>
+        </marker>
+      </defs>
+
+      <!-- ゾーン枠 -->
+      <rect class="zone-box" x="16" y="70" width="620" height="590"/>
+      <text class="zone-label" x="30" y="94">会話フロー(音声UI)</text>
+
+      <rect class="zone-box" x="670" y="70" width="494" height="480"/>
+      <text class="zone-label" x="684" y="94">セカンドブレイン基盤</text>
+
+      <rect class="zone-box" x="16" y="700" width="1148" height="200"/>
+      <text class="zone-label" x="30" y="724">外部連携(Claude Code)</text>
+
+      <rect class="zone-box" x="16" y="940" width="1148" height="270"/>
+      <text class="zone-label" x="30" y="964">デスクトップUI</text>
+
+      <!-- ============ 会話フロー ============ -->
+      <!-- 起動 -->
+      <g class="node node--accent-moss" tabindex="0" role="button" data-detail="startup" transform="translate(40,110)">
+        <rect width="560" height="46" rx="8"/>
+        <text x="16" y="28" font-size="13">起動シーケンス — StartupScreen</text>
+      </g>
+
+      <!-- 録音〜STT -->
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="hotkey_record" transform="translate(40,190)">
+        <rect width="260" height="52" rx="8"/>
+        <text x="14" y="24" font-size="12.5">ホットキー / マイク</text>
+        <text class="node__sub" x="14" y="40" font-size="10.5">VoiceBar.tsx</text>
+      </g>
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="stt" transform="translate(340,190)">
+        <rect width="260" height="52" rx="8"/>
+        <text x="14" y="24" font-size="12.5">STT — whisper-server</text>
+        <text class="node__sub" x="14" y="40" font-size="10.5">オンデマンド起動</text>
+      </g>
+
+      <!-- 判定ファネル -->
+      <g class="node node--accent-chat" tabindex="0" role="button" data-detail="identity_guard" transform="translate(40,290)">
+        <rect width="172" height="56" rx="8"/>
+        <text x="12" y="24" font-size="12">identity_guard</text>
+        <text class="node__sub" x="12" y="41" font-size="10">アイデンティティ質問</text>
+      </g>
+      <g class="node node--accent-chat" tabindex="0" role="button" data-detail="memo_guard" transform="translate(234,290)">
+        <rect width="172" height="56" rx="8"/>
+        <text x="12" y="24" font-size="12">memo_guard</text>
+        <text class="node__sub" x="12" y="41" font-size="10">メモ保存意図の検知</text>
+      </g>
+      <g class="node node--accent-chat" tabindex="0" role="button" data-detail="passive_recall" transform="translate(428,290)">
+        <rect width="172" height="56" rx="8"/>
+        <text x="12" y="24" font-size="12">passive recall</text>
+        <text class="node__sub" x="12" y="41" font-size="10">常時軽量検索</text>
+      </g>
+
+      <!-- LLM -->
+      <g class="node node--accent-moss" tabindex="0" role="button" data-detail="llm" transform="translate(140,400)">
+        <rect width="360" height="56" rx="8"/>
+        <text x="16" y="24" font-size="13">LLM — llama-server(Qwen3)</text>
+        <text class="node__sub" x="16" y="41" font-size="10.5">Function Calling / config.llm.port</text>
+      </g>
+
+      <!-- ツール実行 -->
+      <g class="node node--accent-moss" tabindex="0" role="button" data-detail="tool_search_knowledge" transform="translate(180,490)">
+        <rect width="280" height="52" rx="8"/>
+        <text x="14" y="23" font-size="12">tool: search_knowledge</text>
+        <text class="node__sub" x="14" y="40" font-size="10">execute_tool()</text>
+      </g>
+
+      <!-- 出力 -->
+      <g class="node node--accent-clay" tabindex="0" role="button" data-detail="tts" transform="translate(40,590)">
+        <rect width="260" height="52" rx="8"/>
+        <text x="14" y="24" font-size="12.5">TTS — piper-plus-cli</text>
+        <text class="node__sub" x="14" y="40" font-size="10">現状: 手動プレビューのみ</text>
+      </g>
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="conversation_log" transform="translate(340,590)">
+        <rect width="260" height="52" rx="8"/>
+        <text x="14" y="24" font-size="12.5">会話ログ表示</text>
+        <text class="node__sub" x="14" y="40" font-size="10.5">ConversationLog.tsx</text>
+      </g>
+
+      <!-- 会話フロー内の矢印 -->
+      <path class="flow-line" marker-end="url(#arrow)" d="M170,242 L170,266 L126,266 L126,290"/>
+      <path class="flow-line" marker-end="url(#arrow)" d="M470,242 L470,266 L514,266 L514,290"/>
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M212,318 L234,318"/>
+      <text class="flow-label"><textPath href="#lbl1"> </textPath></text>
+      <text class="flow-label" x="196" y="310">非該当</text>
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M406,318 L428,318"/>
+      <text class="flow-label" x="390" y="310">非該当</text>
+
+      <path class="flow-line flow-line--priority" marker-end="url(#arrow-moss)" d="M126,346 L126,370 L320,370 L320,400"/>
+      <text class="flow-label" x="132" y="366">該当時: contextを注入</text>
+      <path class="flow-line flow-line--priority" marker-end="url(#arrow-moss)" d="M320,346 L320,400"/>
+      <path class="flow-line" marker-end="url(#arrow)" d="M514,346 L514,370 L320,370" opacity="0"/>
+      <path class="flow-line" marker-end="url(#arrow)" d="M514,346 L514,375 L410,375 L320,400"/>
+
+      <path class="flow-line" marker-end="url(#arrow)" d="M320,456 L320,490"/>
+      <text class="flow-label" x="326" y="475">tool_calls検知時</text>
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M180,516 L60,516 L60,590"/>
+      <text class="flow-label" x="16" y="512">最終応答</text>
+      <path class="flow-line" marker-end="url(#arrow)" d="M320,542 L320,566 L470,566 L470,590"/>
+      <text class="flow-label" x="330" y="562">応答表示</text>
+
+      <!-- ============ セカンドブレイン基盤 ============ -->
+      <g class="node node--accent-clay" tabindex="0" role="button" data-detail="embedding_daemon" transform="translate(696,110)">
+        <rect width="230" height="52" rx="8"/>
+        <text x="14" y="23" font-size="12">埋め込みデーモン</text>
+        <text class="node__sub" x="14" y="40" font-size="10">nomic-embed-text / 共有</text>
+      </g>
+      <g class="node node--accent-moss" tabindex="0" role="button" data-detail="rag_server" transform="translate(696,200)">
+        <rect width="230" height="56" rx="8"/>
+        <text x="14" y="23" font-size="12">RAGサーバー(FastAPI)</text>
+        <text class="node__sub" x="14" y="41" font-size="10">遅延・差分インデックス</text>
+      </g>
+      <g class="node node--accent-moss" tabindex="0" role="button" data-detail="chromadb" transform="translate(696,310)">
+        <rect width="230" height="52" rx="8"/>
+        <text x="14" y="23" font-size="12">ChromaDB</text>
+        <text class="node__sub" x="14" y="40" font-size="10">shiori_knowledgeコレクション</text>
+      </g>
+      <g class="node node--accent-moss" tabindex="0" role="button" data-detail="reranker" transform="translate(940,310)">
+        <rect width="220" height="52" rx="8"/>
+        <text x="14" y="23" font-size="12">reranker</text>
+        <text class="node__sub" x="14" y="40" font-size="10">japanese-reranker-xsmall-v2</text>
+      </g>
+      <g class="node node--accent-clay" tabindex="0" role="button" data-detail="library_dir" transform="translate(696,420)">
+        <rect width="464" height="56" rx="8"/>
+        <text x="16" y="23" font-size="12.5">library/ — 00-inbox 〜 90-archive / _system</text>
+        <text class="node__sub" x="16" y="41" font-size="10.5">frontmatter付きMarkdown</text>
+      </g>
+
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M811,162 L811,200"/>
+      <text class="flow-label" x="817" y="184">共有デーモン</text>
+      <path class="flow-line" marker-end="url(#arrow)" d="M811,256 L811,310"/>
+      <path class="flow-line" marker-end="url(#arrow)" d="M927,336 L940,336"/>
+      <path class="flow-line" marker-end="url(#arrow)" d="M811,362 L811,420"/>
+      <text class="flow-label" x="817" y="404">mtime差分同期</text>
+
+      <!-- 会話フロー(左)からRAGサーバーへの2経路は、間のゾーンを跨ぐため
+           専用の縦通路(x=645/655)を通して合流させる(斜め線が他ノードを
+           突っ切らないようにするため)。 -->
+      <path class="flow-line" marker-end="url(#arrow)" d="M600,318 L645,318 L645,214 L696,214"/>
+      <text class="flow-label" x="605" y="308">軽量検索</text>
+      <path class="flow-line" marker-end="url(#arrow)" d="M460,516 L655,516 L655,242 L696,242"/>
+      <text class="flow-label" x="466" y="506">/search呼び出し</text>
+
+      <!-- ============ 外部連携 ============ -->
+      <g class="node node--external" tabindex="0" role="button" data-detail="claude_code" transform="translate(40,750)">
+        <rect width="200" height="50" rx="8"/>
+        <text x="14" y="24" font-size="12">Claude Code</text>
+        <text class="node__sub" x="14" y="39" font-size="10">アプリ外のエージェント</text>
+      </g>
+      <g class="node node--accent-moss" tabindex="0" role="button" data-detail="mcp_server" transform="translate(300,750)">
+        <rect width="240" height="50" rx="8"/>
+        <text x="14" y="23" font-size="12">MCPサーバー</text>
+        <text class="node__sub" x="14" y="38" font-size="10">get_context_profile / search_library</text>
+      </g>
+      <g class="node node--accent-clay" tabindex="0" role="button" data-detail="shiori_save" transform="translate(600,750)">
+        <rect width="220" height="50" rx="8"/>
+        <text x="14" y="23" font-size="12">shiori-save CLI</text>
+        <text class="node__sub" x="14" y="38" font-size="10">決定的ルーティング保存</text>
+      </g>
+      <g class="node node--accent-clay" tabindex="0" role="button" data-detail="shared_daemon_concept" transform="translate(870,750)">
+        <rect width="270" height="50" rx="8"/>
+        <text x="14" y="23" font-size="12">共有デーモンの仕組み</text>
+        <text class="node__sub" x="14" y="38" font-size="10">shared_daemon.rs / ロック+PID</text>
+      </g>
+
+      <path class="flow-line" marker-end="url(#arrow)" d="M240,775 L300,775"/>
+      <text class="flow-label" x="244" y="770">検索</text>
+
+      <!-- claude_code→shiori_saveはmcp_serverの真上を跨ぐため、その手前の
+           隙間(y=700〜750)を通す。mcp_server→rag_serverは右外周(x=1172)を
+           大きく回してrag_serverの右辺へ入れる(いずれも他ノードと非交差)。 -->
+      <path class="flow-line" marker-end="url(#arrow)" d="M200,750 L200,725 L660,725 L660,750"/>
+      <text class="flow-label" x="380" y="718">CLI実行</text>
+      <path class="flow-line" marker-end="url(#arrow)" d="M710,750 L710,690 L811,690 L811,476"/>
+      <text class="flow-label" x="716" y="684">library/へ直接書込み</text>
+      <path class="flow-line" marker-end="url(#arrow)" d="M420,750 L420,740 L1172,740 L1172,228 L926,228"/>
+      <text class="flow-label" x="1000" y="220">search_library</text>
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M1005,750 L1005,700"/>
+      <text class="flow-label" x="882" y="694">対象: 埋め込み/RAGデーモン</text>
+
+      <!-- ============ デスクトップUI ============ -->
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="desktop_ui" transform="translate(40,990)">
+        <rect width="260" height="60" rx="8"/>
+        <text x="14" y="24" font-size="12">デスクトップ領域</text>
+        <text class="node__sub" x="14" y="41" font-size="10">DesktopArea.tsx / Dock.tsx</text>
+        <text class="node__sub" x="14" y="55" font-size="9.5">4つのOsWindow</text>
+      </g>
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="ui_knowledge" transform="translate(340,990)">
+        <rect width="180" height="60" rx="8"/>
+        <text x="14" y="24" font-size="11.5">ナレッジ</text>
+        <text class="node__sub" x="14" y="41" font-size="9.5">KnowledgePanel.tsx</text>
+      </g>
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="ui_library" transform="translate(560,990)">
+        <rect width="180" height="60" rx="8"/>
+        <text x="14" y="24" font-size="11.5">詩織の図書館</text>
+        <text class="node__sub" x="14" y="41" font-size="9.5">LibraryScreen.tsx</text>
+      </g>
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="ui_browse" transform="translate(780,990)">
+        <rect width="180" height="60" rx="8"/>
+        <text x="14" y="24" font-size="11.5">全件閲覧</text>
+        <text class="node__sub" x="14" y="41" font-size="9.5">LibraryBrowseScreen.tsx</text>
+      </g>
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="ui_settings" transform="translate(1000,990)">
+        <rect width="164" height="60" rx="8"/>
+        <text x="14" y="24" font-size="11.5">設定</text>
+        <text class="node__sub" x="14" y="41" font-size="9.5">ControlPanel.tsx</text>
+      </g>
+
+      <path class="flow-line" marker-end="url(#arrow)" d="M300,1020 L340,1020"/>
+      <path class="flow-line" marker-end="url(#arrow)" d="M520,1020 L560,1020"/>
+      <path class="flow-line" marker-end="url(#arrow)" d="M740,1020 L780,1020"/>
+      <path class="flow-line" marker-end="url(#arrow)" d="M960,1020 L1000,1020"/>
+
+      <!-- 会話フロー・セカンドブレインからデスクトップUIへの反映は、長距離を
+           引かず各ウィンドウ直上の短い受け口として示す。 -->
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M430,960 L430,990"/>
+      <text class="flow-label" x="345" y="950">← 出典(sources)</text>
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M650,960 L650,990"/>
+      <text class="flow-label" x="600" y="950">← 検索結果</text>
+    </svg>
+    <figcaption>
+      音声入力からSTT・会話判定ロジック(identity_guard→memo_guard→passive
+      recallの優先順位)・LLM・TTSに至る会話フロー(左)、library/を土台に
+      RAGサーバー・ChromaDB・rerankerが支えるセカンドブレイン(右上)、Claude
+      Codeが検索/保存に使うMCPサーバーとshiori-save CLI(中央下)、それらを
+      画面として束ねるデスクトップUI(下)の4系統。矢印にカーソルを合わせず
+      とも、各箱をクリックすれば詳細が開く。
+    </figcaption>
+  </figure>
+</section>
+
+<footer class="note">
+  実装(system/配下)から都度裏取りして書いています。細部は開発の進行で変わるため、
+  最終的な正としてはコード本体を当たってください。
+</footer>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <button class="modal__close" id="modalClose" aria-label="閉じる">✕</button>
+    <p class="modal__eyebrow" id="modalEyebrow"></p>
+    <h3 class="modal__title" id="modalTitle"></h3>
+    <div class="modal__body" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var DETAILS = {
+    startup: {
+      eyebrow: "起動",
+      title: "起動シーケンス — StartupScreen",
+      body: "<p>アプリ起動直後に表示される起動画面。裏では<strong>ensureBackendServicesStarted()</strong>を待ち受けており、実際のバックエンド起動(LLM/埋め込みモデルの読み込み〜RAGサーバーの起動)が完了するまで進捗を漸近的に表示し続ける。完了検知後に短時間で100%まで埋めてフェードアウトする。</p><p>いずれかのサービスがhealthy:falseで返った場合はエラー表示+再試行ボタンに切り替わり、勝手に会話画面へは進まない。</p>",
+      paths: ["system/src/components/startup/StartupScreen.tsx", "system/src-tauri/src/lib.rs — start_backend_services_impl()"]
+    },
+    hotkey_record: {
+      eyebrow: "音声入力",
+      title: "ホットキー / マイクボタン",
+      body: "<p>グローバルホットキー(既定 Ctrl+Alt+S)またはVoiceBarのマイクボタンから録音を開始する。両者は同じstate更新に収束する形で実装されている。</p>",
+      paths: ["system/src/components/VoiceBar.tsx", "system/src-tauri/src/audio.rs"]
+    },
+    stt: {
+      eyebrow: "音声認識",
+      title: "STT — whisper-server",
+      body: "<p>whisper.cppをオンデマンドで起動して文字起こしする。VRAM軽量化のため常時起動はせず、<strong>録音のたびに起動→アイドル15秒でバックグラウンドスレッドが自動停止</strong>させる設計(SttManager)。文字起こし完了直後は即座にアンロードする。</p><p>POST /inference にmultipartでwavを送り、テキストを受け取るだけのシンプルなクライアント。</p>",
+      paths: ["system/src-tauri/src/whisper_client.rs — transcribe()", "system/src-tauri/src/lib.rs — SttManager"]
+    },
+    identity_guard: {
+      eyebrow: "会話判定ロジック(優先度1)",
+      title: "identity_guard",
+      body: "<p>「詩織って何?」のようなアイデンティティに関する質問を検知したら、LLMの裁量に任せずRust側が<strong>search_knowledgeを直接強制実行</strong>する。LLMのFunction Callingがtool_choiceを無視することがある実測結果を踏まえた安全網。</p><p>該当すればここでcontextが確定し、memo_guard/passive recallは実行されない。</p>",
+      paths: ["system/src-tauri/src/lib.rs — is_identity_question() / build_identity_guard_context()"]
+    },
+    memo_guard: {
+      eyebrow: "会話判定ロジック(優先度2)",
+      title: "memo_guard",
+      body: "<p>「〜についてメモして」等の明確な保存意図を検知すると、その場でMarkdownファイルとして<strong>library/00-inbox/</strong>へ書き出し、RAGサーバーの/add_documentで即座にChromaDBへも登録する(直後の会話から想起できるようにするため)。</p><p>2026-08-17に、旧Ver1.0時代の\"memo\"カテゴリのまま保存していたため図書館UIで常に未分類表示になる不整合を修正し、Ver2.0の00-inboxへ保存するよう変更した。</p>",
+      paths: ["system/src-tauri/src/lib.rs — parse_memo_intent() / build_memo_guard_context()"]
+    },
+    passive_recall: {
+      eyebrow: "会話判定ロジック(優先度3・既定)",
+      title: "passive recall(常時軽量検索)",
+      body: "<p>上記2つに該当しない通常の発話では、毎回RAGサーバーへ軽量な検索を投げ、関連度が高ければ結果をsystemメッセージとしてLLMへ注入する(閾値はconfig.jsonのrag.passiveRecallThreshold)。LLMに明示的な検索ツールを呼ばせずとも、自然に過去の記憶を踏まえた応答ができるようにする仕組み。</p>",
+      paths: ["system/src-tauri/src/lib.rs — build_passive_recall_context()"]
+    },
+    llm: {
+      eyebrow: "推論",
+      title: "LLM — llama-server(Qwen3-8B)",
+      body: "<p>OpenAI互換の/v1/chat/completionsへ、system(プロンプト+ここまでのcontext)・userを送信。Function Calling用にtools=[search_knowledge]を渡す。<strong>enable_thinking: false</strong>でQwen3の思考モードを止めており、これにより雑談の応答遅延が最大22.79秒→5.96秒まで短縮された実測がある。</p><p>tool_callsが返れば execute_tool() で実行し、結果を会話履歴に積んで再度LLMへ問い合わせる(最大反復回数まで)。</p>",
+      paths: ["system/src-tauri/src/llm_client.rs — chat_with_tools()", "system/src-tauri/src/lib.rs — send_message_impl()"]
+    },
+    tool_search_knowledge: {
+      eyebrow: "ツール実行",
+      title: "tool: search_knowledge",
+      body: "<p>LLMが明示的に「調べる」と判断した場合に呼ばれる唯一のツール(TOOL_NAMESは現状これ1つのみ)。RAGサーバーの/searchを叩き、結果をtoolメッセージとして会話履歴に積んでLLMへ返す。</p>",
+      paths: ["system/src-tauri/src/prompts.rs — TOOL_NAMES", "system/src-tauri/src/rag_client.rs"]
+    },
+    tts: {
+      eyebrow: "音声合成",
+      title: "TTS — piper-plus-cli",
+      body: "<p><strong>現状、起動時のサイドカーとしては有効化されていない。</strong>アップストリームのspeaker_embedding次元不一致という既知の不具合により、自動起動フェーズから除外されている。設定画面(音声設定ページ)の「試し読み」プレビューでのみ、その場でコマンドを都度呼び出す形で使われている。</p>",
+      paths: ["system/src-tauri/src/piper_client.rs", "system/src-tauri/src/lib.rs — start_backend_services_impl()内のコメント参照"]
+    },
+    conversation_log: {
+      eyebrow: "表示",
+      title: "会話ログ表示",
+      body: "<p>LLMの最終応答・出典(sources)・detected_mode(chat/search/memo)を画面左側に表示する。detected_modeはUI側でどのツールが使われたかの表示分岐に使われる。</p>",
+      paths: ["system/src/components/ConversationLog.tsx"]
+    },
+    embedding_daemon: {
+      eyebrow: "共有基盤",
+      title: "埋め込みデーモン(nomic-embed-text)",
+      body: "<p>llama-server --embeddingをCPU実行で起動し、テキストをベクトル化する。詩織Ver2.0で<strong>会話UI・MCPサーバー・shiori-save等、複数プロセスから共有されるデーモン</strong>という位置づけになった。「先に呼んだ側が起動する」設計で、会話UIが起動していなくてもMCPサーバー単体で検索が完結する。</p>",
+      paths: ["system/src-tauri/src/lib.rs — build_embedding_command()", "system/src-tauri/src/shared_daemon.rs"]
+    },
+    rag_server: {
+      eyebrow: "セカンドブレイン",
+      title: "RAGサーバー(FastAPI)",
+      body: "<p>/search・/search_library・/list_all_library等のエンドポイントを持つ。検索リクエストのたびに<strong>sync_index()</strong>を呼び、library/配下のファイルmtimeを前回同期時点と比較して、変更のあったファイルだけ増分でChromaDBへ反映する「遅延・差分再インデックス」方式(全件の再計算はしない)。</p><p>Claude Codeの直接ファイル編集やshiori-save CLIでの追加も、次の検索時に自動で反映される。</p>",
+      paths: ["system/services/rag/app.py", "system/services/rag/indexing.py — sync_index()"]
+    },
+    chromadb: {
+      eyebrow: "セカンドブレイン",
+      title: "ChromaDB",
+      body: "<p>永続化されたベクトルDB(shiori_knowledgeコレクション)。見出し単位でチャンク化されたテキストとそのembeddingを保持する。現状のデータ規模は実測70チャンク・17ファイルで、ディスク容量は約1.6MBと小さい。</p>",
+      paths: ["system/data/vectordb/", "system/services/rag/chunking.py — chunk_markdown()"]
+    },
+    reranker: {
+      eyebrow: "セカンドブレイン",
+      title: "reranker(japanese-reranker-xsmall-v2)",
+      body: "<p>日本語Cross-Encoderによるリランキング。embedding距離だけでは正解チャンクの順位が下がることがある実測を踏まえ、<strong>全クエリで無条件に</strong>使われている(条件分岐なし)。CPU実行でVRAM消費はゼロ。起動時にウォームアップ読み込みしておくことで、初回検索が約6秒ブロックされる問題を解消済み。</p>",
+      paths: ["system/services/rag/reranker.py"]
+    },
+    library_dir: {
+      eyebrow: "データ本体",
+      title: "library/ — セカンドブレインの書庫",
+      body: "<p>00-inbox / 10-log / 20-projects / 30-knowledge / 40-decisions / 50-reference / 90-archive の7つのライフサイクルフォルダと、設定置き場の_system/で構成される(Ver2.0で旧profile/garden/portfolio/memoから移行)。frontmatter付きMarkdownとして、Claude Codeが直接書き込む。</p><p>_system/配下はインデックス・検索対象から明示的に除外されている(設定ファイル置き場であり蔵書ではないため)。90-archive/を検索から除外するロジックは現状無い。</p>",
+      paths: ["library/00-inbox〜90-archive/, library/_system/", "library/_system/CLAUDE.md — 保存ルール", "library/_system/tags.yaml, projects.yaml"]
+    },
+    claude_code: {
+      eyebrow: "外部アクター",
+      title: "Claude Code",
+      body: "<p>詩織アプリのプロセス外で動くAIコーディングエージェント。MCPサーバー経由でlibrary/を検索し、library/_system/CLAUDE.mdの配置ルールに従って直接frontmatter付きMarkdownを書き込む(または shiori-save CLI経由で決定的にルーティングさせる)。</p>",
+      paths: ["library/_system/CLAUDE.md"]
+    },
+    mcp_server: {
+      eyebrow: "外部連携",
+      title: "MCPサーバー(mcp_server.rs)",
+      body: "<p>会話UIとは別バイナリのstdioベースMCPサーバー。読み取り専用で、<strong>get_context_profile</strong>(_system/tier1-profile.mdを丸ごと返す)と<strong>search_library</strong>(ファイル単位に集約した見出し一覧を返す、本文は含めない)の2ツールのみを持つ。書き込みツールは意図的に持たせていない。</p><p>呼び出し時に埋め込み/RAGデーモンの起動確認を自分でも行うため、会話UIが起動していなくても単体で検索が完結する。</p>",
+      paths: ["system/src-tauri/src/bin/mcp_server.rs"]
+    },
+    shiori_save: {
+      eyebrow: "外部連携",
+      title: "shiori-save CLI",
+      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは_system/tags.yamlで正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(アプリの「要確認」UIで承認・却下できる)。</p>",
+      paths: ["system/src-tauri/src/bin/shiori_save.rs — decide_destination()"]
+    },
+    shared_daemon_concept: {
+      eyebrow: "共有基盤の仕組み",
+      title: "共有デーモン(shared_daemon.rs)",
+      body: "<p>埋め込みモデルとRAGサーバーは、会話UI・MCPサーバー・保存CLIのどこから先に呼ばれても良いよう「ヘルスチェック→ロック取得→起動→ロック解放」という共通手順で管理される。起動したプロセスは呼び出し元のライフタイムに縛られず、意図的にハンドルを手放してデタッチする。稼働判定はプロセスハンドルではなく<strong>ロックファイルに記録したPIDの生存確認</strong>で行う。</p>",
+      paths: ["system/src-tauri/src/shared_daemon.rs — ensure_daemon_running()"]
+    },
+    desktop_ui: {
+      eyebrow: "画面構成",
+      title: "デスクトップ領域",
+      body: "<p>右ゾーンに配置される、macOSのDockを模したフリースペース型ウィンドウシステム。4つのウィンドウ(ナレッジ/図書館/全件閲覧/設定)はOsWindowとしてドラッグ・リサイズ可能な形で共存する。デバッグ画面のみ例外的に独立した全画面表示。</p>",
+      paths: ["system/src/components/desktop/DesktopArea.tsx", "system/src/components/desktop/Dock.tsx"]
+    },
+    ui_knowledge: {
+      eyebrow: "デスクトップUI",
+      title: "ナレッジウィンドウ",
+      body: "<p>会話中に自動で開き、直近の応答で参照された出典(sources)を表示する。会話の流れに追従する唯一のウィンドウ。</p>",
+      paths: ["system/src/components/panels/KnowledgePanel.tsx"]
+    },
+    ui_library: {
+      eyebrow: "デスクトップUI",
+      title: "詩織の図書館",
+      body: "<p>検索結果ベースの図書館UI。Ver3.0のUI改善で刷新され、全件をただ並べるのではなく検索クエリに基づいた結果表示に作り替えられた(全件を見たい場合は別ウィンドウの「全件閲覧」を使う)。</p>",
+      paths: ["system/src/components/library/LibraryScreen.tsx", "system/src/lib/library.ts — カテゴリ表示定義"]
+    },
+    ui_browse: {
+      eyebrow: "デスクトップUI",
+      title: "全件閲覧",
+      body: "<p>Ver3.0のUI改善で新設された、Finder風のエクスプローラー画面。検索結果ベースに刷新された図書館ウィンドウとは別に、library/の全件を素朴に一覧・閲覧する用途を担う。</p>",
+      paths: ["system/src/components/library/LibraryBrowseScreen.tsx"]
+    },
+    ui_settings: {
+      eyebrow: "デスクトップUI",
+      title: "設定ウィンドウ",
+      body: "<p>システム状態(VRAM/CPU/温度等のリアルタイムモニター)・音声設定・詳細設定・モデル切替の4ページで構成される。以前は1ファイル933行に肥大化していたが、ページ単位で分割済み。</p>",
+      paths: ["system/src/components/controlpanel/ControlPanel.tsx", "system/src/components/controlpanel/{SystemStatusPage,VoiceSettingsPage,AdvancedSettingsPage,ModelSwitchPage}.tsx"]
+    }
+  };
+
+  var backdrop = document.getElementById('modalBackdrop');
+  var titleEl = document.getElementById('modalTitle');
+  var eyebrowEl = document.getElementById('modalEyebrow');
+  var bodyEl = document.getElementById('modalBody');
+  var closeBtn = document.getElementById('modalClose');
+  var lastFocused = null;
+
+  function openModal(key) {
+    var d = DETAILS[key];
+    if (!d) return;
+    eyebrowEl.textContent = d.eyebrow;
+    titleEl.textContent = d.title;
+    bodyEl.innerHTML = d.body + (d.paths && d.paths.length
+      ? '<ul class="modal__paths">' + d.paths.map(function (p) {
+          var parts = p.split(' — ');
+          return '<li>' + (parts.length > 1 ? '<b>' + parts[0] + '</b> — ' + parts.slice(1).join(' — ') : p) + '</li>';
+        }).join('') + '</ul>'
+      : '');
+    lastFocused = document.activeElement;
+    backdrop.classList.add('is-open');
+    closeBtn.focus();
+  }
+
+  function closeModal() {
+    backdrop.classList.remove('is-open');
+    if (lastFocused && lastFocused.focus) lastFocused.focus();
+  }
+
+  document.querySelectorAll('.node[data-detail]').forEach(function (node) {
+    node.addEventListener('click', function () { openModal(node.getAttribute('data-detail')); });
+    node.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openModal(node.getAttribute('data-detail')); }
+    });
+  });
+
+  closeBtn.addEventListener('click', closeModal);
+  backdrop.addEventListener('click', function (e) { if (e.target === backdrop) closeModal(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && backdrop.classList.contains('is-open')) closeModal();
+  });
+})();
+</script>
