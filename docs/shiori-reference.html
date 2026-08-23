@@ -352,7 +352,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver2.0 セカンドブレイン化 / Ver3.0 UI改善進行中</span>
+    <span class="home__chip"><b>世代</b> Ver3.0 データ管理法見直し完了 / UI改善進行中</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -701,13 +701,13 @@
     rag_server: {
       eyebrow: "セカンドブレイン",
       title: "RAGサーバー(FastAPI)",
-      body: "<p>/search・/search_library・/list_all_library等のエンドポイントを持つ。検索リクエストのたびに<strong>sync_index()</strong>を呼び、library/配下のファイルmtimeを前回同期時点と比較して、変更のあったファイルだけ増分でChromaDBへ反映する「遅延・差分再インデックス」方式(全件の再計算はしない)。</p><p>Claude Codeの直接ファイル編集やshiori-save CLIでの追加も、次の検索時に自動で反映される。</p>",
+      body: "<p>/search・/search_library・/list_all_library等のエンドポイントを持つ。Ver3.0で方式を変更し、現在は<strong>書き込み時フック</strong>が主軸: shiori-save CLI等がファイル保存直後に<strong>/reindex_file</strong>を呼び、そのファイル1件だけを即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。検索リクエストのたびに全件スキャンする旧方式(sync_index)は廃止した。</p><p>RAGサーバーが起動していない、またはCLIからの疎通に失敗した場合でも書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p>",
       paths: ["system/services/rag/app.py", "system/services/rag/indexing.py — sync_index()"]
     },
     chromadb: {
       eyebrow: "セカンドブレイン",
       title: "ChromaDB",
-      body: "<p>永続化されたベクトルDB(shiori_knowledgeコレクション)。見出し単位でチャンク化されたテキストとそのembeddingを保持する。現状のデータ規模は実測70チャンク・17ファイルで、ディスク容量は約1.6MBと小さい。</p>",
+      body: "<p>永続化されたベクトルDB(shiori_knowledgeコレクション)。見出し単位でチャンク化されたテキストとそのembeddingを保持する。データ規模はlibrary/へ書き込むたびに増減するため固定値ではないが、<strong>執筆時点(2026-08-24)の目安</strong>としてはfile数48件(_system/除く、内訳: 10-projects 1・30-resources 44・40-journal 3)。チャンク数・ディスク容量は都度実測が必要。</p>",
       paths: ["system/data/vectordb/", "system/services/rag/chunking.py — chunk_markdown()"]
     },
     reranker: {
@@ -719,7 +719,7 @@
     library_dir: {
       eyebrow: "データ本体",
       title: "library/ — セカンドブレインの書庫",
-      body: "<p>00-inbox / 10-log / 20-projects / 30-knowledge / 40-decisions / 50-reference / 90-archive の7つのライフサイクルフォルダと、設定置き場の_system/で構成される(Ver2.0で旧profile/garden/portfolio/memoから移行)。frontmatter付きMarkdownとして、Claude Codeが直接書き込む。</p><p>_system/配下はインデックス・検索対象から明示的に除外されている(設定ファイル置き場であり蔵書ではないため)。90-archive/を検索から除外するロジックは現状無い。</p>",
+      body: "<p>00-inbox / 10-projects / 20-areas / 30-resources / 40-journal / 90-archive の6つのライフサイクルフォルダと、設定置き場の_system/で構成される(Ver3.0のデータ管理法見直しで、Ver2.0の8フォルダ構成〈00-inbox/10-log/20-projects/30-knowledge/40-decisions/50-reference/90-archive/_system〉から移行)。frontmatterのtype(project/area/resource/journal)がフォルダと1対1で対応する。frontmatter付きMarkdownとして、Claude Codeが直接書き込む。</p><p>_system/配下はインデックス・検索対象から明示的に除外されている(設定ファイル置き場であり蔵書ではないため)。90-archive/を検索から除外するロジックは現状無い。</p>",
       paths: ["library/00-inbox〜90-archive/, library/_system/", "library/_system/CLAUDE.md — 保存ルール", "library/_system/tags.yaml, projects.yaml"]
     },
     claude_code: {
