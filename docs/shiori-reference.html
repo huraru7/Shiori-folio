@@ -385,6 +385,68 @@
     font-size: 0.76rem;
     padding: 3em 24px 5em;
   }
+
+  /* ============ セクション3: バージョン履歴 ============ */
+  .version-section {
+    padding: 2vh 5vw 10vh;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .version-list {
+    list-style: none;
+    margin: 2em 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .version-list__item {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 1.2em 1.4em;
+  }
+
+  .version-list__head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 0.5em;
+  }
+
+  .version-list__tag {
+    font-family: var(--font-mono);
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--moss);
+  }
+
+  .version-list__tag--current::after {
+    content: "現行";
+    margin-left: 0.6em;
+    font-size: 0.66rem;
+    font-family: var(--font-body);
+    color: var(--bg);
+    background: var(--moss);
+    padding: 0.15em 0.6em;
+    border-radius: 999px;
+    letter-spacing: 0.04em;
+  }
+
+  .version-list__date {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    color: var(--paper-faint);
+  }
+
+  .version-list__body {
+    margin: 0;
+    color: var(--paper-dim);
+    font-size: 0.88rem;
+  }
 </style>
 
 <div class="home">
@@ -397,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.0 データ管理法見直し完了 / UI改善進行中</span>
+    <span class="home__chip"><b>世代</b> Ver3.0.1(データ管理法見直し・ライブラリ大幅更新)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -668,6 +730,45 @@
       ズームできる。
     </figcaption>
   </figure>
+</section>
+
+<section class="version-section" id="version">
+  <div class="diagram-section__head">
+    <p class="diagram-section__eyebrow">Changelog</p>
+    <h2 class="diagram-section__title">バージョン履歴</h2>
+    <p class="diagram-section__desc">
+      ここでの「Ver」は詩織の設計・実装上の世代番号(このページや`library/_system/CLAUDE.md`等で
+      使っている呼称)であり、アプリ本体のビルドバージョン(package.json等の0.1.0表記)とは別軸。
+    </p>
+  </div>
+  <ul class="version-list">
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag version-list__tag--current">Ver3.0.1</span>
+        <span class="version-list__date">2026-08-24</span>
+      </div>
+      <p class="version-list__body">
+        library/のデータを大幅更新。心理学的な自己開示の知見(段階的開示・ライフストーリー
+        インタビュー等)を踏まえたインタビューを実施し、自己理解プロフィール記事21件を
+        `30-resources/profile/`へ追加。実機ライブラリに残っていたVer2.0時代の旧フォルダ・
+        テストデータを整理し、Ver3.0のフォルダ構成に統一。このリファレンスHTMLについても、
+        Phase1・2直後で古くなっていた記述の修正と、図解へのパン/ズーム操作の追加を行った。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.0.0</span>
+        <span class="version-list__date">2026-08-22</span>
+      </div>
+      <p class="version-list__body">
+        詩織Ver3.0設計指示書に基づく主要実装が完了。RAGの再インデックスを検索都度スキャンから
+        書き込み時フック(`/reindex_file`)方式へ変更、library/のフォルダ構成とfrontmatterスキーマを
+        現行方式(`00-inbox/10-projects/20-areas/30-resources/40-journal/90-archive/_system`)へ
+        移行、`search_library`のスコア閾値廃止とページング化、図書館UIの検索結果ベース刷新と
+        全件閲覧画面の新設、左ゾーン(会話UI)の折りたたみ機能を追加。
+      </p>
+    </li>
+  </ul>
 </section>
 
 <footer class="note">
