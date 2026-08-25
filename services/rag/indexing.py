@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 import chromadb
@@ -165,8 +166,15 @@ def sync_index(
     # かつsource_category="_system"は図書館UI側の分類マッピングに存在しないため
     # 「未分類」として表示されてしまう(2026-08-17、Windows実機のVer2.0移行後
     # 確認で発覚)。
+    # 「._」始まりはmacOS/exFAT環境でFinder等が自動生成するAppleDoubleの
+    # リソースフォーク・サイドカーファイル(バイナリ、UTF-8ではない)。除外
+    # しないとread_text(utf-8)がUnicodeDecodeErrorで落ち、起動時の全件
+    # スキャン(このsync_index)がアプリ起動そのものを道連れにしてしまう
+    # (2026-08-25、実機でRAGサーバーが起動直後にクラッシュする不具合として発覚)。
     md_files = [
-        p for p in knowledge_dir.rglob("*.md") if "_system" not in p.relative_to(knowledge_dir).parts
+        p
+        for p in knowledge_dir.rglob("*.md")
+        if "_system" not in p.relative_to(knowledge_dir).parts and not p.name.startswith("._")
     ]
     current_paths = {str(p.relative_to(knowledge_dir)): p for p in md_files}
 
@@ -186,7 +194,14 @@ def sync_index(
         if prior == mtime:
             continue
         category = source_category_for(md_path, knowledge_dir)
-        _embed_file(collection, http_client, md_path, category)
+        try:
+            _embed_file(collection, http_client, md_path, category)
+        except (UnicodeDecodeError, OSError) as e:
+            # 1ファイルの読み込み失敗で全体(起動シーケンスを含む)を巻き込まない。
+            # 「なんでも保存」方針上、壊れたファイルが1つあってもアプリは
+            # 動き続けるべき(そのファイルが検索に出てこないだけに留める)。
+            print(f"警告: {rel} の読み込みに失敗したためスキップします({e})", file=sys.stderr)
+            continue
         (added if prior is None else updated).append(rel)
         state[rel] = mtime
 
