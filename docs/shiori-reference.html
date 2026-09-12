@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.0.1(データ管理法見直し・ライブラリ大幅更新)</span>
+    <span class="home__chip"><b>世代</b> Ver3.0.2(実データ・保存ルールのVer3.0追従、リファレンス現行化)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -492,7 +492,7 @@
     </div>
     <div class="diagram-viewport" id="diagramViewport">
     <div class="diagram-canvas" id="diagramCanvas">
-    <svg viewBox="0 0 1180 1250" role="img" aria-label="詩織の内部構成図。音声入力からSTT・会話判定ロジック・LLM・TTSに至る会話フロー、library配下のセカンドブレインを支えるRAGサーバーとChromaDB・reranker・共有埋め込みデーモン、Claude CodeからのMCPサーバー/shiori-save経由の連携、デスクトップUIの4系統を示す。">
+    <svg viewBox="0 0 1180 1250" role="img" aria-label="詩織の内部構成図。音声入力からSTT・会話判定ロジック・LLM・TTSに至る会話フロー、library配下のセカンドブレインを支えるRAGサーバーとChromaDB・reranker・共有埋め込みデーモン、Claude CodeからのMCPサーバー/shiori-save経由の連携、デスクトップUIとDockから独立して開く要確認UI/デバッグ画面の4系統を示す。">
       <defs>
         <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L8,4 L0,8 z" fill="var(--paper-dim)"></path>
@@ -717,6 +717,23 @@
       <text class="flow-label" x="345" y="950">← 出典(sources)</text>
       <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M650,960 L650,990"/>
       <text class="flow-label" x="600" y="950">← 検索結果</text>
+
+      <!-- Dockから独立して起動する2画面(要確認UI・デバッグ画面)。デスクトップ
+           領域ノードの下に2段目として配置する。 -->
+      <g class="node node--accent-clay" tabindex="0" role="button" data-detail="pending_modal" transform="translate(40,1090)">
+        <rect width="260" height="50" rx="8"/>
+        <text x="14" y="23" font-size="12">要確認UI — PendingModal</text>
+        <text class="node__sub" x="14" y="38" font-size="10">tags/projects.yamlのpending承認</text>
+      </g>
+      <g class="node node--accent-task" tabindex="0" role="button" data-detail="debug_screen" transform="translate(340,1090)">
+        <rect width="260" height="50" rx="8"/>
+        <text x="14" y="23" font-size="12">デバッグ画面</text>
+        <text class="node__sub" x="14" y="38" font-size="10">TTS失敗/RAGAS履歴(読み取り専用)</text>
+      </g>
+
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M170,1050 L170,1090"/>
+      <text class="flow-label" x="176" y="1075">Dockから起動</text>
+      <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M240,1050 L470,1050 L470,1090"/>
     </svg>
     </div>
     </div>
@@ -725,9 +742,9 @@
       recallの優先順位)・LLM・TTSに至る会話フロー(左)、library/を土台に
       RAGサーバー・ChromaDB・rerankerが支えるセカンドブレイン(右上)、Claude
       Codeが検索/保存に使うMCPサーバーとshiori-save CLI(中央下)、それらを
-      画面として束ねるデスクトップUI(下)の4系統。矢印にカーソルを合わせず
-      とも、各箱をクリックすれば詳細が開く。ドラッグでパン、右上のボタンで
-      ズームできる。
+      画面として束ねるデスクトップUI・Dockから独立して開く要確認UI/デバッグ
+      画面(下)の4系統。矢印にカーソルを合わせずとも、各箱をクリックすれば
+      詳細が開く。ドラッグでパン、右上のボタンでズームできる。
     </figcaption>
   </figure>
 </section>
@@ -744,7 +761,25 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.0.1</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.0.2</span>
+        <span class="version-list__date">2026-09-09</span>
+      </div>
+      <p class="version-list__body">
+        コード実装(shiori_save.rsのVALID_TYPES/decide_destination)はVer3.0の
+        フォルダ体系(10-projects/20-areas/30-resources/40-journal)に対応済み
+        だったが、実データ(library/)と保存ルール文書(_system/CLAUDE.md)が
+        Ver2.0の8フォルダ構成のまま取り残されていた不整合を発見・解消。
+        Ver3.0.1で追加した21件のプロフィール記事はテストデータと判明したため
+        削除し、唯一の実データ(profile-huraru.md)のみtype: resourceへ移行、
+        CLAUDE.mdをVer3.0仕様へ全面改訂した。あわせてこのリファレンスHTML
+        自体も実装から再度裏取りし、file数48件という古い数値の修正、STT
+        アンロード挙動の表現修正、Orb演出/ActivityIndicator/PendingModal/
+        デバッグ画面の4項目を新規追加した。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.0.1</span>
         <span class="version-list__date">2026-08-24</span>
       </div>
       <p class="version-list__body">
@@ -803,7 +838,7 @@
     stt: {
       eyebrow: "音声認識",
       title: "STT — whisper-server",
-      body: "<p>whisper.cppをオンデマンドで起動して文字起こしする。VRAM軽量化のため常時起動はせず、<strong>録音のたびに起動→アイドル15秒でバックグラウンドスレッドが自動停止</strong>させる設計(SttManager)。文字起こし完了直後は即座にアンロードする。</p><p>POST /inference にmultipartでwavを送り、テキストを受け取るだけのシンプルなクライアント。</p>",
+      body: "<p>whisper.cppをオンデマンドで起動して文字起こしする。VRAM軽量化のため常時起動はせず、<strong>録音のたびに起動→アイドル15秒でバックグラウンドスレッドが自動停止</strong>させる設計(SttManager)。文字起こし完了直後に即座に止めるわけではなく、5秒間隔でアイドル状態をポーリングして15秒経過を検知してから停止するため、最後の呼び出しから最大20秒程度はプロセスが残り得る。</p><p>POST /inference にmultipartでwavを送り、テキストを受け取るだけのシンプルなクライアント。</p>",
       paths: ["system/src-tauri/src/whisper_client.rs — transcribe()", "system/src-tauri/src/lib.rs — SttManager"]
     },
     identity_guard: {
@@ -845,8 +880,20 @@
     conversation_log: {
       eyebrow: "表示",
       title: "会話ログ表示",
-      body: "<p>LLMの最終応答・出典(sources)・detected_mode(chat/search/memo)を画面左側に表示する。detected_modeはUI側でどのツールが使われたかの表示分岐に使われる。</p>",
+      body: "<p>LLMの最終応答・出典(sources)・detected_mode(chat/search/memo)を画面左側に表示する。detected_modeはUI側でどのツールが使われたかの表示分岐に使われる。</p><p>会話中の状態そのものは、このログとは別に<strong>会話状態の可視化(Orb)</strong>が並行して表示する。</p>",
       paths: ["system/src/components/ConversationLog.tsx"]
+    },
+    orb_visualization: {
+      eyebrow: "表示(2026-08-12〜)",
+      title: "会話状態の可視化(Orb)",
+      body: "<p>idle/listening/thinking/speakingの4状態をリング状のアニメーションで表す、キャラクター表示エリア。状態自体はストア(useShioriStore)側で管理し、CharacterStageは<strong>配置(画面下部を基点)の責務だけ</strong>を持つ薄いラッパーとして切り出されている。</p><p>コード内コメントには「現在はOrbCoreだが、将来Live2Dキャラクターに差し替える計画がある」と明記されており、中身の差し替えやすさを保つための意図的な分離。</p>",
+      paths: ["system/src/components/character/CharacterStage.tsx", "system/src/components/orb/OrbCore.tsx", "system/src/components/orb/RingLayer.tsx"]
+    },
+    activity_indicator: {
+      eyebrow: "表示",
+      title: "ActivityIndicator",
+      body: "<p>search_knowledge/memo実行中だけ控えめなラベルを表示する、クリック不可の表示専用コンポーネント。「安全なとき・通常時は何も表示しない、意味のある変化のときだけ控えめに見せる」という方針をコントロールパネルの危険度表現と同じ思想で踏襲している。</p><p>passive recallがヒットした痕跡はKnowledgePanel側が表現するため、ここでは重ねて表示しない設計。</p>",
+      paths: ["system/src/components/ActivityIndicator.tsx", "system/src/components/orb/activityConfig.ts"]
     },
     embedding_daemon: {
       eyebrow: "共有基盤",
@@ -863,7 +910,7 @@
     chromadb: {
       eyebrow: "セカンドブレイン",
       title: "ChromaDB",
-      body: "<p>永続化されたベクトルDB(shiori_knowledgeコレクション)。見出し単位でチャンク化されたテキストとそのembeddingを保持する。データ規模はlibrary/へ書き込むたびに増減するため固定値ではないが、<strong>執筆時点(2026-08-24)の目安</strong>としてはfile数48件(_system/除く、内訳: 10-projects 1・30-resources 44・40-journal 3)。チャンク数・ディスク容量は都度実測が必要。</p>",
+      body: "<p>永続化されたベクトルDB(shiori_knowledgeコレクション)。見出し単位でチャンク化されたテキストとそのembeddingを保持する。データ規模はlibrary/へ書き込むたびに増減するため固定値ではない。<strong>執筆時点(2026-09-09)</strong>では、Ver3.0構成への移行に伴いテストデータを整理した直後のため、file数1件(_system/除く、30-resources/profile/のみ)と大きく減っている。以前(2026-08-24時点)は48件あったが、その後の整理で大幅に減少した経緯があり、ここでの数値は一時点のスナップショットに過ぎない。チャンク数・ディスク容量は都度実測が必要。</p>",
       paths: ["system/data/vectordb/", "system/services/rag/chunking.py — chunk_markdown()"]
     },
     reranker: {
@@ -875,7 +922,7 @@
     library_dir: {
       eyebrow: "データ本体",
       title: "library/ — セカンドブレインの書庫",
-      body: "<p>00-inbox / 10-projects / 20-areas / 30-resources / 40-journal / 90-archive の6つのライフサイクルフォルダと、設定置き場の_system/で構成される(Ver3.0のデータ管理法見直しで、Ver2.0の8フォルダ構成〈00-inbox/10-log/20-projects/30-knowledge/40-decisions/50-reference/90-archive/_system〉から移行)。frontmatterのtype(project/area/resource/journal)がフォルダと1対1で対応する。frontmatter付きMarkdownとして、Claude Codeが直接書き込む。</p><p>_system/配下はインデックス・検索対象から明示的に除外されている(設定ファイル置き場であり蔵書ではないため)。90-archive/を検索から除外するロジックは現状無い。</p>",
+      body: "<p>00-inbox / 10-projects / 20-areas / 30-resources / 40-journal / 90-archive の6つのライフサイクルフォルダと、設定置き場の_system/で構成される(Ver3.0のデータ管理法見直しで、Ver2.0の8フォルダ構成〈00-inbox/10-log/20-projects/30-knowledge/40-decisions/50-reference/90-archive/_system〉から移行)。frontmatterのtype(project/area/resource/journal)がフォルダと1対1で対応するのは<strong>shiori-save CLI経由の書き込みに限った話</strong>で、memo_guard(音声メモ)はこのCLIを経由せず、上記4値に含まれないtype: メモのまま00-inbox/へ直接書き込む例外がある。frontmatter付きMarkdownとして、Claude Codeが直接書き込む。</p><p>_system/配下はインデックス・検索対象から明示的に除外されている(設定ファイル置き場であり蔵書ではないため)。90-archive/を検索から除外するロジックは現状無い。</p><p>2026-09-09時点で実データはlibrary/直下のフォルダ・保存ルール文書(_system/CLAUDE.md)ともにVer3.0構成へ移行済み(以前はコードのみVer3.0対応で、実データとCLAUDE.mdがVer2.0のまま取り残されていた)。</p>",
       paths: ["library/00-inbox〜90-archive/, library/_system/", "library/_system/CLAUDE.md — 保存ルール", "library/_system/tags.yaml, projects.yaml"]
     },
     claude_code: {
@@ -893,7 +940,7 @@
     shiori_save: {
       eyebrow: "外部連携",
       title: "shiori-save CLI",
-      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは_system/tags.yamlで正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(アプリの「要確認」UIで承認・却下できる)。</p>",
+      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは_system/tags.yamlで正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(アプリの「要確認」UI = PendingModalで承認・却下できる)。</p>",
       paths: ["system/src-tauri/src/bin/shiori_save.rs — decide_destination()"]
     },
     shared_daemon_concept: {
@@ -931,6 +978,18 @@
       title: "設定ウィンドウ",
       body: "<p>システム状態(VRAM/CPU/温度等のリアルタイムモニター)・音声設定・詳細設定・モデル切替の4ページで構成される。以前は1ファイル933行に肥大化していたが、ページ単位で分割済み。</p>",
       paths: ["system/src/components/controlpanel/ControlPanel.tsx", "system/src/components/controlpanel/{SystemStatusPage,VoiceSettingsPage,AdvancedSettingsPage,ModelSwitchPage}.tsx"]
+    },
+    pending_modal: {
+      eyebrow: "デスクトップUI(Phase 8)",
+      title: "要確認UI — PendingModal",
+      body: "<p>tags.yaml/projects.yamlのpending/deferredなエントリ、および00-inbox/の未レビュー記録を一覧表示し、承認(confirm)/却下(reject)/保留(defer)を選べるモーダル。「未着手」「保留中」の2タブに分かれ、保留中タブからも改めて承認/却下できる。</p><p>shiori-save CLIが自己登録した未知のタグ・プロジェクトを、人間が後から見返して確定させるための受け皿。</p>",
+      paths: ["system/src/components/desktop/PendingModal.tsx"]
+    },
+    debug_screen: {
+      eyebrow: "デスクトップUI",
+      title: "デバッグ画面",
+      body: "<p>TTS失敗履歴・passive recallの統計・RAGAS評価履歴を表示する読み取り専用画面。以前はコントロールパネル内のナビタブの1つだったが、2026-08-12のUI/UX改善指示書に基づき、Dockから独立して呼び出せる専用画面として分離された。</p>",
+      paths: ["system/src/components/debug/DebugScreen.tsx"]
     }
   };
 
