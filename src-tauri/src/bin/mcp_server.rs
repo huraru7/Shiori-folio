@@ -122,7 +122,13 @@ impl ShioriLibrary {
             ".shiori-embed.lock",
             30,
             || {
-                build_embedding_command(&root, &backend.embedding_model_path, backend.embedding_port, true)
+                build_embedding_command(
+                    &root,
+                    &backend.embedding_model_path,
+                    backend.embedding_port,
+                    backend.embedding_context_size,
+                    true,
+                )
             },
         )
         .map_err(|e| McpError::internal_error(e, None))?;

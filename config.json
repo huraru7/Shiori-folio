@@ -5,6 +5,7 @@
     "vectorDbPath": "./data/vectordb"
   },
   "embedding": {
+    "contextSize": 2048,
     "modelPath": "./models/embed/nomic-embed-text.gguf",
     "port": 8082
   },

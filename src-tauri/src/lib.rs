@@ -56,6 +56,17 @@ struct LlmConfig {
 struct EmbeddingConfig {
     model_path: String,
     port: u16,
+    // 【2026-09-10追加】未指定時はllama-serverのデフォルト並列スロット数(4)で
+    // --ctx-sizeが均等分割され実効512トークンになり、約500文字を超える日本語
+    // チャンクの埋め込みで500エラーが発生し、それを起点にRAGサーバーの起動時
+    // 全件再インデックス(_initial_index_sync)ごと巻き込んでクラッシュする
+    // 不具合があった(search_libraryがタイムアウトする形で発覚)。
+    // nomic-embed-textの訓練時コンテキスト(2048)を超えても無意味なため
+    // デフォルトは2048(build_embedding_command側で--parallel 1も指定し、
+    // 1スロットで全量を使う)。llm.contextSizeと同じパターンでconfig化し、
+    // 明示的に指定する。
+    #[serde(default)]
+    context_size: Option<u32>,
 }
 
 #[derive(Deserialize)]
@@ -421,7 +432,17 @@ pub fn spawn_server(
         .args(extra_args)
         .env("PATH", extended_path(Some(libs_dir_name)));
     if quiet_stdio {
-        cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+        // 【2026-09-10追加】stdinを明示指定しないとCommandはデフォルトで
+        // 親プロセスの標準入力を継承する。MCPサーバー(mcp_server.rs)は
+        // 標準入出力をClaude CodeとのJSON-RPC通信に使っているstdio型
+        // サーバーのため、それを継承した子プロセスが標準入力からの読み取りで
+        // 稀にブロックし、search_libraryが数分単位でタイムアウトする不具合が
+        // あった(実機調査でRAGサーバー側に顕著に再現。詳細はbuild_rag_command
+        // 側のコメント参照)。子サーバーはいずれも対話的な標準入力を必要と
+        // しないため、常にnullにしてよい。
+        cmd.stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
     }
     no_console_window(&mut cmd);
     cmd.spawn()
@@ -520,7 +541,15 @@ fn start_backend_services_impl(
             config.embedding.port,
             ".shiori-embed.lock",
             30,
-            || build_embedding_command(&root, &config.embedding.model_path, config.embedding.port, false),
+            || {
+                build_embedding_command(
+                    &root,
+                    &config.embedding.model_path,
+                    config.embedding.port,
+                    config.embedding.context_size,
+                    false,
+                )
+            },
         ) {
             Ok(child) => {
                 if let Some(child) = child {
@@ -575,11 +604,27 @@ pub fn build_embedding_command(
     root: &Path,
     model_path_rel: &str,
     port: u16,
+    context_size: Option<u32>,
     quiet_stdio: bool,
 ) -> std::io::Result<Child> {
     let llama_server_exe = resolve_engine_exe(&root.join("third_party/llama.cpp/build"), "llama-server");
     let model_path = root.join(model_path_rel);
     let port_str = port.to_string();
+    // 【2026-09-10追加】未指定時はllama-serverのデフォルト(--parallelのデフォルト
+    // スロット数4で--ctx-sizeを均等分割するため実効512トークン)になり、約500文字を
+    // 超える日本語チャンクの埋め込みで500エラーが発生する不具合があったため明示的に
+    // 指定する(詳細はEmbeddingConfigのコメント参照)。nomic-embed-textの訓練時
+    // コンテキストが2048のため、--ctx-sizeをこれより大きくしてもcapされて無意味
+    // (実機調査で確認済み)。RAGサーバーは埋め込みを1件ずつ逐次リクエストするため
+    // 並列スロットは不要と判断し、--parallel 1で1スロットの全量(2048)を
+    // 使えるようにする。
+    //
+    // さらに--ctx-size/--parallelだけでは不十分で、実機のlibrary/には2000
+    // トークン近い巨大チャンクが実在し、「input (N tokens) is too large to
+    // process. increase the physical batch size」というエラーで--ubatch-size
+    // (物理バッチサイズ、デフォルト512)にも同時に阻まれることが実測で判明した。
+    // ubatch-sizeはctx-sizeを超えられない制約があるため、同じ値を指定する。
+    let ctx = context_size.unwrap_or(2048).to_string();
     // VRAM軽量化のためCPU実行にする(埋め込みモデルは軽量なためCPUでも実用速度が出る想定)
     let args = [
         "--port",
@@ -589,6 +634,12 @@ pub fn build_embedding_command(
         "--n-gpu-layers",
         "0",
         "--embedding",
+        "--ubatch-size",
+        &ctx,
+        "--ctx-size",
+        &ctx,
+        "--parallel",
+        "1",
     ];
     spawn_server(&llama_server_exe, &model_path, &args, "libs-llama", quiet_stdio)
 }
@@ -640,8 +691,27 @@ pub fn build_rag_command(root: &Path, port: u16, quiet_stdio: bool) -> std::io::
         "127.0.0.1",
     ];
     let mut cmd = Command::new(&python_exe);
-    cmd.current_dir(&rag_dir).args(args).env("PATH", extended_path(None));
+    cmd.current_dir(&rag_dir)
+        .args(args)
+        .env("PATH", extended_path(None))
+        // 起動時のreranker.warmup()(CrossEncoderロード)がhuggingface_hubの
+        // オンライン検証(バージョン確認等)を試みる。モデルは
+        // ~/.cache/huggingfaceに既にキャッシュ済みで確認自体が不要なため、
+        // ネットワーク状態に左右されず安定した起動時間にするためオフライン
+        // 強制する(2026-09-10追加)。
+        .env("HF_HUB_OFFLINE", "1")
+        .env("TRANSFORMERS_OFFLINE", "1");
     if quiet_stdio {
+        // 【2026-09-10追加】真因はこちら。stdinを明示指定しないとCommandは
+        // デフォルトで親プロセスの標準入力を継承する。MCPサーバー
+        // (mcp_server.rs)は標準入出力をClaude CodeとのJSON-RPC通信に
+        // 使っているため、それを継承したRAGサーバー(uvicorn)がまれに
+        // 標準入力からの読み取りでブロックし、search_libraryが数分単位で
+        // タイムアウトする不具合があった(実機調査で、embedding用
+        // llama-serverは影響を受けずRAGサーバー側だけが毎回ハングすることから
+        // 特定。HF_HUB_OFFLINE単体では解消しなかった)。RAGサーバーは対話的な
+        // 標準入力を必要としないため常にnullにしてよい。
+        cmd.stdin(std::process::Stdio::null());
         cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
     }
     no_console_window(&mut cmd);
@@ -656,6 +726,7 @@ pub fn build_rag_command(root: &Path, port: u16, quiet_stdio: bool) -> std::io::
 pub struct SearchBackendConfig {
     pub embedding_port: u16,
     pub embedding_model_path: String,
+    pub embedding_context_size: Option<u32>,
     pub rag_port: u16,
 }
 
@@ -664,6 +735,7 @@ pub fn load_search_backend_config(root: &Path) -> Result<SearchBackendConfig, St
     Ok(SearchBackendConfig {
         embedding_port: config.embedding.port,
         embedding_model_path: config.embedding.model_path.clone(),
+        embedding_context_size: config.embedding.context_size,
         rag_port: config.rag.port,
     })
 }
