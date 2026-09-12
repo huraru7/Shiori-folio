@@ -1,10 +1,15 @@
-# Tauri + React + Typescript
+# 詩織 (Shiori)
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+個人用AIアシスタント「詩織」のデスクトップアプリ本体。Tauri(Rust) + React製で、会話(LLM/STT/TTS)とセカンドブレイン(RAGによる長期記憶)の両方をローカル完結で動かすことを目指したプロジェクト。
 
-## Recommended IDE Setup
+## 構成
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- **基盤**: Tauri(Rust) + React
+- **会話**: llama.cpp(LLM) / whisper.cpp(STT) / piper-plus(TTS)
+- **記憶**: ChromaDB + reranker(RAG)によるセカンドブレイン(`library/`配下のMarkdownを検索・参照)
+- **Claude Code連携**: MCPサーバー経由でセカンドブレインの検索・保存が可能
+
+詳細な内部構成は [docs/shiori-reference.html](docs/shiori-reference.html) を参照。
 
 ## セットアップ
 
@@ -12,3 +17,9 @@ This template should help get you started developing with Tauri, React and Types
 
 - `models/` 配下のLLM/STT/TTSモデルファイル(`.gguf`/`.bin`/`.onnx`)は容量が大きいため対象外。各自でダウンロードして配置すること
 - `third_party/` 配下(llama.cpp・whisper.cpp・piper-plus)はビルド済みバイナリの実クローンのため対象外。clone・ビルド手順とWindows環境で動作確認済みの固定バージョンは [docs/setup-third-party.md](docs/setup-third-party.md) を参照
+
+開発サーバーの起動やビルド手順は通常のTauri + Viteプロジェクトと同様(`npm install` → `npm run tauri dev` / `npm run tauri build`)。
+
+## ライセンス
+
+[MIT License](LICENSE)
