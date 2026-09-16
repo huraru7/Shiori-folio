@@ -125,6 +125,9 @@ pub struct SearchLibraryResultItem {
     pub source_category: String,
     pub headings: Vec<FileHeading>,
     pub best_score: f64,
+    // 実ファイルへの絶対パス(見つからなければ空文字列)。app.py側で
+    // source_category配下をrglobして解決している(2026-09-16追加)。
+    pub path: String,
 }
 
 // MCPサーバーのsearch_libraryツール向け(詩織Ver2.0設計指示書v3、9章)。

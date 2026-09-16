@@ -384,6 +384,23 @@ class SearchLibraryResultItem(BaseModel):
     headings: list[FileHeading]
     # ファイル自体の並び順に使う、ファイル内最高スコア。
     best_score: float
+    # 実ファイルへの絶対パス(見つからなければ空文字列)。chromadbのmetadataは
+    # ファイル名(source)とトップレベルフォルダ(source_category)しか
+    # 持たず、中間のサブディレクトリ(project識別子等)が分からないため、
+    # source_category配下を都度rglobして解決する(2026-09-16追加)。
+    path: str
+
+
+def _resolve_source_path(source_category: str, source: str) -> str:
+    """source_category配下から、ファイル名(source)が一致する実ファイルの
+    絶対パスを探す。sourceはlibrary全体で一意という既存の前提(indexing.pyが
+    metadataのキーとしてファイル名のみを使っている)を踏襲する。
+    """
+    search_root = KNOWLEDGE_DIR / source_category
+    if not search_root.is_dir():
+        return ""
+    match = next(search_root.rglob(source), None)
+    return str(match) if match else ""
 
 
 @app.post("/search_library", response_model=list[SearchLibraryResultItem])
@@ -391,7 +408,10 @@ def search_library(req: SearchLibraryRequest):
     """MCPサーバーのsearch_libraryツール向け(詩織Ver2.0設計指示書v3、9章)。
     /searchと違い、結果をファイル単位に集約し、本文は含めない(司書は棚の
     場所(見出し)を教えるだけで、中身を合成しない、という設計方針)。1冊=
-    1ファイルという表示単位(10章)とも整合させている。
+    1ファイルという表示単位(10章)とも整合させている。ただし実ファイルへの
+    絶対パス(path)は返すため、呼び出し側(Claude Code)はそれを使って
+    Readツール等で直接本文を読める(2026-09-16追加。棚の場所を教えるだけ、
+    という設計方針は変えず、「棚の正確な位置(パス)まで教える」形に強化した)。
 
     filterのauthor/type/projectは、Ver2.0の保存ルーティング(shiori-save CLI)が
     chromadbのメタデータに実際に書き込むフィールドで絞り込む(authorは
@@ -441,6 +461,7 @@ def search_library(req: SearchLibraryRequest):
             source_category=files[source]["source_category"],
             headings=files[source]["headings"],
             best_score=files[source]["best_score"],
+            path=_resolve_source_path(files[source]["source_category"], source),
         )
         for source in order
     ]
