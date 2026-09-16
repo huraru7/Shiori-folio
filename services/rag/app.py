@@ -285,6 +285,18 @@ class LibraryFileItem(BaseModel):
     source_category: str
     # そのファイル内の見出し一覧(登場順、重複なし)。
     headings: list[LibraryFileHeading]
+    # frontmatterのtitle(無ければ空文字列。GUI側でファイル名にフォールバック
+    # する)。2026-09-16追加、エクスプローラー風UI刷新向け。
+    title: str
+    # 実ファイルへの絶対パス。search_libraryのpathと同じ_resolve_source_path
+    # で解決する(2026-09-16追加)。
+    path: str
+    # library_rootからの相対パス(/区切り)。GUIがフォルダツリーを構築する際、
+    # 絶対パス文字列の解析に頼らず安全に階層を取り出せるようにする
+    # (2026-09-16追加)。
+    relative_path: str
+    # ファイルの更新日時(Unixタイムスタンプ、無ければ0。2026-09-16追加)。
+    mtime: float
 
 
 @app.get("/list_all_library", response_model=list[LibraryFileItem])
@@ -312,6 +324,9 @@ def list_all_library():
             files[source] = {
                 "source_category": meta.get("source_category", "uncategorized"),
                 "headings": [],
+                "title": meta.get("title", ""),
+                "relative_path": meta.get("relative_path", ""),
+                "mtime": meta.get("mtime", 0.0),
             }
             order.append(source)
         heading = meta.get("heading", "")
@@ -324,6 +339,10 @@ def list_all_library():
             source=source,
             source_category=files[source]["source_category"],
             headings=files[source]["headings"],
+            title=files[source]["title"],
+            path=_resolve_source_path(files[source]["source_category"], source),
+            relative_path=files[source]["relative_path"],
+            mtime=files[source]["mtime"],
         )
         for source in sorted(order)
     ]
@@ -389,6 +408,8 @@ class SearchLibraryResultItem(BaseModel):
     # 持たず、中間のサブディレクトリ(project識別子等)が分からないため、
     # source_category配下を都度rglobして解決する(2026-09-16追加)。
     path: str
+    # frontmatterのtitle(無ければ空文字列)。2026-09-16追加。
+    title: str
 
 
 def _resolve_source_path(source_category: str, source: str) -> str:
@@ -451,6 +472,7 @@ def search_library(req: SearchLibraryRequest):
                 "source_category": meta.get("source_category", "uncategorized"),
                 "headings": [],
                 "best_score": score,
+                "title": meta.get("title", ""),
             }
             order.append(source)
         files[source]["headings"].append(FileHeading(heading=meta.get("heading", ""), rerank_score=score))
@@ -462,6 +484,7 @@ def search_library(req: SearchLibraryRequest):
             headings=files[source]["headings"],
             best_score=files[source]["best_score"],
             path=_resolve_source_path(files[source]["source_category"], source),
+            title=files[source]["title"],
         )
         for source in order
     ]

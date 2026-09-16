@@ -128,6 +128,8 @@ pub struct SearchLibraryResultItem {
     // 実ファイルへの絶対パス(見つからなければ空文字列)。app.py側で
     // source_category配下をrglobして解決している(2026-09-16追加)。
     pub path: String,
+    // frontmatterのtitle(無ければ空文字列、2026-09-16追加)。
+    pub title: String,
 }
 
 // MCPサーバーのsearch_libraryツール向け(詩織Ver2.0設計指示書v3、9章)。
@@ -187,6 +189,14 @@ pub struct LibraryFileItem {
     pub source: String,
     pub source_category: String,
     pub headings: Vec<LibraryFileHeading>,
+    // frontmatterのtitle・実ファイルへの絶対パス(2026-09-16追加、
+    // エクスプローラー風UI刷新向け)。
+    pub title: String,
+    pub path: String,
+    // library_rootからの相対パス(/区切り)。GUIのフォルダツリー構築に使う。
+    pub relative_path: String,
+    // ファイルの更新日時(Unixタイムスタンプ)。
+    pub mtime: f64,
 }
 
 // スタンドアロン図書館UI(Phase 7、1冊=1ファイルの表示単位への変更)向け。

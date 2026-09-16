@@ -1443,6 +1443,14 @@ pub struct LibraryFileDto {
     source: String,
     source_category: String,
     headings: Vec<String>,
+    // frontmatterのtitle・実ファイルへの絶対パス(2026-09-16追加、
+    // エクスプローラー風UI刷新向け)。
+    title: String,
+    path: String,
+    // library_rootからの相対パス(/区切り)。GUIのフォルダツリー構築に使う。
+    relative_path: String,
+    // ファイルの更新日時(Unixタイムスタンプ)。
+    mtime: f64,
 }
 
 // source_category配下を再帰的に探索し、ファイル名が一致する最初のファイルを
@@ -1511,6 +1519,10 @@ fn list_all_knowledge() -> Result<Vec<LibraryFileDto>, String> {
             source: f.source,
             source_category: f.source_category,
             headings: f.headings.into_iter().map(|h| h.heading).collect(),
+            title: f.title,
+            path: f.path,
+            relative_path: f.relative_path,
+            mtime: f.mtime,
         })
         .collect())
 }
@@ -1529,6 +1541,9 @@ pub struct SearchLibraryResultDto {
     source_category: String,
     headings: Vec<SearchLibraryHeadingDto>,
     best_score: f64,
+    // 実ファイルへの絶対パス・frontmatterのtitle(2026-09-16追加)。
+    path: String,
+    title: String,
 }
 
 // ライブラリウィンドウの検索結果ベースUI(詩織Ver3.0、UI改善4-2節)向け。
@@ -1551,6 +1566,8 @@ fn search_library(query: String, limit: u32, offset: u32) -> Result<Vec<SearchLi
                 .map(|h| SearchLibraryHeadingDto { heading: h.heading, rerank_score: h.rerank_score })
                 .collect(),
             best_score: r.best_score,
+            path: r.path,
+            title: r.title,
         })
         .collect())
 }

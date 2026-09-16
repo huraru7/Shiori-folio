@@ -25,6 +25,7 @@ INDEX_STATE_FILENAME = ".index_state.json"
 # 解析する必要が出てきたら見直すこと)。
 _FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
 _INDEX_FALSE_RE = re.compile(r"^index:\s*false\s*$", re.MULTILINE | re.IGNORECASE)
+_TITLE_RE = re.compile(r"^title:\s*(.+?)\s*$", re.MULTILINE)
 
 
 def _is_indexable(text: str) -> bool:
@@ -36,6 +37,25 @@ def _is_indexable(text: str) -> bool:
     if not m:
         return True
     return not _INDEX_FALSE_RE.search(m.group(1))
+
+
+def _extract_title(text: str) -> str:
+    """frontmatterのtitleを取り出す(GUIの一覧表示用、2026-09-16追加)。
+    _is_indexableと同じ理由でpyyaml等は使わず正規表現で軽量に済ませる。
+    値がダブル/シングルクォートで囲まれている場合(コロンを含むtitleは
+    クォート必須)は剥がして返す。見つからなければ空文字列(呼び出し側で
+    ファイル名にフォールバックする)。
+    """
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return ""
+    title_m = _TITLE_RE.search(m.group(1))
+    if not title_m:
+        return ""
+    raw = title_m.group(1)
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+        raw = raw[1:-1]
+    return raw
 
 
 def source_category_for(md_path: Path, knowledge_dir: Path) -> str:
@@ -66,7 +86,7 @@ def save_index_state(vectordb_dir: Path, state: dict[str, float]) -> None:
 
 
 def _embed_file(
-    collection, http_client: httpx.Client, md_path: Path, category: str
+    collection, http_client: httpx.Client, md_path: Path, category: str, relative_path: str
 ) -> int:
     """1ファイル分のチャンクを埋め込んでChromaDBへ反映する。チャンク数が前回
     から変わっている可能性があるため、まず同じsource(ファイル名)の既存チャンクを
@@ -86,6 +106,8 @@ def _embed_file(
     if not chunks:
         return 0
 
+    title = _extract_title(text)
+
     ids: list[str] = []
     documents: list[str] = []
     embeddings: list[list[float]] = []
@@ -100,7 +122,19 @@ def _embed_file(
         documents.append(chunk.text)
         embeddings.append(embedding)
         metadatas.append(
-            {"source": md_path.name, "heading": chunk.heading, "source_category": category}
+            {
+                "source": md_path.name,
+                "heading": chunk.heading,
+                "source_category": category,
+                "title": title,
+                # library_rootからの相対パス(/区切りに統一、2026-09-16追加)。
+                # GUIのエクスプローラー風ツリー表示が、絶対パス文字列の解析
+                # という脆い方法に頼らずフォルダ階層を安全に構築するために使う。
+                "relative_path": relative_path.replace("\\", "/"),
+                # ファイルの更新日時(Unixタイムスタンプ、2026-09-16追加)。
+                # エクスプローラー風UIの「更新日時」列に使う。
+                "mtime": md_path.stat().st_mtime,
+            }
         )
 
     collection.upsert(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
@@ -133,7 +167,7 @@ def reindex_single_file(
         raise FileNotFoundError(relative_path)
 
     category = source_category_for(md_path, knowledge_dir)
-    count = _embed_file(collection, http_client, md_path, category)
+    count = _embed_file(collection, http_client, md_path, category, relative_path)
 
     state = load_index_state(vectordb_dir)
     state[relative_path] = md_path.stat().st_mtime
@@ -195,7 +229,7 @@ def sync_index(
             continue
         category = source_category_for(md_path, knowledge_dir)
         try:
-            _embed_file(collection, http_client, md_path, category)
+            _embed_file(collection, http_client, md_path, category, rel)
         except (UnicodeDecodeError, OSError) as e:
             # 1ファイルの読み込み失敗で全体(起動シーケンスを含む)を巻き込まない。
             # 「なんでも保存」方針上、壊れたファイルが1つあってもアプリは

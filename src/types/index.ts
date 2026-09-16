@@ -26,6 +26,14 @@ export interface LibraryFile {
   source: string;
   sourceCategory: string;
   headings: string[];
+  // frontmatterのtitle(無ければ空文字列)・実ファイルへの絶対パス
+  // (2026-09-16追加、エクスプローラー風UI刷新向け)。
+  title: string;
+  path: string;
+  // library_rootからの相対パス(/区切り)。フォルダツリー構築に使う。
+  relativePath: string;
+  // ファイルの更新日時(Unixタイムスタンプ、秒)。
+  mtime: number;
 }
 
 // ライブラリウィンドウの検索結果ベースUI(Ver3.0、UI改善4-2節)向け。
@@ -41,6 +49,9 @@ export interface SearchLibraryResult {
   sourceCategory: string;
   headings: SearchLibraryHeading[];
   bestScore: number;
+  // 実ファイルへの絶対パス・frontmatterのtitle(2026-09-16追加)。
+  path: string;
+  title: string;
 }
 
 // 記事詳細画面(Ver3.0、UI改善4-2節)向け。frontmatterの構造化フィールド。
