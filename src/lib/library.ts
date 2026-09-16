@@ -2,6 +2,8 @@
 // メタデータから機械的に導出する。KnowledgePanel(3-1)・ChunkModal(3-3)・
 // LibraryScreen(3-2)で共有する。
 
+import type { LibraryFile } from "../types";
+
 export interface CategoryMeta {
   abbr: string;
   label: string;
@@ -110,4 +112,59 @@ const FLY_FROM_PRESETS: { fx: string; fy: string; fr: string }[] = [
 
 export function getFlyFromOffset(index: number): { fx: string; fy: string; fr: string } {
   return FLY_FROM_PRESETS[index % FLY_FROM_PRESETS.length];
+}
+
+// 全件閲覧のエクスプローラー風UI(2026-09-16追加)。LibraryFile[]の
+// relativePath("20-areas/shiori/resource/xxx.md"のような/区切り文字列)から
+// フォルダツリーを構築する。絶対パス文字列を解析する脆い方法は避け、
+// バックエンド側で計算済みの相対パスをそのまま分割するだけにしている。
+export interface TreeFolder {
+  name: string;
+  // このフォルダ自身のrelativePath(ルートは空文字列)。
+  path: string;
+  folders: Map<string, TreeFolder>;
+  files: LibraryFile[];
+}
+
+export function buildFileTree(files: LibraryFile[]): TreeFolder {
+  const root: TreeFolder = { name: "", path: "", folders: new Map(), files: [] };
+  for (const file of files) {
+    const parts = file.relativePath.split("/").filter(Boolean);
+    if (parts.length === 0) continue;
+    let node = root;
+    for (let i = 0; i < parts.length - 1; i++) {
+      const name = parts[i];
+      const path = parts.slice(0, i + 1).join("/");
+      let child = node.folders.get(name);
+      if (!child) {
+        child = { name, path, folders: new Map(), files: [] };
+        node.folders.set(name, child);
+      }
+      node = child;
+    }
+    node.files.push(file);
+  }
+  return root;
+}
+
+// ルートからpath("20-areas/shiori"のような/区切り文字列)を辿って
+// TreeFolderを取得する。見つからなければnull。
+export function findTreeFolder(root: TreeFolder, path: string): TreeFolder | null {
+  if (!path) return root;
+  let node = root;
+  for (const part of path.split("/").filter(Boolean)) {
+    const child = node.folders.get(part);
+    if (!child) return null;
+    node = child;
+  }
+  return node;
+}
+
+// Unixタイムスタンプ(秒)を"2026-09-16 20:54"形式に整形する。0や未設定は
+// 空文字列を返す(mtimeを取得できなかった場合、空欄表示にする)。
+export function formatMtime(mtime: number): string {
+  if (!mtime) return "";
+  const d = new Date(mtime * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }

@@ -1,0 +1,64 @@
+.folder-tree {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--paper-dim);
+  user-select: none;
+}
+
+.folder-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.folder-tree__row:hover {
+  background: rgba(143, 160, 107, 0.08);
+  color: var(--paper);
+}
+
+.folder-tree__row--selected {
+  background: rgba(198, 138, 94, 0.14);
+  color: var(--paper);
+  box-shadow: inset 2px 0 0 var(--clay);
+}
+
+.folder-tree__toggle {
+  width: 18px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--paper-dim);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  transform: rotate(0deg);
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+/* 開いている時は90度回転して▾相当の向きになる。矢印の形そのものを
+   変えるより、はっきり動きが見えて開閉の違いが分かりやすいという
+   フィードバックを踏まえた調整(2026-09-16)。 */
+.folder-tree__toggle--expanded {
+  transform: rotate(90deg);
+  color: var(--clay);
+}
+
+.folder-tree__swatch {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.folder-tree__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

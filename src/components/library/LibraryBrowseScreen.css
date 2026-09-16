@@ -3,9 +3,6 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  /* min-width:0が無いと、flexアイテムであるこのコンテナ自体が中身の幅より
-     縮まなくなり、下位の__shelfのflex-wrapが実質効かずウィンドウ端で
-     見切れる原因になる(LibraryScreen.cssと同じ教訓)。 */
   min-width: 0;
   color: var(--paper);
   font-family: var(--font-body);
@@ -37,17 +34,10 @@
   color: var(--paper-dim);
 }
 
-.library-browse-screen__scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 0 14px 14px;
-}
-
 .library-browse-screen__status {
   color: var(--paper-dim);
   font-size: 0.8rem;
+  padding: 0 14px;
 }
 
 .library-browse-screen__status--error {
@@ -69,28 +59,152 @@
   cursor: pointer;
 }
 
-.library-browse-screen__group {
-  margin-bottom: 16px;
+/* エクスプローラー風の2ペイン構成(詩織Ver3.1、2026-09-16刷新)。
+   左: フォルダツリー、右: パンくず+テーブル。 */
+.library-browse-screen__explorer {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  gap: 0;
+  padding: 0 14px 14px;
 }
 
-.library-browse-screen__group-head {
+.library-browse-screen__tree {
+  flex: 0 0 168px;
+  min-width: 0;
+  overflow-y: auto;
+  border-right: 0.5px solid var(--glass-border);
+  padding-right: 10px;
+  margin-right: 10px;
+}
+
+.library-browse-screen__main {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 9.5px;
-  letter-spacing: 0.08em;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.library-browse-screen__breadcrumb {
+  flex-shrink: 0;
+  font-size: 11px;
   color: var(--paper-dim);
-  margin-bottom: 8px;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 0.5px solid var(--glass-border);
 }
 
-.library-browse-screen__swatch {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
+.library-browse-screen__breadcrumb button {
+  background: none;
+  border: none;
+  color: var(--paper-dim);
+  font-family: var(--font-body);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 3px;
 }
 
-.library-browse-screen__shelf {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.library-browse-screen__breadcrumb button:hover {
+  color: var(--paper);
+  text-decoration: underline;
+}
+
+.library-browse-screen__breadcrumb-sep {
+  margin: 0 1px;
+}
+
+/* テーブル自体をflexアイテムにすると、中身が1行しかない場合にブラウザが
+   その行を(残りの空間を埋めるように)異常に引き伸ばしてしまう
+   (2026-09-16、実機確認で発覚)。スクロール領域はこのラッパー側に持たせ、
+   table自身はコンテンツに応じた自然な高さのままにする。 */
+.library-browse-screen__table-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.library-browse-screen__table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.library-browse-screen__table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  text-align: left;
+  color: var(--paper-dim);
+  font-weight: 400;
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  padding: 4px 10px;
+  border-bottom: 0.5px solid var(--glass-border);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* 「名前」「更新日時」列の右端にあるドラッグハンドル(Windowsエクスプローラー
+   のような列幅リサイズ、2026-09-16追加)。列自体の幅はJS側(colWidths state、
+   隣接列と比率を融通し合う)がインラインstyleで指定しており、
+   table-layout: fixedと組み合わせて効く。末尾の「種類」列だけはリサイズ
+   対象外(残り幅を自動で埋める)。
+   クリック判定は太め(8px)にしつつ、見た目の線自体は::afterで中央1pxの
+   細線として常時薄く見せ、どこをつかめるか一目で分かるようにしている
+   (「ドラッグ部分がどこにあるか分かりにくい」というフィードバックを反映)。 */
+.library-browse-screen__col-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+}
+
+.library-browse-screen__col-resizer::after {
+  content: "";
+  position: absolute;
+  top: 15%;
+  left: 50%;
+  width: 1px;
+  height: 70%;
+  background: var(--glass-border);
+  transform: translateX(-50%);
+}
+
+.library-browse-screen__col-resizer:hover::after,
+.library-browse-screen__col-resizer:active::after {
+  background: var(--clay);
+  width: 2px;
+}
+
+.library-browse-screen__row {
+  cursor: pointer;
+}
+
+.library-browse-screen__row:hover {
+  background: rgba(143, 160, 107, 0.08);
+}
+
+.library-browse-screen__row td {
+  padding: 6px 10px;
+  border-bottom: 0.5px solid var(--glass-border);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+.library-browse-screen__icon {
+  margin-right: 6px;
+}
+
+.library-browse-screen__dim {
+  color: var(--paper-dim);
+  font-size: 11px;
 }
