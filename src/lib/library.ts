@@ -20,12 +20,18 @@ export interface CategoryMeta {
 // ため、フォルダ再編と同じタイミングで更新する。新カテゴリの配色は旧カテゴリの
 // 色をそのまま引き継いだ(統合先の性質が近いものを機械的に対応させただけで、
 // 配色自体の作り込みはUI刷新〈Phase 5〉で改めて検討する)。
+//
+// 【2026-09-16更新】Ver3.1でjournalをtypeから廃止し、project/areaそれぞれの
+// 配下にkind(journal/resource)として統合した。40-journal/は廃止し、空いた
+// 番号をふらるさん自身についての記録の新設フォルダ40-profile/に割り当てた
+// (旧30-resources/profile/の独立後継)。30-resources/はproject/areaに紐づかない
+// 外部知識専用に意味を純化した。
 const CATEGORY_META: Record<string, CategoryMeta> = {
   "00-inbox": { abbr: "IB", label: "インボックス", hex: "#8C8577" },
   "10-projects": { abbr: "PJ", label: "プロジェクト", hex: "#C4914E" },
   "20-areas": { abbr: "AE", label: "エリア", hex: "#6E8FA8" },
   "30-resources": { abbr: "RS", label: "リソース", hex: "#C68A5E" },
-  "40-journal": { abbr: "JN", label: "ジャーナル", hex: "#A67B8F" },
+  "40-profile": { abbr: "PF", label: "プロフィール", hex: "#A67B8F" },
   "90-archive": { abbr: "AC", label: "アーカイブ", hex: "#7A7568" },
 };
 
@@ -47,7 +53,7 @@ export const CATEGORY_ORDER = [
   "10-projects",
   "20-areas",
   "30-resources",
-  "40-journal",
+  "40-profile",
   "90-archive",
 ] as const;
 

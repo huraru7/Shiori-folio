@@ -1445,6 +1445,26 @@ pub struct LibraryFileDto {
     headings: Vec<String>,
 }
 
+// source_category配下を再帰的に探索し、ファイル名が一致する最初のファイルを
+// 返す(詩織Ver3.1、journal廃止・project/area配下への階層深化に伴い追加。
+// services/rag/app.pyの_resolve_source_pathと同じ考え方)。project/areaの
+// 記事はsource_category直下からさらにproject名/kindの2階層深くなるため、
+// 直接のjoinでは見つけられない。
+fn find_file_by_name(dir: &Path, file_name: &str) -> Option<PathBuf> {
+    let entries = std::fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_file_by_name(&path, file_name) {
+                return Some(found);
+            }
+        } else if path.file_name().and_then(|n| n.to_str()) == Some(file_name) {
+            return Some(path);
+        }
+    }
+    None
+}
+
 // KnowledgePanelの参照情報をクリックした際、元のMarkdownファイル全文を返す
 // (v1.0スコープ機能1: 参照資料の表示モーダル)。source_category/sourceから
 // library/配下のパスを組み立てるが、ユーザー入力(というよりLLM経由の
@@ -1456,11 +1476,13 @@ pub struct LibraryFileDto {
 #[tauri::command]
 fn get_source_document(source_category: String, source: String) -> Result<String, String> {
     let knowledge_root = library_root();
-    let candidate = if source_category == "uncategorized" {
-        knowledge_root.join(&source)
+    let search_root = if source_category == "uncategorized" {
+        knowledge_root.clone()
     } else {
-        knowledge_root.join(&source_category).join(&source)
+        knowledge_root.join(&source_category)
     };
+    let candidate = find_file_by_name(&search_root, &source)
+        .ok_or_else(|| "指定された参照資料が見つかりませんでした。".to_string())?;
 
     let canonical_root = knowledge_root
         .canonicalize()

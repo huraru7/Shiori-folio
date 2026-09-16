@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.0.2(実データ・保存ルールのVer3.0追従、リファレンス現行化)</span>
+    <span class="home__chip"><b>世代</b> Ver3.1(journal廃止・project/area配下へのkind統合)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -761,7 +761,24 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.0.2</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.1</span>
+        <span class="version-list__date">2026-09-16</span>
+      </div>
+      <p class="version-list__body">
+        typeからjournalを廃止し、project/areaそれぞれの配下にkind(journal | resource)
+        として統合(10-projects/{project}/{kind}/・20-areas/{project}/{kind}/という3階層に)。
+        30-resources/は「project/areaに紐づかない外部知識」専用に意味を純化し、project/area内で
+        生まれた意思決定・知見はkind: resourceへ移した。ふらるさん自身についての記録は新設の
+        type: profileへ独立させ、廃止したjournalの跡地(40番台)に40-profile/として配置。
+        90-archive/はトップレベル5分類を1階層だけ再現する形に再設計。フォルダ階層が深くなった
+        ことに伴い、get_source_document(記事本文表示)をsource_category直下の決め打ちから
+        再帰探索方式に変更した(search_libraryのpath解決と同じ考え方)。コード側の対応が先行し、
+        実データ(library/)の移行は別途確認の上で進める。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.0.2</span>
         <span class="version-list__date">2026-09-09</span>
       </div>
       <p class="version-list__body">
@@ -922,7 +939,7 @@
     library_dir: {
       eyebrow: "データ本体",
       title: "library/ — セカンドブレインの書庫",
-      body: "<p>00-inbox / 10-projects / 20-areas / 30-resources / 40-journal / 90-archive の6つのライフサイクルフォルダと、設定置き場の_system/で構成される(Ver3.0のデータ管理法見直しで、Ver2.0の8フォルダ構成〈00-inbox/10-log/20-projects/30-knowledge/40-decisions/50-reference/90-archive/_system〉から移行)。frontmatterのtype(project/area/resource/journal)がフォルダと1対1で対応するのは<strong>shiori-save CLI経由の書き込みに限った話</strong>で、memo_guard(音声メモ)はこのCLIを経由せず、上記4値に含まれないtype: メモのまま00-inbox/へ直接書き込む例外がある。frontmatter付きMarkdownとして、Claude Codeが直接書き込む。</p><p>_system/配下はインデックス・検索対象から明示的に除外されている(設定ファイル置き場であり蔵書ではないため)。90-archive/を検索から除外するロジックは現状無い。</p><p>2026-09-09時点で実データはlibrary/直下のフォルダ・保存ルール文書(_system/CLAUDE.md)ともにVer3.0構成へ移行済み(以前はコードのみVer3.0対応で、実データとCLAUDE.mdがVer2.0のまま取り残されていた)。</p>",
+      body: "<p><strong>2026-09-16(Ver3.1)更新</strong>: 00-inbox / 10-projects / 20-areas / 30-resources / 40-profile / 90-archive の6つのフォルダと、設定置き場の_system/で構成される。type(project/area/resource/profile)がフォルダと1対1で対応するのは<strong>shiori-save CLI経由の書き込みに限った話</strong>で、memo_guard(音声メモ)はこのCLIを経由せず、type: メモのまま00-inbox/へ直接書き込む例外がある。</p><p>project/areaの記事はさらにkind(journal | resource)を持ち、<code>10-projects/{project}/{kind}/</code>・<code>20-areas/{project}/{kind}/</code>という3階層で置かれる。journalはその案件・領域の作業ログ、resourceはそこから生まれた意思決定・知見。トップレベルの30-resources/は「project/areaに紐づかない、外部から与えられた知識」専用に意味を純化した(旧Ver3.0では、project/area固有の知見もここに混在していた)。ふらるさん自身についての記録は新設のtype: profileへ独立させ、廃止したtype: journalの跡地(40番台)に40-profile/として配置した。</p><p>90-archive/配下は_system/と90-archive/自身を除くトップレベル5分類を1階層だけ再現する(project名やkindのサブフォルダまでは掘らない)。</p><p>_system/配下はインデックス・検索対象から明示的に除外されている(設定ファイル置き場であり蔵書ではないため)。90-archive/を検索から除外するロジックは現状無い。</p><p>フォルダ階層が深くなったことに伴い、記事本文の表示(get_source_document)・検索結果のパス解決(search_libraryのpath)は、source_category直下を決め打ちで見に行く方式から、該当ディレクトリ配下を再帰的に探索してファイル名で見つける方式に変更した。</p>",
       paths: ["library/00-inbox〜90-archive/, library/_system/", "library/_system/CLAUDE.md — 保存ルール", "library/_system/tags.yaml, projects.yaml"]
     },
     claude_code: {
@@ -940,7 +957,7 @@
     shiori_save: {
       eyebrow: "外部連携",
       title: "shiori-save CLI",
-      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは_system/tags.yamlで正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(アプリの「要確認」UI = PendingModalで承認・却下できる)。</p>",
+      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは_system/tags.yamlで正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(アプリの「要確認」UI = PendingModalで承認・却下できる)。</p><p><strong>2026-09-16(Ver3.1)更新</strong>: typeからjournalを廃止し、project/areaの記事にはkind(journal | resource)を必須化。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層構成になった。resourceは「project/areaに紐づかない外部知識」専用に意味を純化し、project/area内で生まれた意思決定・知見はkind: resourceとしてそれぞれの配下に置くよう変更。ふらるさん自身についての記録は新設のtype: profileへ独立させ、空いた40番台に40-profile/として配置した。</p>",
       paths: ["system/src-tauri/src/bin/shiori_save.rs — decide_destination()"]
     },
     shared_daemon_concept: {

@@ -18,10 +18,16 @@ use std::path::{Path, PathBuf};
 
 use shiori_folio_lib::{library_root, load_search_backend_config, project_root, rag_client};
 
-// 詩織Ver3.0(データ管理法見直し2-2節)。旧enum(project-log/task/decision/
-// principle/insight/experience/glossary/reference)を廃止し、新フォルダ構成
-// (10-projects/20-areas/30-resources/40-journal)と1対1対応させた。
-const VALID_TYPES: &[&str] = &["project", "area", "resource", "journal"];
+// 詩織Ver3.1(journal廃止・project/area配下へのkind統合、2026-09-16)。
+// journalをtypeから廃止し、project/areaそれぞれの配下にjournal/resourceの
+// 2種類(kindフィールド)を持たせる形に変更した。resourceは「project/area
+// に紐づかない外部由来の知識」専用に純化し、ふらるさん自身についての記録は
+// 新設のprofileへ独立させた。
+const VALID_TYPES: &[&str] = &["project", "area", "resource", "profile"];
+// type: project/areaの記事だけが持つ、記事の性質(作業ログか、そこから
+// 生まれた意思決定・知見か)。type: resource/profileには存在しない
+// (存在してもdecide_destinationでは参照しない)。
+const VALID_KINDS: &[&str] = &["journal", "resource"];
 
 fn default_index() -> bool {
     true
@@ -37,6 +43,11 @@ struct Frontmatter {
     title: Option<String>,
     #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
     kind: Option<String>,
+    // 詩織Ver3.1で新設。type: project/areaの記事のみ使う(journal | resource)。
+    // YAML上のフィールド名は"kind"だが、上のkind(YAML上の"type")と紛らわしい
+    // ためRust側の変数名はsub_kindとした。
+    #[serde(rename = "kind", skip_serializing_if = "Option::is_none")]
+    sub_kind: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -175,7 +186,21 @@ fn validate(fm: &Frontmatter) -> Option<String> {
         return Some("tagsが空です".to_string());
     }
     match fm.kind.as_deref() {
-        Some(k) if VALID_TYPES.contains(&k) => None,
+        Some(k) if VALID_TYPES.contains(&k) => {
+            // project/areaはkind(journal|resource)も必須。resource/profileには
+            // 存在しない概念なので、指定されていても無視する(バリデーション
+            // 対象外)。
+            if k == "project" || k == "area" {
+                match fm.sub_kind.as_deref() {
+                    Some(sk) if VALID_KINDS.contains(&sk) => None,
+                    other => Some(format!(
+                        "kindが不正です(値: {other:?}, 許可値: {VALID_KINDS:?}。typeがproject/areaの記事には必須です)"
+                    )),
+                }
+            } else {
+                None
+            }
+        }
         other => Some(format!("typeが不正です(値: {other:?}, 許可値: {VALID_TYPES:?})")),
     }
 }
@@ -189,39 +214,38 @@ fn decide_destination(root: &Path, fm: &Frontmatter, projects_yaml: &Path) -> Re
     let project = fm.project.as_deref().map(str::trim).filter(|p| !p.is_empty());
 
     match fm.kind.as_deref().expect("validateを通過済みのためSome") {
-        // 期限・ゴールのある進行中の取り組み。
+        // 期限・ゴールのある進行中の取り組み。kind(journal|resource)で
+        // さらにサブフォルダへ分ける(詩織Ver3.1、journal廃止統合)。
         "project" => match project {
             Some(p) => {
                 ensure_project_registered(projects_yaml, p)?;
-                Ok(root.join("10-projects").join(p))
+                let sub_kind = fm.sub_kind.as_deref().expect("validateを通過済みのためSome");
+                Ok(root.join("10-projects").join(p).join(sub_kind))
             }
             None => Ok(root.join("00-inbox")),
         },
 
         // 終わりのない継続的関心領域。projectフィールドを識別子として流用する
         // (huraru.com運営・詩織開発等、type: projectと同じ命名空間で管理する)。
+        // projectと同じくkindでjournal/resourceに分ける。
         "area" => match project {
             Some(p) => {
                 ensure_project_registered(projects_yaml, p)?;
-                Ok(root.join("20-areas").join(p))
+                let sub_kind = fm.sub_kind.as_deref().expect("validateを通過済みのためSome");
+                Ok(root.join("20-areas").join(p).join(sub_kind))
             }
             None => Ok(root.join("00-inbox")),
         },
 
-        // 確立された知識・参考資料・意思決定の記録(旧40-decisions/50-reference/
-        // 30-knowledgeを統合)。project別サブフォルダ構成は維持しつつ、
-        // projectが空でも(旧referenceと異なり)inboxへ逃がさず直下に置ける
-        // 一般知識として扱う。
-        "resource" => match project {
-            Some(p) => {
-                ensure_project_registered(projects_yaml, p)?;
-                Ok(root.join("30-resources").join(p))
-            }
-            None => Ok(root.join("30-resources")),
-        },
+        // 【詩織Ver3.1で意味を変更】project/areaに紐づかない、外部から
+        // 与えられた知識・参考資料専用に純化した(project/area内で生まれた
+        // 意思決定・知見はkind: resourceとしてそれぞれの配下に置くようになった
+        // ため)。projectフィールドが付いていても無視し、常に直下に置く。
+        "resource" => Ok(root.join("30-resources")),
 
-        // 日々の記録・ログ(旧10-logの後継)。project等での分岐はない。
-        "journal" => Ok(root.join("40-journal")),
+        // ふらるさん自身についての記録(詩織Ver3.1で新設。旧30-resources/profile/
+        // の独立後継)。project等での分岐はない。
+        "profile" => Ok(root.join("40-profile")),
 
         _ => unreachable!("validateで許可値のみ通過しているはず"),
     }
