@@ -492,7 +492,7 @@
     </div>
     <div class="diagram-viewport" id="diagramViewport">
     <div class="diagram-canvas" id="diagramCanvas">
-    <svg viewBox="0 0 1180 1250" role="img" aria-label="詩織の内部構成図。音声入力からSTT・会話判定ロジック・LLM・TTSに至る会話フロー、library配下のセカンドブレインを支えるRAGサーバーとChromaDB・reranker・共有埋め込みデーモン、Claude CodeからのMCPサーバー/shiori-save経由の連携、デスクトップUIとDockから独立して開く要確認UI/デバッグ画面の4系統を示す。">
+    <svg viewBox="0 0 1180 1250" role="img" aria-label="詩織の内部構成図。音声入力からSTT・会話判定ロジック・LLM・TTSに至る会話フロー、library配下のセカンドブレインを支えるRAGサーバーとChromaDB・reranker・共有埋め込みデーモン、外部AIからのMCPサーバー/shiori-save経由の連携、デスクトップUIとDockから独立して開く要確認UI/デバッグ画面の4系統を示す。">
       <defs>
         <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L8,4 L0,8 z" fill="var(--paper-dim)"></path>
@@ -510,7 +510,7 @@
       <text class="zone-label" x="684" y="94">セカンドブレイン基盤</text>
 
       <rect class="zone-box" x="16" y="700" width="1148" height="200"/>
-      <text class="zone-label" x="30" y="724">外部連携(Claude Code)</text>
+      <text class="zone-label" x="30" y="724">外部連携(外部AI)</text>
 
       <rect class="zone-box" x="16" y="940" width="1148" height="270"/>
       <text class="zone-label" x="30" y="964">デスクトップUI</text>
@@ -644,7 +644,7 @@
       <!-- ============ 外部連携 ============ -->
       <g class="node node--external" tabindex="0" role="button" data-detail="claude_code" transform="translate(40,750)">
         <rect width="200" height="50" rx="8"/>
-        <text x="14" y="24" font-size="12">Claude Code</text>
+        <text x="14" y="24" font-size="12">外部AI</text>
         <text class="node__sub" x="14" y="39" font-size="10">アプリ外のエージェント</text>
       </g>
       <g class="node node--accent-moss" tabindex="0" role="button" data-detail="mcp_server" transform="translate(300,750)">
@@ -740,8 +740,8 @@
     <figcaption>
       音声入力からSTT・会話判定ロジック(identity_guard→memo_guard→passive
       recallの優先順位)・LLM・TTSに至る会話フロー(左)、library/を土台に
-      RAGサーバー・ChromaDB・rerankerが支えるセカンドブレイン(右上)、Claude
-      Codeが検索/保存に使うMCPサーバーとshiori-save CLI(中央下)、それらを
+      RAGサーバー・ChromaDB・rerankerが支えるセカンドブレイン(右上)、外部
+      AIが検索/保存に使うMCPサーバーとshiori-save CLI(中央下)、それらを
       画面として束ねるデスクトップUI・Dockから独立して開く要確認UI/デバッグ
       画面(下)の4系統。矢印にカーソルを合わせずとも、各箱をクリックすれば
       詳細が開く。ドラッグでパン、右上のボタンでズームできる。
@@ -843,133 +843,133 @@
     startup: {
       eyebrow: "起動",
       title: "起動シーケンス — StartupScreen",
-      body: "<p>アプリ起動直後に表示される起動画面。裏では<strong>ensureBackendServicesStarted()</strong>を待ち受けており、実際のバックエンド起動(LLM/埋め込みモデルの読み込み〜RAGサーバーの起動)が完了するまで進捗を漸近的に表示し続ける。完了検知後に短時間で100%まで埋めてフェードアウトする。</p><p>いずれかのサービスがhealthy:falseで返った場合はエラー表示+再試行ボタンに切り替わり、勝手に会話画面へは進まない。</p>",
+      body: "<p><code>ensureBackendServicesStarted()</code>の完了を待つ起動画面。LLM/埋め込みモデル〜RAGサーバーの起動が終わるまで進捗を表示し、完了検知後に100%まで埋めてフェードアウトする。いずれかが<code>healthy: false</code>で返るとエラー表示+再試行ボタンに切り替わり、勝手には会話画面へ進まない。</p>",
       paths: ["system/src/components/startup/StartupScreen.tsx", "system/src-tauri/src/lib.rs — start_backend_services_impl()"]
     },
     hotkey_record: {
       eyebrow: "音声入力",
       title: "ホットキー / マイクボタン",
-      body: "<p>グローバルホットキー(既定 Ctrl+Alt+S)またはVoiceBarのマイクボタンから録音を開始する。両者は同じstate更新に収束する形で実装されている。</p>",
+      body: "<p>グローバルホットキー(既定 <code>Ctrl+Alt+S</code>)またはVoiceBarのマイクボタンから録音を開始する。どちらも同じstate更新に収束する。</p>",
       paths: ["system/src/components/VoiceBar.tsx", "system/src-tauri/src/audio.rs"]
     },
     stt: {
       eyebrow: "音声認識",
       title: "STT — whisper-server",
-      body: "<p>whisper.cppをオンデマンドで起動して文字起こしする。VRAM軽量化のため常時起動はせず、<strong>録音のたびに起動→アイドル15秒でバックグラウンドスレッドが自動停止</strong>させる設計(SttManager)。文字起こし完了直後に即座に止めるわけではなく、5秒間隔でアイドル状態をポーリングして15秒経過を検知してから停止するため、最後の呼び出しから最大20秒程度はプロセスが残り得る。</p><p>POST /inference にmultipartでwavを送り、テキストを受け取るだけのシンプルなクライアント。</p>",
+      body: "<p>録音のたびにwhisper.cppを起動し、<code>POST /inference</code>にwavを送って文字起こしする(<code>SttManager</code>)。VRAM節約のため常時起動はせず、アイドル15秒でバックグラウンド停止する。5秒間隔のポーリングで検知するため、最後の呼び出しから最大20秒ほどプロセスが残ることがある。</p>",
       paths: ["system/src-tauri/src/whisper_client.rs — transcribe()", "system/src-tauri/src/lib.rs — SttManager"]
     },
     identity_guard: {
       eyebrow: "会話判定ロジック(優先度1)",
       title: "identity_guard",
-      body: "<p>「詩織って何?」のようなアイデンティティに関する質問を検知したら、LLMの裁量に任せずRust側が<strong>search_knowledgeを直接強制実行</strong>する。LLMのFunction Callingがtool_choiceを無視することがある実測結果を踏まえた安全網。</p><p>該当すればここでcontextが確定し、memo_guard/passive recallは実行されない。</p>",
+      body: "<p>「詩織って何?」のようなアイデンティティ質問を検知すると、Rust側が<code>search_knowledge</code>を強制実行する安全網。LLMのFunction Callingが<code>tool_choice</code>を無視することがある実測を踏まえた対策で、該当すればここでcontextが確定し、memo_guard/passive recallは実行されない。</p>",
       paths: ["system/src-tauri/src/lib.rs — is_identity_question() / build_identity_guard_context()"]
     },
     memo_guard: {
       eyebrow: "会話判定ロジック(優先度2)",
       title: "memo_guard",
-      body: "<p>「〜についてメモして」等の明確な保存意図を検知すると、その場でMarkdownファイルとして<strong>library/00-inbox/</strong>へ書き出し、RAGサーバーの/add_documentで即座にChromaDBへも登録する(直後の会話から想起できるようにするため)。</p><p>2026-08-17に、旧Ver1.0時代の\"memo\"カテゴリのまま保存していたため図書館UIで常に未分類表示になる不整合を修正し、Ver2.0の00-inboxへ保存するよう変更した。</p>",
+      body: "<p>「〜についてメモして」等の保存意図を検知すると、<code>library/00-inbox/</code>へMarkdownとして書き出し、RAGサーバーの<code>/add_document</code>で即座にChromaDBへも登録する(直後の会話から想起できるように)。</p>",
       paths: ["system/src-tauri/src/lib.rs — parse_memo_intent() / build_memo_guard_context()"]
     },
     passive_recall: {
       eyebrow: "会話判定ロジック(優先度3・既定)",
       title: "passive recall(常時軽量検索)",
-      body: "<p>上記2つに該当しない通常の発話では、毎回RAGサーバーへ軽量な検索を投げ、関連度が高ければ結果をsystemメッセージとしてLLMへ注入する(閾値はconfig.jsonのrag.passiveRecallThreshold)。LLMに明示的な検索ツールを呼ばせずとも、自然に過去の記憶を踏まえた応答ができるようにする仕組み。</p>",
+      body: "<p>通常の発話では毎回RAGサーバーへ軽量検索を投げ、関連度が閾値(<code>config.json</code>の<code>rag.passiveRecallThreshold</code>)を超えればsystemメッセージとしてLLMへ注入する。LLMに検索ツールを呼ばせずとも、自然に過去の記憶を踏まえた応答ができる。</p>",
       paths: ["system/src-tauri/src/lib.rs — build_passive_recall_context()"]
     },
     llm: {
       eyebrow: "推論",
       title: "LLM — llama-server(Qwen3-8B)",
-      body: "<p>OpenAI互換の/v1/chat/completionsへ、system(プロンプト+ここまでのcontext)・userを送信。Function Calling用にtools=[search_knowledge]を渡す。<strong>enable_thinking: false</strong>でQwen3の思考モードを止めており、これにより雑談の応答遅延が最大22.79秒→5.96秒まで短縮された実測がある。</p><p>tool_callsが返れば execute_tool() で実行し、結果を会話履歴に積んで再度LLMへ問い合わせる(最大反復回数まで)。</p>",
+      body: "<p>OpenAI互換の<code>/v1/chat/completions</code>にsystem(プロンプト+context)・userを送信し、Function Calling用に<code>tools=[search_knowledge]</code>を渡す。<code>enable_thinking: false</code>でQwen3の思考モードを止めており、雑談の応答遅延が最大22.79秒→5.96秒に短縮された実測がある。<code>tool_calls</code>が返れば<code>execute_tool()</code>で実行し、結果を会話履歴に積んで再度問い合わせる(最大反復回数まで)。</p>",
       paths: ["system/src-tauri/src/llm_client.rs — chat_with_tools()", "system/src-tauri/src/lib.rs — send_message_impl()"]
     },
     tool_search_knowledge: {
       eyebrow: "ツール実行",
       title: "tool: search_knowledge",
-      body: "<p>LLMが明示的に「調べる」と判断した場合に呼ばれる唯一のツール(TOOL_NAMESは現状これ1つのみ)。RAGサーバーの/searchを叩き、結果をtoolメッセージとして会話履歴に積んでLLMへ返す。</p>",
+      body: "<p>LLMが「調べる」と判断した場合に呼ばれる、現状唯一のツール(<code>TOOL_NAMES</code>はこれ1つのみ)。RAGサーバーの<code>/search</code>を叩き、結果をtoolメッセージとして会話履歴に積む。</p>",
       paths: ["system/src-tauri/src/prompts.rs — TOOL_NAMES", "system/src-tauri/src/rag_client.rs"]
     },
     tts: {
       eyebrow: "音声合成",
       title: "TTS — piper-plus-cli",
-      body: "<p><strong>現状、起動時のサイドカーとしては有効化されていない。</strong>アップストリームのspeaker_embedding次元不一致という既知の不具合により、自動起動フェーズから除外されている。設定画面(音声設定ページ)の「試し読み」プレビューでのみ、その場でコマンドを都度呼び出す形で使われている。</p>",
+      body: "<p>現状、起動時のサイドカーとしては無効化されている(アップストリームの<code>speaker_embedding</code>次元不一致という既知の不具合のため)。設定画面(音声設定ページ)の「試し読み」プレビューでのみ、その場でコマンドを都度呼び出す。</p>",
       paths: ["system/src-tauri/src/piper_client.rs", "system/src-tauri/src/lib.rs — start_backend_services_impl()内のコメント参照"]
     },
     conversation_log: {
       eyebrow: "表示",
       title: "会話ログ表示",
-      body: "<p>LLMの最終応答・出典(sources)・detected_mode(chat/search/memo)を画面左側に表示する。detected_modeはUI側でどのツールが使われたかの表示分岐に使われる。</p><p>会話中の状態そのものは、このログとは別に<strong>会話状態の可視化(Orb)</strong>が並行して表示する。</p>",
+      body: "<p>LLMの最終応答・出典(sources)・<code>detected_mode</code>(chat/search/memo)を画面左側に表示する。<code>detected_mode</code>はどのツールが使われたかのUI表示分岐に使う。会話中の状態そのものは、別枠の会話状態の可視化(Orb)が並行して表示する。</p>",
       paths: ["system/src/components/ConversationLog.tsx"]
     },
     orb_visualization: {
       eyebrow: "表示(2026-08-12〜)",
       title: "会話状態の可視化(Orb)",
-      body: "<p>idle/listening/thinking/speakingの4状態をリング状のアニメーションで表す、キャラクター表示エリア。状態自体はストア(useShioriStore)側で管理し、CharacterStageは<strong>配置(画面下部を基点)の責務だけ</strong>を持つ薄いラッパーとして切り出されている。</p><p>コード内コメントには「現在はOrbCoreだが、将来Live2Dキャラクターに差し替える計画がある」と明記されており、中身の差し替えやすさを保つための意図的な分離。</p>",
+      body: "<p><code>idle</code>/<code>listening</code>/<code>thinking</code>/<code>speaking</code>の4状態をリング状アニメーションで表すキャラクター表示エリア。状態は<code>useShioriStore</code>側で管理し、<code>CharacterStage</code>は配置(画面下部基点)だけを担う薄いラッパー。将来Live2Dキャラクターへ差し替える計画があり、中身を差し替えやすくするための意図的な分離。</p>",
       paths: ["system/src/components/character/CharacterStage.tsx", "system/src/components/orb/OrbCore.tsx", "system/src/components/orb/RingLayer.tsx"]
     },
     activity_indicator: {
       eyebrow: "表示",
       title: "ActivityIndicator",
-      body: "<p>search_knowledge/memo実行中だけ控えめなラベルを表示する、クリック不可の表示専用コンポーネント。「安全なとき・通常時は何も表示しない、意味のある変化のときだけ控えめに見せる」という方針をコントロールパネルの危険度表現と同じ思想で踏襲している。</p><p>passive recallがヒットした痕跡はKnowledgePanel側が表現するため、ここでは重ねて表示しない設計。</p>",
+      body: "<p><code>search_knowledge</code>/memo実行中だけ控えめなラベルを表示する、クリック不可の表示専用コンポーネント。通常時は何も表示しない方針(コントロールパネルの危険度表現と同じ思想)。passive recallのヒットはKnowledgePanel側が表現するため、ここでは重ねて表示しない。</p>",
       paths: ["system/src/components/ActivityIndicator.tsx", "system/src/components/orb/activityConfig.ts"]
     },
     embedding_daemon: {
       eyebrow: "共有基盤",
       title: "埋め込みデーモン(nomic-embed-text)",
-      body: "<p>llama-server --embeddingをCPU実行で起動し、テキストをベクトル化する。詩織Ver2.0で<strong>会話UI・MCPサーバー・shiori-save等、複数プロセスから共有されるデーモン</strong>という位置づけになった。「先に呼んだ側が起動する」設計で、会話UIが起動していなくてもMCPサーバー単体で検索が完結する。</p>",
+      body: "<p><code>llama-server --embedding</code>をCPU実行で起動し、テキストをベクトル化する。会話UI・MCPサーバー・shiori-save等、複数プロセスから共有されるデーモンで、先に呼んだ側が起動する設計。会話UIが起動していなくてもMCPサーバー単体で検索が完結する。</p>",
       paths: ["system/src-tauri/src/lib.rs — build_embedding_command()", "system/src-tauri/src/shared_daemon.rs"]
     },
     rag_server: {
       eyebrow: "セカンドブレイン",
       title: "RAGサーバー(FastAPI)",
-      body: "<p>/search・/search_library・/list_all_library等のエンドポイントを持つ。Ver3.0で方式を変更し、現在は<strong>書き込み時フック</strong>が主軸: shiori-save CLI等がファイル保存直後に<strong>/reindex_file</strong>を呼び、そのファイル1件だけを即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。検索リクエストのたびに全件スキャンする旧方式(sync_index)は廃止した。</p><p>RAGサーバーが起動していない、またはCLIからの疎通に失敗した場合でも書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p>",
+      body: "<p><code>/search</code>・<code>/search_library</code>・<code>/list_all_library</code>等を持つFastAPIサーバー。書き込み時フックが主軸で、shiori-save CLI等がファイル保存直後に<code>/reindex_file</code>を呼び、そのファイル1件だけ即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。RAGサーバー未起動時も書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p>",
       paths: ["system/services/rag/app.py", "system/services/rag/indexing.py — sync_index()"]
     },
     chromadb: {
       eyebrow: "セカンドブレイン",
       title: "ChromaDB",
-      body: "<p>永続化されたベクトルDB(shiori_knowledgeコレクション)。見出し単位でチャンク化されたテキストとそのembeddingを保持する。データ規模はlibrary/へ書き込むたびに増減するため固定値ではない。<strong>執筆時点(2026-09-09)</strong>では、Ver3.0構成への移行に伴いテストデータを整理した直後のため、file数1件(_system/除く、30-resources/profile/のみ)と大きく減っている。以前(2026-08-24時点)は48件あったが、その後の整理で大幅に減少した経緯があり、ここでの数値は一時点のスナップショットに過ぎない。チャンク数・ディスク容量は都度実測が必要。</p>",
+      body: "<p>永続化されたベクトルDB(<code>shiori_knowledge</code>コレクション)。見出し単位でチャンク化したテキストとそのembeddingを保持する。データ規模はlibrary/への書き込みに応じて増減するため、チャンク数・ディスク容量は都度実測が必要。</p>",
       paths: ["system/data/vectordb/", "system/services/rag/chunking.py — chunk_markdown()"]
     },
     reranker: {
       eyebrow: "セカンドブレイン",
       title: "reranker(japanese-reranker-xsmall-v2)",
-      body: "<p>日本語Cross-Encoderによるリランキング。embedding距離だけでは正解チャンクの順位が下がることがある実測を踏まえ、<strong>全クエリで無条件に</strong>使われている(条件分岐なし)。CPU実行でVRAM消費はゼロ。起動時にウォームアップ読み込みしておくことで、初回検索が約6秒ブロックされる問題を解消済み。</p>",
+      body: "<p>日本語Cross-Encoderによるリランキング。embedding距離だけでは正解チャンクの順位が下がることがある実測を踏まえ、全クエリで無条件に使う(条件分岐なし)。CPU実行でVRAM消費ゼロ。起動時のウォームアップ読み込みで、初回検索が約6秒ブロックされる問題を解消済み。</p>",
       paths: ["system/services/rag/reranker.py"]
     },
     library_dir: {
       eyebrow: "データ本体",
       title: "library/ — セカンドブレインの書庫",
-      body: "<p><strong>2026-09-16(Ver3.1)更新</strong>: 00-inbox / 10-projects / 20-areas / 30-resources / 40-profile / 90-archive の6つのフォルダと、設定置き場の_system/で構成される。type(project/area/resource/profile)がフォルダと1対1で対応するのは<strong>shiori-save CLI経由の書き込みに限った話</strong>で、memo_guard(音声メモ)はこのCLIを経由せず、type: メモのまま00-inbox/へ直接書き込む例外がある。</p><p>project/areaの記事はさらにkind(journal | resource)を持ち、<code>10-projects/{project}/{kind}/</code>・<code>20-areas/{project}/{kind}/</code>という3階層で置かれる。journalはその案件・領域の作業ログ、resourceはそこから生まれた意思決定・知見。トップレベルの30-resources/は「project/areaに紐づかない、外部から与えられた知識」専用に意味を純化した(旧Ver3.0では、project/area固有の知見もここに混在していた)。ふらるさん自身についての記録は新設のtype: profileへ独立させ、廃止したtype: journalの跡地(40番台)に40-profile/として配置した。</p><p>90-archive/配下は_system/と90-archive/自身を除くトップレベル5分類を1階層だけ再現する(project名やkindのサブフォルダまでは掘らない)。</p><p>_system/配下はインデックス・検索対象から明示的に除外されている(設定ファイル置き場であり蔵書ではないため)。90-archive/を検索から除外するロジックは現状無い。</p><p>フォルダ階層が深くなったことに伴い、記事本文の表示(get_source_document)・検索結果のパス解決(search_libraryのpath)は、source_category直下を決め打ちで見に行く方式から、該当ディレクトリ配下を再帰的に探索してファイル名で見つける方式に変更した。</p>",
+      body: "<p>library/は<code>00-inbox</code> / <code>10-projects</code> / <code>20-areas</code> / <code>30-resources</code> / <code>40-profile</code> / <code>90-archive</code>の6フォルダと、設定置き場の<code>_system/</code>で構成される。</p><p>project/areaの記事は<code>kind</code>(<code>journal</code> | <code>resource</code>)を持ち、<code>10-projects/{project}/{kind}/</code>・<code>20-areas/{project}/{kind}/</code>という3階層に置かれる。journalは作業ログ、resourceはそこから生まれた意思決定・知見。トップレベルの<code>30-resources/</code>は「project/areaに紐づかない外部知識」専用、<code>40-profile/</code>はふらるさん自身についての記録専用。</p><p><code>90-archive/</code>は<code>_system/</code>と自身を除くトップレベル5分類を1階層だけ再現する(project名・kindのサブフォルダまでは掘らない)。<code>_system/</code>は検索対象から除外(設定ファイル置き場のため)。</p><p>例外: memo_guard(音声メモ)はshiori-save CLIを経由せず、typeを持たないまま<code>00-inbox/</code>へ直接書き込む。記事本文の表示・検索結果のパス解決は、フォルダ階層が深くなったことに伴い再帰探索方式に変更済み。</p>",
       paths: ["library/00-inbox〜90-archive/, library/_system/", "library/_system/CLAUDE.md — 保存ルール", "library/_system/tags.yaml, projects.yaml"]
     },
     claude_code: {
       eyebrow: "外部アクター",
-      title: "Claude Code",
-      body: "<p>詩織アプリのプロセス外で動くAIコーディングエージェント。MCPサーバー経由でlibrary/を検索し、library/_system/CLAUDE.mdの配置ルールに従って直接frontmatter付きMarkdownを書き込む(または shiori-save CLI経由で決定的にルーティングさせる)。</p>",
-      paths: ["library/_system/CLAUDE.md"]
+      title: "外部AI",
+      body: "<p>詩織アプリのプロセス外で動くAIエージェント。MCPサーバー経由でlibrary/を検索し、<code>library/_system/CLAUDE.md</code>の配置ルールに従ってMarkdownを直接書き込む(またはshiori-save CLI経由で決定的にルーティングさせる)。</p><p>MCP(Model Context Protocol)はAnthropicが公開したオープン規格で、<code>mcp_server.rs</code>は特定AI専用ではない。現状の実例はClaude Codeのみだが、MCP対応クライアント(2026年時点でChatGPT/Cursor等が対応、Geminiは開発者向けのみ)なら理論上は接続できる。</p>",
+      paths: ["library/_system/CLAUDE.md", "system/src-tauri/src/bin/mcp_server.rs"]
     },
     mcp_server: {
       eyebrow: "外部連携",
       title: "MCPサーバー(mcp_server.rs)",
-      body: "<p>会話UIとは別バイナリのstdioベースMCPサーバー。読み取り専用で、<strong>get_context_profile</strong>(_system/tier1-profile.mdを丸ごと返す)と<strong>search_library</strong>(ファイル単位に集約した見出し一覧を返す、本文は含めない)の2ツールのみを持つ。書き込みツールは意図的に持たせていない。</p><p>呼び出し時に埋め込み/RAGデーモンの起動確認を自分でも行うため、会話UIが起動していなくても単体で検索が完結する。</p>",
+      body: "<p>会話UIとは別バイナリの、読み取り専用stdioベースMCPサーバー。<code>get_context_profile</code>(<code>_system/tier1-profile.md</code>を丸ごと返す)と<code>search_library</code>(ファイル単位の見出し一覧を返す、本文は含めない)の2ツールのみ持ち、書き込みツールは意図的に持たせていない。呼び出し時に埋め込み/RAGデーモンの起動確認も自分で行うため、会話UIなしでも単体で検索が完結する。</p>",
       paths: ["system/src-tauri/src/bin/mcp_server.rs"]
     },
     shiori_save: {
       eyebrow: "外部連携",
       title: "shiori-save CLI",
-      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは_system/tags.yamlで正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(アプリの「要確認」UI = PendingModalで承認・却下できる)。</p><p><strong>2026-09-16(Ver3.1)更新</strong>: typeからjournalを廃止し、project/areaの記事にはkind(journal | resource)を必須化。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層構成になった。resourceは「project/areaに紐づかない外部知識」専用に意味を純化し、project/area内で生まれた意思決定・知見はkind: resourceとしてそれぞれの配下に置くよう変更。ふらるさん自身についての記録は新設のtype: profileへ独立させ、空いた40番台に40-profile/として配置した。</p>",
+      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは<code>_system/tags.yaml</code>で正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(PendingModalで承認・却下)。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層に、resource/profileはそれぞれ固定の配置先に振り分ける。</p>",
       paths: ["system/src-tauri/src/bin/shiori_save.rs — decide_destination()"]
     },
     shared_daemon_concept: {
       eyebrow: "共有基盤の仕組み",
       title: "共有デーモン(shared_daemon.rs)",
-      body: "<p>埋め込みモデルとRAGサーバーは、会話UI・MCPサーバー・保存CLIのどこから先に呼ばれても良いよう「ヘルスチェック→ロック取得→起動→ロック解放」という共通手順で管理される。起動したプロセスは呼び出し元のライフタイムに縛られず、意図的にハンドルを手放してデタッチする。稼働判定はプロセスハンドルではなく<strong>ロックファイルに記録したPIDの生存確認</strong>で行う。</p>",
+      body: "<p>埋め込みモデルとRAGサーバーは、会話UI・MCPサーバー・保存CLIのどこから先に呼ばれても良いよう「ヘルスチェック→ロック取得→起動→ロック解放」という共通手順で管理される。起動プロセスは呼び出し元から意図的にデタッチし、稼働判定はプロセスハンドルではなく<strong>ロックファイルに記録したPIDの生存確認</strong>で行う。</p>",
       paths: ["system/src-tauri/src/shared_daemon.rs — ensure_daemon_running()"]
     },
     desktop_ui: {
       eyebrow: "画面構成",
       title: "デスクトップ領域",
-      body: "<p>右ゾーンに配置される、macOSのDockを模したフリースペース型ウィンドウシステム。4つのウィンドウ(ナレッジ/図書館/全件閲覧/設定)はOsWindowとしてドラッグ・リサイズ可能な形で共存する。デバッグ画面のみ例外的に独立した全画面表示。</p>",
+      body: "<p>右ゾーンに配置される、macOSのDockを模したフリースペース型ウィンドウシステム。4つのウィンドウ(ナレッジ/図書館/全件閲覧/設定)は<code>OsWindow</code>としてドラッグ・リサイズ可能な形で共存する。デバッグ画面のみ例外的に独立した全画面表示。</p>",
       paths: ["system/src/components/desktop/DesktopArea.tsx", "system/src/components/desktop/Dock.tsx"]
     },
     ui_knowledge: {
@@ -981,13 +981,13 @@
     ui_library: {
       eyebrow: "デスクトップUI",
       title: "詩織の図書館",
-      body: "<p>検索結果ベースの図書館UI。Ver3.0のUI改善で刷新され、全件をただ並べるのではなく検索クエリに基づいた結果表示に作り替えられた(全件を見たい場合は別ウィンドウの「全件閲覧」を使う)。</p>",
+      body: "<p>検索結果ベースの図書館UI。全件を並べるのではなく検索クエリに基づいた結果を表示する(全件を見たい場合は別ウィンドウの「全件閲覧」を使う)。</p>",
       paths: ["system/src/components/library/LibraryScreen.tsx", "system/src/lib/library.ts — カテゴリ表示定義"]
     },
     ui_browse: {
       eyebrow: "デスクトップUI",
       title: "全件閲覧",
-      body: "<p>Ver3.0のUI改善で新設された、Finder風のエクスプローラー画面。検索結果ベースに刷新された図書館ウィンドウとは別に、library/の全件を素朴に一覧・閲覧する用途を担う。</p>",
+      body: "<p>Finder風のエクスプローラー画面。検索結果ベースの図書館ウィンドウとは別に、library/の全件を一覧・閲覧する用途を担う。</p>",
       paths: ["system/src/components/library/LibraryBrowseScreen.tsx"]
     },
     ui_settings: {
@@ -999,13 +999,13 @@
     pending_modal: {
       eyebrow: "デスクトップUI(Phase 8)",
       title: "要確認UI — PendingModal",
-      body: "<p>tags.yaml/projects.yamlのpending/deferredなエントリ、および00-inbox/の未レビュー記録を一覧表示し、承認(confirm)/却下(reject)/保留(defer)を選べるモーダル。「未着手」「保留中」の2タブに分かれ、保留中タブからも改めて承認/却下できる。</p><p>shiori-save CLIが自己登録した未知のタグ・プロジェクトを、人間が後から見返して確定させるための受け皿。</p>",
+      body: "<p>shiori-save CLIが自己登録した未知のタグ・プロジェクトを、人間が後から見返して確定させるための受け皿。<code>tags.yaml</code>/<code>projects.yaml</code>のpending/deferredなエントリ、および<code>00-inbox/</code>の未レビュー記録を一覧表示し、承認(confirm)/却下(reject)/保留(defer)を選べる。「未着手」「保留中」の2タブに分かれる。</p>",
       paths: ["system/src/components/desktop/PendingModal.tsx"]
     },
     debug_screen: {
       eyebrow: "デスクトップUI",
       title: "デバッグ画面",
-      body: "<p>TTS失敗履歴・passive recallの統計・RAGAS評価履歴を表示する読み取り専用画面。以前はコントロールパネル内のナビタブの1つだったが、2026-08-12のUI/UX改善指示書に基づき、Dockから独立して呼び出せる専用画面として分離された。</p>",
+      body: "<p>TTS失敗履歴・passive recallの統計・RAGAS評価履歴を表示する読み取り専用画面。Dockから独立して呼び出せる。</p>",
       paths: ["system/src/components/debug/DebugScreen.tsx"]
     }
   };
