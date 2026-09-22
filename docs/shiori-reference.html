@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.1(journal廃止・project/area配下へのkind統合)</span>
+    <span class="home__chip"><b>世代</b> Ver3.2(40-profile/のサブフォルダ細分化)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -761,7 +761,23 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.1</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.2</span>
+        <span class="version-list__date">2026-09-21</span>
+      </div>
+      <p class="version-list__body">
+        40-profile/直下にフラットに並んでいた22件を、frontmatterの新設フィールド
+        category(6分類: temperament-and-thinking / values / life-history /
+        relationships / self-image / daily-and-work)でサブフォルダ分けできるようにした。
+        shiori_save.rsのdecide_destination()をcategory指定時は40-profile/{category}/へ、
+        未指定時は従来通り40-profile/直下へ振り分けるよう拡張。category未指定を許容する
+        設計にしたことで、profile-huraru.mdのような「プロフィール全体の入り口」的な記事は
+        分類を強制されず直下に残せる。コード・保存ルール文書(_system/CLAUDE.md)・実データの
+        移行を同一セッション内でまとめて実施した。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.1</span>
         <span class="version-list__date">2026-09-16</span>
       </div>
       <p class="version-list__body">
@@ -939,7 +955,7 @@
     library_dir: {
       eyebrow: "データ本体",
       title: "library/ — セカンドブレインの書庫",
-      body: "<p>library/は<code>00-inbox</code> / <code>10-projects</code> / <code>20-areas</code> / <code>30-resources</code> / <code>40-profile</code> / <code>90-archive</code>の6フォルダと、設定置き場の<code>_system/</code>で構成される。</p><p>project/areaの記事は<code>kind</code>(<code>journal</code> | <code>resource</code>)を持ち、<code>10-projects/{project}/{kind}/</code>・<code>20-areas/{project}/{kind}/</code>という3階層に置かれる。journalは作業ログ、resourceはそこから生まれた意思決定・知見。トップレベルの<code>30-resources/</code>は「project/areaに紐づかない外部知識」専用、<code>40-profile/</code>はふらるさん自身についての記録専用。</p><p><code>90-archive/</code>は<code>_system/</code>と自身を除くトップレベル5分類を1階層だけ再現する(project名・kindのサブフォルダまでは掘らない)。<code>_system/</code>は検索対象から除外(設定ファイル置き場のため)。</p><p>例外: memo_guard(音声メモ)はshiori-save CLIを経由せず、typeを持たないまま<code>00-inbox/</code>へ直接書き込む。記事本文の表示・検索結果のパス解決は、フォルダ階層が深くなったことに伴い再帰探索方式に変更済み。</p>",
+      body: "<p>library/は<code>00-inbox</code> / <code>10-projects</code> / <code>20-areas</code> / <code>30-resources</code> / <code>40-profile</code> / <code>90-archive</code>の6フォルダと、設定置き場の<code>_system/</code>で構成される。</p><p>project/areaの記事は<code>kind</code>(<code>journal</code> | <code>resource</code>)を持ち、<code>10-projects/{project}/{kind}/</code>・<code>20-areas/{project}/{kind}/</code>という3階層に置かれる。journalは作業ログ、resourceはそこから生まれた意思決定・知見。トップレベルの<code>30-resources/</code>は「project/areaに紐づかない外部知識」専用。</p><p><code>40-profile/</code>はふらるさん自身についての記録専用で、<code>category</code>(6分類)によるサブフォルダを持つ。<code>temperament-and-thinking</code>・<code>values</code>・<code>life-history</code>・<code>relationships</code>・<code>self-image</code>・<code>daily-and-work</code>の6つで、category未指定の記事(<code>profile-huraru.md</code>等)は直下に置く。</p><p><code>90-archive/</code>は<code>_system/</code>と自身を除くトップレベル5分類を1階層だけ再現する(project名・kind・categoryのサブフォルダまでは掘らない)。<code>_system/</code>は検索対象から除外(設定ファイル置き場のため)。</p><p>例外: memo_guard(音声メモ)はshiori-save CLIを経由せず、typeを持たないまま<code>00-inbox/</code>へ直接書き込む。記事本文の表示・検索結果のパス解決は、フォルダ階層が深くなったことに伴い再帰探索方式に変更済み。</p>",
       paths: ["library/00-inbox〜90-archive/, library/_system/", "library/_system/CLAUDE.md — 保存ルール", "library/_system/tags.yaml, projects.yaml"]
     },
     claude_code: {
@@ -957,7 +973,7 @@
     shiori_save: {
       eyebrow: "外部連携",
       title: "shiori-save CLI",
-      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは<code>_system/tags.yaml</code>で正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(PendingModalで承認・却下)。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層に、resource/profileはそれぞれ固定の配置先に振り分ける。</p>",
+      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは<code>_system/tags.yaml</code>で正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(PendingModalで承認・却下)。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層に、resourceは<code>30-resources/</code>直下に、profileは<code>category</code>指定があれば<code>40-profile/{category}/</code>(未指定なら直下)に振り分ける。</p>",
       paths: ["system/src-tauri/src/bin/shiori_save.rs — decide_destination()"]
     },
     shared_daemon_concept: {

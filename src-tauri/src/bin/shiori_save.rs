@@ -28,6 +28,18 @@ const VALID_TYPES: &[&str] = &["project", "area", "resource", "profile"];
 // 生まれた意思決定・知見か)。type: resource/profileには存在しない
 // (存在してもdecide_destinationでは参照しない)。
 const VALID_KINDS: &[&str] = &["journal", "resource"];
+// 詩織Ver3.2(40-profile/のサブフォルダ細分化、2026-09-21)。type: profileの
+// 記事だけが持つ分類。未指定を許容する点がkindと異なり、profile-huraru.md
+// のような「プロフィール全体の入り口」的な記事はcategoryなしのまま
+// 40-profile/直下に置かれる。
+const VALID_CATEGORIES: &[&str] = &[
+    "temperament-and-thinking",
+    "values",
+    "life-history",
+    "relationships",
+    "self-image",
+    "daily-and-work",
+];
 
 fn default_index() -> bool {
     true
@@ -48,6 +60,9 @@ struct Frontmatter {
     // ためRust側の変数名はsub_kindとした。
     #[serde(rename = "kind", skip_serializing_if = "Option::is_none")]
     sub_kind: Option<String>,
+    // 詩織Ver3.2で新設。type: profileの記事のみ使う(6分類の列挙、未指定可)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
     #[serde(default)]
     tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -197,6 +212,16 @@ fn validate(fm: &Frontmatter) -> Option<String> {
                         "kindが不正です(値: {other:?}, 許可値: {VALID_KINDS:?}。typeがproject/areaの記事には必須です)"
                     )),
                 }
+            } else if k == "profile" {
+                // categoryは未指定を許容する(profile-huraru.md想定)。
+                // 指定されている場合のみ値の妥当性を検証する。
+                match fm.category.as_deref() {
+                    None => None,
+                    Some(c) if VALID_CATEGORIES.contains(&c) => None,
+                    Some(c) => Some(format!(
+                        "categoryが不正です(値: {c:?}, 許可値: {VALID_CATEGORIES:?})"
+                    )),
+                }
             } else {
                 None
             }
@@ -244,8 +269,12 @@ fn decide_destination(root: &Path, fm: &Frontmatter, projects_yaml: &Path) -> Re
         "resource" => Ok(root.join("30-resources")),
 
         // ふらるさん自身についての記録(詩織Ver3.1で新設。旧30-resources/profile/
-        // の独立後継)。project等での分岐はない。
-        "profile" => Ok(root.join("40-profile")),
+        // の独立後継)。詩織Ver3.2でcategory(6分類)によるサブフォルダ分けに
+        // 対応。category未指定の記事(profile-huraru.md等)は直下に置く。
+        "profile" => match fm.category.as_deref() {
+            Some(c) => Ok(root.join("40-profile").join(c)),
+            None => Ok(root.join("40-profile")),
+        },
 
         _ => unreachable!("validateで許可値のみ通過しているはず"),
     }
