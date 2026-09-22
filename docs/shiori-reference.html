@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.2(40-profile/のサブフォルダ細分化)</span>
+    <span class="home__chip"><b>世代</b> Ver3.3(時間認識検索: 現在モード/経緯モード)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -738,13 +738,15 @@
     </div>
     </div>
     <figcaption>
-      音声入力からSTT・会話判定ロジック(identity_guard→memo_guard→passive
-      recallの優先順位)・LLM・TTSに至る会話フロー(左)、library/を土台に
-      RAGサーバー・ChromaDB・rerankerが支えるセカンドブレイン(右上)、外部
-      AIが検索/保存に使うMCPサーバーとshiori-save CLI(中央下)、それらを
-      画面として束ねるデスクトップUI・Dockから独立して開く要確認UI/デバッグ
-      画面(下)の4系統。矢印にカーソルを合わせずとも、各箱をクリックすれば
-      詳細が開く。ドラッグでパン、右上のボタンでズームできる。
+      音声入力からSTT・会話判定ロジック(identity_guard→memo_guard→
+      history_guard→passive recallの優先順位。Ver3.3でhistory_guardを追加、
+      図中は省略しているため詳細は右のツール一覧を参照)・LLM・TTSに至る
+      会話フロー(左)、library/を土台にRAGサーバー・ChromaDB・rerankerが
+      支えるセカンドブレイン(右上)、外部AIが検索/保存に使うMCPサーバーと
+      shiori-save CLI(中央下)、それらを画面として束ねるデスクトップUI・
+      Dockから独立して開く要確認UI/デバッグ画面(下)の4系統。矢印に
+      カーソルを合わせずとも、各箱をクリックすれば詳細が開く。ドラッグで
+      パン、右上のボタンでズームできる。
     </figcaption>
   </figure>
 </section>
@@ -761,7 +763,27 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.2</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.3</span>
+        <span class="version-list__date">2026-09-22</span>
+      </div>
+      <p class="version-list__body">
+        RAG検索が「数える」「時系列」「全体像」を問う質問に構造的に弱い(status/dateが
+        ChromaDBのmetadataに未保存で、90-archive/への移動も検索結果に無反映だった)ことを
+        調査で突き止め、現在モード/経緯モードの2種類の検索を導入。現在モード(デフォルト)は
+        status: deprecatedを除外し、date(frontmatterの新設フィールド、shiori-save CLIが
+        保存の都度自動付与)が新しいほど有利になる時間減衰をrerank_scoreに掛ける。経緯モードは
+        deprecated/archive込みでdate降順に並べ替えて返し、新旧を見比べられるようにした。
+        ローカルLLM(会話UI)向けにはidentity_guard/memo_guardと同じ並びでhistory_guardを新設し、
+        「前は」「以前は」等のキーワードで経緯モードを強制実行。外部AI(MCP経由)向けには
+        search_libraryツールにinclude_historyパラメータを追加し、判断をAI側に委ねた。
+        related(記事間の関連リンク)を検索結果に含めるようにし、新しい記事から置き換えた
+        古い記事へ辿れる手がかりも用意した。詳細は
+        <code>20-areas/shiori/resource/decision-1790001990.md</code>参照。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.2</span>
         <span class="version-list__date">2026-09-21</span>
       </div>
       <p class="version-list__body">
@@ -886,6 +908,12 @@
       body: "<p>「〜についてメモして」等の保存意図を検知すると、<code>library/00-inbox/</code>へMarkdownとして書き出し、RAGサーバーの<code>/add_document</code>で即座にChromaDBへも登録する(直後の会話から想起できるように)。</p>",
       paths: ["system/src-tauri/src/lib.rs — parse_memo_intent() / build_memo_guard_context()"]
     },
+    history_guard: {
+      eyebrow: "会話判定ロジック(優先度3、Ver3.3〜)",
+      title: "history_guard",
+      body: "<p>「前は」「以前は」「昔は」「かつては」のような、経緯・変遷を尋ねる質問を検知すると、Rust側が<code>search_knowledge</code>を経緯モード(<code>rag_client::search_history</code>)で強制実行する。identity_guard/memo_guardと同じくLLMの協力に依存する強制ルーティングは信頼できないという実測を踏まえた設計。デフォルトの現在モードはstatus: deprecatedを除外し新しさを優先するため、「前はどうだったか」に正しく答えられない構造的な弱さがあり、その対策として新設した。identity_guard/memo_guardのどちらにも該当しない場合にのみ判定する(優先度3、passive recallより先)。</p>",
+      paths: ["system/src-tauri/src/lib.rs — is_history_question() / build_history_guard_context()", "system/src-tauri/src/rag_client.rs — search_history()"]
+    },
     passive_recall: {
       eyebrow: "会話判定ロジック(優先度3・既定)",
       title: "passive recall(常時軽量検索)",
@@ -937,7 +965,7 @@
     rag_server: {
       eyebrow: "セカンドブレイン",
       title: "RAGサーバー(FastAPI)",
-      body: "<p><code>/search</code>・<code>/search_library</code>・<code>/list_all_library</code>等を持つFastAPIサーバー。書き込み時フックが主軸で、shiori-save CLI等がファイル保存直後に<code>/reindex_file</code>を呼び、そのファイル1件だけ即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。RAGサーバー未起動時も書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p>",
+      body: "<p><code>/search</code>・<code>/search_library</code>・<code>/list_all_library</code>等を持つFastAPIサーバー。書き込み時フックが主軸で、shiori-save CLI等がファイル保存直後に<code>/reindex_file</code>を呼び、そのファイル1件だけ即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。RAGサーバー未起動時も書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p><p>Ver3.3(時間認識検索)で<code>mode</code>パラメータを追加。デフォルトの現在モードは<code>status: deprecated</code>を候補プールの時点で除外し、frontmatterの<code>date</code>が新しいほど有利になる時間減衰(直近30日は減衰なし、30〜365日で1.0→0.8へ線形減衰、365日超は0.8で下げ止め)をrerank_scoreに掛ける。経緯モードはdeprecated/archive込みで絞り込みをかけず、rerank_scoreではなくdate降順で並べ替える。</p>",
       paths: ["system/services/rag/app.py", "system/services/rag/indexing.py — sync_index()"]
     },
     chromadb: {
@@ -967,13 +995,13 @@
     mcp_server: {
       eyebrow: "外部連携",
       title: "MCPサーバー(mcp_server.rs)",
-      body: "<p>会話UIとは別バイナリの、読み取り専用stdioベースMCPサーバー。<code>get_context_profile</code>(<code>_system/tier1-profile.md</code>を丸ごと返す)と<code>search_library</code>(ファイル単位の見出し一覧を返す、本文は含めない)の2ツールのみ持ち、書き込みツールは意図的に持たせていない。呼び出し時に埋め込み/RAGデーモンの起動確認も自分で行うため、会話UIなしでも単体で検索が完結する。</p>",
+      body: "<p>会話UIとは別バイナリの、読み取り専用stdioベースMCPサーバー。<code>get_context_profile</code>(<code>_system/tier1-profile.md</code>を丸ごと返す)と<code>search_library</code>(ファイル単位の見出し一覧を返す、本文は含めない)の2ツールのみ持ち、書き込みツールは意図的に持たせていない。呼び出し時に埋め込み/RAGデーモンの起動確認も自分で行うため、会話UIなしでも単体で検索が完結する。</p><p>Ver3.3(時間認識検索)で<code>search_library</code>に<code>include_history</code>引数を追加。trueにすると経緯モード(deprecated/archive込み、date降順)で検索する。「前はどうだったか」のような時系列・変遷が重要な質問かどうかは、外部AI(呼び出し元)側の判断に委ねる設計。</p>",
       paths: ["system/src-tauri/src/bin/mcp_server.rs"]
     },
     shiori_save: {
       eyebrow: "外部連携",
       title: "shiori-save CLI",
-      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは<code>_system/tags.yaml</code>で正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(PendingModalで承認・却下)。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層に、resourceは<code>30-resources/</code>直下に、profileは<code>category</code>指定があれば<code>40-profile/{category}/</code>(未指定なら直下)に振り分ける。</p>",
+      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは<code>_system/tags.yaml</code>で正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(PendingModalで承認・却下)。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層に、resourceは<code>30-resources/</code>直下に、profileは<code>category</code>指定があれば<code>40-profile/{category}/</code>(未指定なら直下)に振り分ける。</p><p>Ver3.3(時間認識検索)で<code>date</code>(記事の作成日時、ISO8601)を保存の都度、実行時刻で決定的に上書きするようになった。type/kindの判定と同じく、日時のような機械的に決まる値はAIの手動入力に委ねず、CLI側で確実に付与する。</p>",
       paths: ["system/src-tauri/src/bin/shiori_save.rs — decide_destination()"]
     },
     shared_daemon_concept: {

@@ -8,6 +8,10 @@ use serde::{Deserialize, Serialize};
 struct SearchRequest<'a> {
     query: &'a str,
     top_k: u32,
+    // 詩織Ver3.3(時間認識検索)で新設。"current"/"history"。省略時は
+    // services/rag/app.py側のデフォルト("current")に委ねる。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<&'a str>,
 }
 
 #[derive(Deserialize)]
@@ -25,8 +29,24 @@ pub struct SearchResultItem {
 }
 
 pub fn search(port: u16, query: &str, top_k: u32) -> Result<Vec<SearchResultItem>, String> {
+    search_with_mode(port, query, top_k, None)
+}
+
+// history_guard(詩織Ver3.3、時間認識検索)向け。deprecated/archive込みで
+// date降順に並べ替えて返す経緯モードで検索する(app.pyの_retrieve_and_rerank
+// 参照)。
+pub fn search_history(port: u16, query: &str, top_k: u32) -> Result<Vec<SearchResultItem>, String> {
+    search_with_mode(port, query, top_k, Some("history"))
+}
+
+fn search_with_mode(
+    port: u16,
+    query: &str,
+    top_k: u32,
+    mode: Option<&str>,
+) -> Result<Vec<SearchResultItem>, String> {
     let url = format!("http://127.0.0.1:{port}/search");
-    let body = SearchRequest { query, top_k };
+    let body = SearchRequest { query, top_k, mode };
 
     ureq::post(&url)
         .timeout(Duration::from_secs(30))
@@ -111,6 +131,10 @@ struct SearchLibraryRequest<'a> {
     offset: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     filter: Option<LibrarySearchFilter<'a>>,
+    // 詩織Ver3.3(時間認識検索)で新設。"current"/"history"。省略時は
+    // services/rag/app.py側のデフォルト("current")に委ねる。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<&'a str>,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -130,6 +154,10 @@ pub struct SearchLibraryResultItem {
     pub path: String,
     // frontmatterのtitle(無ければ空文字列、2026-09-16追加)。
     pub title: String,
+    // frontmatterのrelated(詩織Ver3.3、時間認識検索で追加)。経緯モードで
+    // 新旧の記事を辿るための手がかり。
+    #[serde(default)]
+    pub related: Vec<String>,
 }
 
 // MCPサーバーのsearch_libraryツール向け(詩織Ver2.0設計指示書v3、9章)。
@@ -145,9 +173,11 @@ pub fn search_library(
     limit: u32,
     offset: u32,
     filter: Option<LibrarySearchFilter>,
+    include_history: bool,
 ) -> Result<Vec<SearchLibraryResultItem>, String> {
     let url = format!("http://127.0.0.1:{port}/search_library");
-    let body = SearchLibraryRequest { query, limit, offset, filter };
+    let mode = include_history.then_some("history");
+    let body = SearchLibraryRequest { query, limit, offset, filter, mode };
 
     ureq::post(&url)
         .timeout(Duration::from_secs(30))

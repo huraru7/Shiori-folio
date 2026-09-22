@@ -1554,7 +1554,7 @@ pub struct SearchLibraryResultDto {
 #[tauri::command]
 fn search_library(query: String, limit: u32, offset: u32) -> Result<Vec<SearchLibraryResultDto>, String> {
     let config = app_config()?;
-    let results = rag_client::search_library(config.rag.port, &query, limit, offset, None)?;
+    let results = rag_client::search_library(config.rag.port, &query, limit, offset, None, false)?;
     Ok(results
         .into_iter()
         .map(|r| SearchLibraryResultDto {
@@ -2351,6 +2351,81 @@ fn build_identity_guard_context(
     ))
 }
 
+// 「前はどうだったか」「以前と何が変わったか」のような、経緯・変遷を尋ねる
+// 質問はidentity_guardと同じ理由(LLMの協力に依存する強制ルーティングは
+// 信頼できない)でRust側のキーワード検知に切り替える(詩織Ver3.3、時間
+// 認識検索)。この種の質問はRAGの通常モード(現在モード、新しさ優先+
+// deprecated除外)では過去の情報が不利に扱われ、「前はどうだったか」に
+// 正しく答えられない構造的な弱さがあるため、経緯モード(deprecated/
+// archive込み、date降順)での検索を強制する。
+//
+// 「変わった」は「気持ちが変わった」等、時間の経緯を尋ねる質問以外でも
+// 頻出するため誤爆しやすく、標準キーワードから外している。
+const HISTORY_GUARD_KEYWORDS: [&str; 4] = ["前は", "以前は", "昔は", "かつて"];
+
+fn is_history_question(text: &str) -> bool {
+    HISTORY_GUARD_KEYWORDS.iter().any(|k| text.contains(k))
+}
+
+// identity_guardのIDENTITY_GUARD_CANDIDATE_TOP_K/MAX_RESULTSと同じ考え方。
+// 経緯モードはheadingでの絞り込みを行わない(アイデンティティ質問と違い
+// 話題が「詩織自身」に限定されないため)ぶん、候補・採用件数はidentity_guard
+// と揃えている。
+const HISTORY_GUARD_CANDIDATE_TOP_K: u32 = 10;
+const HISTORY_GUARD_MAX_RESULTS: usize = 5;
+
+// 経緯を尋ねる質問と判定された場合に、search_knowledgeを経緯モード
+// (rag_client::search_history)でRust側が直接実行し、結果をcontextとして
+// 組み立てる(build_identity_guard_contextと同じ構造)。
+fn build_history_guard_context(
+    config: &AppConfig,
+    text: &str,
+    sources_out: &mut Option<Vec<KnowledgeResultDto>>,
+) -> Option<String> {
+    let normalized = normalize_search_query(text);
+    let mut relevant =
+        rag_client::search_history(config.rag.port, &normalized, HISTORY_GUARD_CANDIDATE_TOP_K)
+            .ok()?;
+    relevant.truncate(HISTORY_GUARD_MAX_RESULTS);
+
+    let tool_result = if relevant.is_empty() {
+        "該当する記録は見つかりませんでした。".to_string()
+    } else {
+        let context = relevant
+            .iter()
+            .map(format_shelf_reference)
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        *sources_out = Some(
+            relevant
+                .into_iter()
+                .map(|r| KnowledgeResultDto {
+                    id: r.id,
+                    text: r.text,
+                    source: r.source,
+                    heading: r.heading,
+                    source_category: r.source_category,
+                })
+                .collect(),
+        );
+        context
+    };
+
+    Some(format!(
+        "ふらるさんは過去と現在の経緯・変遷について質問しています(「前は」「以前は」\n\
+         のような言い回し)。以下の[参考情報]は、deprecated・アーカイブ済みの記録も\n\
+         含めて新しい順に並べた検索結果の所在情報です(本文はここには含まれていません)。\n\
+         古い記録と新しい記録が混在していることを踏まえ、何がいつ変わったのかを\n\
+         見比べられるように案内してください。中身を答えるのではなく、「その経緯に\n\
+         ついての記録がありますよ、開いて確認してみてください」のように、記録の場所を\n\
+         案内してください。想像で経緯を作り出すことは絶対にしないでください。\n\
+         関係していそうな記録が見当たらない場合や、「該当する記録は見つかりませんでした」\n\
+         と書かれている場合は、正直に「それは、ちょっと分からないですね」のように\n\
+         伝えてください。\n\n\
+         [参考情報]\n{tool_result}"
+    ))
+}
+
 // 「メモして」「記録して」「覚えておいて」という明確な保存意図をRust側で検知し、
 // LLMの判断を経由せず直接メモを保存する(identity_guardと同じ考え方。以前の
 // task_guardと同様、「保存すべきかどうか」をLLMの判断に委ねると、呼び出しを
@@ -2491,13 +2566,32 @@ fn send_message_impl(
         None
     };
 
+    // identity_guard/memo_guardのどちらでもない場合、経緯・変遷を尋ねる
+    // 質問でないか確認する(詩織Ver3.3、時間認識検索)。
+    let history_guard_context = if identity_guard_context.is_none() && memo_guard_context.is_none()
+    {
+        if is_history_question(&text) {
+            eprintln!("[history_guard] 経緯・変遷関連のキーワードを検知し、経緯モードでsearch_knowledgeを直接実行します");
+            active_tool = Some("search_knowledge".to_string());
+            on_activity("search_knowledge");
+            build_history_guard_context(&config, &text, &mut sources)
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
     let passive_recall_start = std::time::Instant::now();
-    let passive_recall = if identity_guard_context.is_some() || memo_guard_context.is_some() {
+    let passive_recall = if identity_guard_context.is_some()
+        || memo_guard_context.is_some()
+        || history_guard_context.is_some()
+    {
         None
     } else {
         let context = build_passive_recall_context(config.rag.port, &text, &mut sources);
-        // identity_guard/memo_guardで代替された場合は「常時検索」を試みてすら
-        // いないため集計対象に含めない。実際に試みたときだけ数える。
+        // identity_guard/memo_guard/history_guardで代替された場合は「常時検索」を
+        // 試みてすらいないため集計対象に含めない。実際に試みたときだけ数える。
         use std::sync::atomic::Ordering;
         PASSIVE_RECALL_TOTAL_COUNT.fetch_add(1, Ordering::Relaxed);
         if context.is_some() {
@@ -2518,6 +2612,8 @@ fn send_message_impl(
     if let Some(context) = &identity_guard_context {
         messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
     } else if let Some(context) = &memo_guard_context {
+        messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
+    } else if let Some(context) = &history_guard_context {
         messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
     } else if let Some(context) = &passive_recall {
         messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
@@ -2877,6 +2973,28 @@ fn greet(name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // history_guard(詩織Ver3.3)のキーワード検知が狙い通りに発火し、かつ
+    // 明示的に除外した「変わった」では誤爆しないことを確認する軽量テスト
+    // (RAGサーバー不要)。
+    // cargo test --lib history_guard_keyword_detection
+    #[test]
+    fn history_guard_keyword_detection() {
+        for text in [
+            "詩織の声、前はどんな感じだったっけ",
+            "以前はどういう構成だったの",
+            "昔はもっとシンプルだった気がする",
+            "かつての設計はどうなってたの",
+        ] {
+            assert!(is_history_question(text), "発話=\"{text}\": history_guardが発火していない");
+        }
+        for text in ["気持ちが変わった", "今日はいい天気だね", "詩織って何?"] {
+            assert!(
+                !is_history_question(text),
+                "発話=\"{text}\": history_guardが誤爆している"
+            );
+        }
+    }
 
     // resolve_engine_exeが「Release/あり」「Release/なし」どちらのビルド出力構成でも
     // 実在するパスを見つけられることを確認する軽量テスト(実バイナリ不要、tempdirで代用)。

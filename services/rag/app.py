@@ -6,7 +6,9 @@ app:app --port 8083 --host 127.0.0.1
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import chromadb
 import httpx
@@ -53,6 +55,9 @@ def _initial_index_sync() -> None:
 class SearchRequest(BaseModel):
     query: str
     top_k: int = 5
+    # 詩織Ver3.3(時間認識検索)で新設。"current"(デフォルト)/"history"は
+    # _retrieve_and_rerank参照。
+    mode: Literal["current", "history"] = "current"
 
 
 class SearchResultItem(BaseModel):
@@ -103,9 +108,52 @@ RERANK_CANDIDATE_POOL_MAX = 200
 # 明確に関連するチャンクは通しつつ、無関係なチャンクは弾けるようにしている。
 RERANK_SCORE_THRESHOLD = 0.3
 
+# 詩織Ver3.3(時間認識検索)。現在モードでの時間減衰の強さ。
+# 直近30日は減衰なし(新着記事を不利にしない)、30〜365日は1.0→0.8へ
+# 線形に減衰、365日を超えたら0.8で下げ止める(「古いから無価値」には
+# しない。あくまでrerank_scoreへの軽い補正に留める)。
+_DECAY_GRACE_DAYS = 30
+_DECAY_FULL_DAYS = 365
+_DECAY_FLOOR = 0.8
+
+
+def _parse_date(date_str: str) -> datetime | None:
+    """frontmatterのdate(ISO8601想定)をdatetimeへ変換する。空文字列・
+    パース失敗時はNone(呼び出し側で「日付不明」として扱う)。date必須化
+    (詩織Ver3.3)前に保存された記事が万一残っていた場合の安全弁でもある。
+    """
+    if not date_str:
+        return None
+    try:
+        dt = datetime.fromisoformat(date_str)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def _time_decay_factor(date_str: str) -> float:
+    """現在モードでrerank_scoreに掛け合わせる時間減衰係数。日付不明な
+    記事は不利にしないよう減衰させない(1.0のまま)。
+    """
+    dt = _parse_date(date_str)
+    if dt is None:
+        return 1.0
+    days = (datetime.now(timezone.utc) - dt).total_seconds() / 86400
+    if days <= _DECAY_GRACE_DAYS:
+        return 1.0
+    if days >= _DECAY_FULL_DAYS:
+        return _DECAY_FLOOR
+    progress = (days - _DECAY_GRACE_DAYS) / (_DECAY_FULL_DAYS - _DECAY_GRACE_DAYS)
+    return 1.0 - progress * (1.0 - _DECAY_FLOOR)
+
 
 def _retrieve_and_rerank(
-    query: str, where: dict | None = None, apply_threshold: bool = True
+    query: str,
+    where: dict | None = None,
+    apply_threshold: bool = True,
+    mode: Literal["current", "history"] = "current",
 ) -> list[tuple[str, str, dict, float, float]]:
     """クエリに対する候補チャンクを取得しリランクする。/search・/search_libraryの
     共通処理。返り値はrerank_score降順(chunk_id, document, metadata, distance,
@@ -125,6 +173,14 @@ def _retrieve_and_rerank(
     はFalseを渡して閾値を無効化する。/search(会話UI向け、本文をそのまま
     文脈に注入する用途)は無関係な候補が混入する副作用が大きいため、
     従来通りTrue(閾値あり)のままにする。
+
+    modeは詩織Ver3.3(時間認識検索)で新設。"current"(デフォルト)は
+    status: deprecatedの記事を除外し、rerank_scoreに時間減衰(新しいほど
+    有利)を掛ける。「今どうなっているか」を答える通常の検索向け。
+    "history"はdeprecated/archive含めて絞り込みをかけず、rerank_scoreでは
+    なくdate降順(新しい順)で並べ替えて返す。過去と現在を見比べたい
+    質問(「前はどうだったか」等)向けで、新旧両方を漏らさず時系列で
+    並べることを優先する(データ管理法見直し3-1節のrecall重視の方針を踏襲)。
     """
     # 【Ver3.0で変更】検索の都度の全件mtimeスキャン(sync_index)は廃止した。
     # 書き込み時フック(/reindex_file)+起動時1回だけの全件スキャンに切り替えた
@@ -139,9 +195,17 @@ def _retrieve_and_rerank(
     # 候補プールにすら入らないことがある(下記コメント参照)ため、コレクション
     # の実際の総件数を上限として、可能な限り全件をリランカーの判断に委ねる。
     pool_size = min(collection.count(), RERANK_CANDIDATE_POOL_MAX)
+
+    # 現在モードのみstatus: deprecatedを候補プールの時点で除外する
+    # (経緯モードはdeprecatedも含めて見比べたいので絞り込まない)。
+    combined_where = where
+    if mode == "current":
+        status_filter = {"status": {"$ne": "deprecated"}}
+        combined_where = {"$and": [where, status_filter]} if where else status_filter
+
     query_kwargs: dict = {"query_embeddings": [query_embedding], "n_results": pool_size}
-    if where:
-        query_kwargs["where"] = where
+    if combined_where:
+        query_kwargs["where"] = combined_where
     result = collection.query(**query_kwargs)
 
     ids = result["ids"][0]
@@ -171,6 +235,21 @@ def _retrieve_and_rerank(
     rerank_scores = rerank(query, passages)
 
     candidates = list(zip(ids, documents, metadatas, distances, rerank_scores))
+
+    if mode == "history":
+        # 経緯モードはrerank_scoreではなくdate降順(新しい順)で並べる。
+        # 日付不明の記事は最後尾に回す(datetime.minでの比較)。
+        candidates.sort(
+            key=lambda c: _parse_date(c[2].get("date", "")) or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        return candidates
+
+    # 現在モードは時間減衰をrerank_scoreに掛け合わせてから並べ替える。
+    candidates = [
+        (i, d, m, dist, score * _time_decay_factor(m.get("date", "")))
+        for i, d, m, dist, score in candidates
+    ]
     candidates.sort(key=lambda c: c[4], reverse=True)
     if apply_threshold:
         candidates = [c for c in candidates if c[4] >= RERANK_SCORE_THRESHOLD]
@@ -355,7 +434,7 @@ def search(req: SearchRequest):
     (search_knowledgeツール)がいずれもこのエンドポイントを使う。挙動は
     Ver2.0でも変更しない(/search_libraryとは別に維持する。下記参照)。
     """
-    candidates = _retrieve_and_rerank(req.query)[: req.top_k]
+    candidates = _retrieve_and_rerank(req.query, mode=req.mode)[: req.top_k]
 
     items: list[SearchResultItem] = []
     for chunk_id, doc, meta, dist, score in candidates:
@@ -388,6 +467,10 @@ class SearchLibraryRequest(BaseModel):
     # 1回目はoffset=0、続きが欲しければoffset=20, 40...と増やして再クエリする。
     offset: int = 0
     filter: LibrarySearchFilter | None = None
+    # 詩織Ver3.3(時間認識検索)で新設。"current"(デフォルト)/"history"は
+    # _retrieve_and_rerank参照。MCPサーバーのsearch_libraryツールでは
+    # include_historyパラメータがこれに変換される。
+    mode: Literal["current", "history"] = "current"
 
 
 class FileHeading(BaseModel):
@@ -410,6 +493,9 @@ class SearchLibraryResultItem(BaseModel):
     path: str
     # frontmatterのtitle(無ければ空文字列)。2026-09-16追加。
     title: str
+    # frontmatterのrelated(無ければ空リスト)。詩織Ver3.3(時間認識検索)で
+    # 追加。経緯モードで新旧の記事を辿るための手がかり。
+    related: list[str] = []
 
 
 def _resolve_source_path(source_category: str, source: str) -> str:
@@ -459,20 +545,23 @@ def search_library(req: SearchLibraryRequest):
         elif len(conditions) > 1:
             where = {"$and": conditions}
 
-    candidates = _retrieve_and_rerank(req.query, where, apply_threshold=False)
+    candidates = _retrieve_and_rerank(req.query, where, apply_threshold=False, mode=req.mode)
 
-    # ファイル単位(source)に集約する。candidatesは既にスコア降順のため、
-    # 各ファイルの初出順=そのファイルの最高スコア順になる。
+    # ファイル単位(source)に集約する。candidatesは既にスコア降順
+    # (経緯モードではdate降順)のため、各ファイルの初出順がそのまま
+    # ファイルの並び順になる。
     files: dict[str, dict] = {}
     order: list[str] = []
     for _chunk_id, _doc, meta, _dist, score in candidates:
         source = meta.get("source", "")
         if source not in files:
+            related_raw = meta.get("related", "")
             files[source] = {
                 "source_category": meta.get("source_category", "uncategorized"),
                 "headings": [],
                 "best_score": score,
                 "title": meta.get("title", ""),
+                "related": related_raw.split("|") if related_raw else [],
             }
             order.append(source)
         files[source]["headings"].append(FileHeading(heading=meta.get("heading", ""), rerank_score=score))
@@ -485,6 +574,7 @@ def search_library(req: SearchLibraryRequest):
             best_score=files[source]["best_score"],
             path=_resolve_source_path(files[source]["source_category"], source),
             title=files[source]["title"],
+            related=files[source]["related"],
         )
         for source in order
     ]

@@ -51,6 +51,13 @@ struct SearchLibraryArgs {
     /// frontmatterのprojectで絞り込む。省略可
     #[serde(default)]
     project: Option<String>,
+    /// 経緯モード(詩織Ver3.3、時間認識検索)。trueにすると、
+    /// status: deprecatedやアーカイブ済みの記事も含め、新しい順に
+    /// 並べ替えて返す。「前はどうだったか」「過去と現在を見比べたい」
+    /// といった時系列・変遷が重要な質問のときに使う。falseの場合は
+    /// deprecatedを除外し、新しい記事を優先する通常の検索(デフォルト)
+    #[serde(default)]
+    include_history: bool,
 }
 
 fn default_limit() -> u32 {
@@ -100,7 +107,7 @@ impl ShioriLibrary {
     }
 
     #[tool(
-        description = "詩織のライブラリ(library/)をクエリで検索し、ファイル単位に集約した見出し一覧を返す(本文は含まない。棚の場所を教えるだけで内容の合成はしない)。各結果には実ファイルへの絶対パス(path)が含まれるため、本文を読みたい場合はReadツール等で直接開ける。スコアによる足切りは行わないため、返却件数がlimit未満になるまでoffsetを増やして同じクエリで呼び直すと、関連しうる候補を漏らさず確認できる"
+        description = "詩織のライブラリ(library/)をクエリで検索し、ファイル単位に集約した見出し一覧を返す(本文は含まない。棚の場所を教えるだけで内容の合成はしない)。各結果には実ファイルへの絶対パス(path)が含まれるため、本文を読みたい場合はReadツール等で直接開ける。スコアによる足切りは行わないため、返却件数がlimit未満になるまでoffsetを増やして同じクエリで呼び直すと、関連しうる候補を漏らさず確認できる。「前はどうだったか」のように時系列・変遷が重要な質問にはinclude_history: trueを指定すると、deprecated/アーカイブ済みの記事も含め新しい順に並べ替えて返す"
     )]
     async fn search_library(
         &self,
@@ -148,9 +155,15 @@ impl ShioriLibrary {
             None
         };
 
-        let results =
-            rag_client::search_library(backend.rag_port, &args.query, args.limit, args.offset, filter)
-                .map_err(|e| McpError::internal_error(e, None))?;
+        let results = rag_client::search_library(
+            backend.rag_port,
+            &args.query,
+            args.limit,
+            args.offset,
+            filter,
+            args.include_history,
+        )
+        .map_err(|e| McpError::internal_error(e, None))?;
 
         let json = serde_json::to_string_pretty(&results)
             .map_err(|e| McpError::internal_error(format!("結果のJSON化に失敗: {e}"), None))?;

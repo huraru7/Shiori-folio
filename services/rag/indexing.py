@@ -26,6 +26,10 @@ INDEX_STATE_FILENAME = ".index_state.json"
 _FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
 _INDEX_FALSE_RE = re.compile(r"^index:\s*false\s*$", re.MULTILINE | re.IGNORECASE)
 _TITLE_RE = re.compile(r"^title:\s*(.+?)\s*$", re.MULTILINE)
+# 詩織Ver3.3(時間認識検索)で新設。status/dateはいずれも_TITLE_REと同じ理由
+# (pyyaml等を追加依存させない軽量な抽出)で正規表現のみを使う。
+_STATUS_RE = re.compile(r"^status:\s*(.+?)\s*$", re.MULTILINE)
+_DATE_RE = re.compile(r"^date:\s*(.+?)\s*$", re.MULTILINE)
 
 
 def _is_indexable(text: str) -> bool:
@@ -39,23 +43,79 @@ def _is_indexable(text: str) -> bool:
     return not _INDEX_FALSE_RE.search(m.group(1))
 
 
-def _extract_title(text: str) -> str:
-    """frontmatterのtitleを取り出す(GUIの一覧表示用、2026-09-16追加)。
-    _is_indexableと同じ理由でpyyaml等は使わず正規表現で軽量に済ませる。
-    値がダブル/シングルクォートで囲まれている場合(コロンを含むtitleは
-    クォート必須)は剥がして返す。見つからなければ空文字列(呼び出し側で
-    ファイル名にフォールバックする)。
+def _strip_quotes(raw: str) -> str:
+    """値がダブル/シングルクォートで囲まれている場合(コロンを含む値は
+    クォート必須)に剥がす。frontmatterの各フィールド抽出で共通して使う。
     """
+    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
+        return raw[1:-1]
+    return raw
+
+
+def _extract_frontmatter_field(pattern: re.Pattern[str], text: str) -> str:
     m = _FRONTMATTER_RE.match(text)
     if not m:
         return ""
-    title_m = _TITLE_RE.search(m.group(1))
-    if not title_m:
+    field_m = pattern.search(m.group(1))
+    if not field_m:
         return ""
-    raw = title_m.group(1)
-    if len(raw) >= 2 and raw[0] == raw[-1] and raw[0] in "\"'":
-        raw = raw[1:-1]
-    return raw
+    return _strip_quotes(field_m.group(1))
+
+
+def _extract_title(text: str) -> str:
+    """frontmatterのtitleを取り出す(GUIの一覧表示用、2026-09-16追加)。
+    _is_indexableと同じ理由でpyyaml等は使わず正規表現で軽量に済ませる。
+    見つからなければ空文字列(呼び出し側でファイル名にフォールバックする)。
+    """
+    return _extract_frontmatter_field(_TITLE_RE, text)
+
+
+def _extract_status(text: str) -> str:
+    """frontmatterのstatusを取り出す(詩織Ver3.3、時間認識検索で新設)。
+    見つからなければ空文字列(shiori_save.rsのデフォルト値"new"を前提とせず、
+    呼び出し側で明示的に扱う)。
+    """
+    return _extract_frontmatter_field(_STATUS_RE, text)
+
+
+def _extract_date(text: str) -> str:
+    """frontmatterのdate(ISO8601)を取り出す(詩織Ver3.3、時間認識検索で新設)。
+    見つからなければ空文字列(date必須化前の記事が万一残っていた場合の
+    フォールバックで、呼び出し側は空文字列を「不明」として扱う)。
+    """
+    return _extract_frontmatter_field(_DATE_RE, text)
+
+
+def _extract_related(text: str) -> list[str]:
+    """frontmatterのrelated(文字列配列)を取り出す(詩織Ver3.3、時間認識検索
+    で新設。新旧記事の手がかりとして経緯モードの検索結果に含める)。
+    shiori_save.rs(serde_yaml)が出力する2形式(ブロックスタイルの`- item`列と、
+    空配列の`[]`)に対応する。他フィールドと同じくpyyaml等は使わない軽量な
+    行ベースの抽出に留める。
+    """
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        return []
+    lines = m.group(1).splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.startswith("related:"):
+            continue
+        inline = stripped[len("related:") :].strip()
+        if inline.startswith("["):
+            inner = inline.strip("[]").strip()
+            return [_strip_quotes(item.strip()) for item in inner.split(",") if item.strip()]
+        items = []
+        for next_line in lines[i + 1 :]:
+            next_stripped = next_line.strip()
+            if next_stripped.startswith("- "):
+                items.append(_strip_quotes(next_stripped[2:].strip()))
+            elif next_stripped == "":
+                continue
+            else:
+                break
+        return items
+    return []
 
 
 def source_category_for(md_path: Path, knowledge_dir: Path) -> str:
@@ -107,6 +167,9 @@ def _embed_file(
         return 0
 
     title = _extract_title(text)
+    status = _extract_status(text)
+    date = _extract_date(text)
+    related = _extract_related(text)
 
     ids: list[str] = []
     documents: list[str] = []
@@ -134,6 +197,14 @@ def _embed_file(
                 # ファイルの更新日時(Unixタイムスタンプ、2026-09-16追加)。
                 # エクスプローラー風UIの「更新日時」列に使う。
                 "mtime": md_path.stat().st_mtime,
+                # frontmatterのstatus/date(詩織Ver3.3、時間認識検索で新設)。
+                # 現在モード/経緯モードのスコアリング・ソートに使う
+                # (app.py参照)。
+                "status": status,
+                "date": date,
+                # ChromaDBのmetadataはスカラー値のみ受け付けるため、リストは
+                # "|"区切りの1文字列に畳んで保存する(app.py側でsplitして復元)。
+                "related": "|".join(related),
             }
         )
 

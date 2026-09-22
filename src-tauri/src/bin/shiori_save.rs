@@ -81,6 +81,12 @@ struct Frontmatter {
     // 内部的に関連する他記事へのリンク(将来のリンクグラフの元データ)。
     #[serde(default)]
     related: Vec<String>,
+    // 記事の作成日時(ISO8601)。詩織Ver3.3で新設。Claude Codeが書いた値が
+    // あっても信用せず、保存の都度このCLIが現在時刻で上書きする(type/kind
+    // の判定と同じく、日時のような機械的に決まる値はAIの裁量に委ねず決定的に
+    // 付与する。手動入力によるズレ・付け忘れの防止が目的)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reason: Option<String>,
     // 上記以外のfrontmatterフィールドは検証・ルーティングの対象外だが、
@@ -133,6 +139,10 @@ fn main() -> Result<()> {
     let content = std::fs::read_to_string(&source)
         .with_context(|| format!("{}の読み込みに失敗", source.display()))?;
     let (mut fm, body) = split_frontmatter(&content)?;
+
+    // dateは常にCLI実行時刻で上書きする(Claude Codeが書いた値があっても
+    // 信用しない。理由はFrontmatter構造体のコメント参照)。
+    fm.date = Some(chrono::Local::now().to_rfc3339());
 
     // タグは常に正規化する(inbox行きになる場合でも、表記ゆれの統一自体は
     // 後で見返したときに有用なため)。
