@@ -40,7 +40,7 @@ pub fn no_console_window(cmd: &mut Command) {
 pub fn no_console_window(_cmd: &mut Command) {}
 
 // config.json のうちバックエンド起動に必要な部分のみを読む
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct LlmConfig {
     model_path: String,
@@ -51,7 +51,7 @@ struct LlmConfig {
     gpu_layers: Option<u32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct EmbeddingConfig {
     model_path: String,
@@ -69,14 +69,14 @@ struct EmbeddingConfig {
     context_size: Option<u32>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct SttConfig {
     model_path: String,
     port: u16,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct RagConfig {
     port: u16,
@@ -90,7 +90,7 @@ fn default_passive_recall_threshold() -> f64 {
     0.55
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct TtsConfig {
     model_path: String,
@@ -140,7 +140,7 @@ fn default_true() -> bool {
     true
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 struct AppConfig {
     llm: LlmConfig,
     embedding: EmbeddingConfig,
@@ -220,7 +220,7 @@ fn get_tts_failures() -> Result<Vec<TtsFailureDto>, String> {
     rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct ServiceStatus {
     name: String,
     port: u16,
@@ -471,119 +471,220 @@ fn emit_startup_stage(app: Option<&tauri::AppHandle>, label: &str) {
     }
 }
 
-fn start_backend_services_impl(
-    procs: &mut BackendProcesses,
-    app: Option<&tauri::AppHandle>,
-) -> Result<Vec<ServiceStatus>, String> {
-    let root = project_root();
-    let config = load_config(&root)?;
+// 起動画面(StartupScreen)に、個々のサービス(LLM/embedding/RAG)の起動状況を
+// 都度通知するためのイベント。2026-10-02(バックエンド起動の並列化)で新設。
+// 単一ラベルのshiori:startup-stageと異なり、サービスごとに「今どの段階か」
+// (起動中/成功/失敗)を個別に伝えられるため、フロントエンドは複数サービスの
+// 進捗を同時に表示できる。
+fn emit_service_status(app: Option<&tauri::AppHandle>, status: &ServiceStatus) {
+    use tauri::Emitter;
+    if let Some(app) = app {
+        let _ = app.emit("shiori:service-status", status);
+    }
+}
 
+// LLM(Qwen3-8B、思考モード無効化での運用が前提)を起動する。2026-10-02
+// (バックエンド起動の並列化)でstart_backend_services_implから切り出した。
+// embeddingと独立に別スレッドで並列実行するための分離で、起動ロジック自体は
+// 変更していない。
+fn start_llm_service(
+    root: &Path,
+    config: &AppConfig,
+    app: Option<&tauri::AppHandle>,
+) -> (ServiceStatus, Option<Child>) {
+    emit_startup_stage(app, "会話用のAIモデルを読み込んでいます");
     let llama_server_exe =
         resolve_engine_exe(&root.join("third_party/llama.cpp/build"), "llama-server");
-
-    let mut results = Vec::new();
-
-    // LLM (Qwen3-8B、思考モード無効化での運用が前提)
-    {
-        emit_startup_stage(app, "会話用のAIモデルを読み込んでいます");
-        let model_path = root.join(&config.llm.model_path);
-        let ctx = config.llm.context_size.unwrap_or(8192).to_string();
-        let gpu_layers = config.llm.gpu_layers.unwrap_or(999).to_string();
-        let port_str = config.llm.port.to_string();
-        // --jinja: GGUF埋め込みのチャットテンプレートをMinjaで評価させるためのフラグ。
-        // llm_client.rsが送るchat_template_kwargs(enable_thinking: false)はこのフラグが
-        // ないと無視される。Qwen2.5等、思考モードを持たないモデルのテンプレートは
-        // このキーワード引数を単に参照しないだけなので、フラグ自体を常時付けても
-        // 無害であることを実機確認済み(2026-08-13)。
-        let args = [
-            "--port",
-            &port_str,
-            "--host",
-            "127.0.0.1",
-            "--n-gpu-layers",
-            &gpu_layers,
-            "--ctx-size",
-            &ctx,
-            "--jinja",
-        ];
-        match spawn_server(&llama_server_exe, &model_path, &args, "libs-llama", false) {
-            Ok(child) => {
-                procs.llm = Some(child);
-                let healthy = wait_for_health(config.llm.port, 30);
-                results.push(ServiceStatus {
-                    name: "llm".into(),
-                    port: config.llm.port,
-                    started: true,
-                    healthy,
-                    error: None,
-                });
-            }
-            Err(e) => results.push(ServiceStatus {
+    let model_path = root.join(&config.llm.model_path);
+    let ctx = config.llm.context_size.unwrap_or(8192).to_string();
+    let gpu_layers = config.llm.gpu_layers.unwrap_or(999).to_string();
+    let port_str = config.llm.port.to_string();
+    // --jinja: GGUF埋め込みのチャットテンプレートをMinjaで評価させるためのフラグ。
+    // llm_client.rsが送るchat_template_kwargs(enable_thinking: false)はこのフラグが
+    // ないと無視される。Qwen2.5等、思考モードを持たないモデルのテンプレートは
+    // このキーワード引数を単に参照しないだけなので、フラグ自体を常時付けても
+    // 無害であることを実機確認済み(2026-08-13)。
+    let args = [
+        "--port",
+        &port_str,
+        "--host",
+        "127.0.0.1",
+        "--n-gpu-layers",
+        &gpu_layers,
+        "--ctx-size",
+        &ctx,
+        "--jinja",
+    ];
+    let (status, child) = match spawn_server(&llama_server_exe, &model_path, &args, "libs-llama", false) {
+        Ok(child) => {
+            let healthy = wait_for_health(config.llm.port, 30);
+            (
+                ServiceStatus { name: "llm".into(), port: config.llm.port, started: true, healthy, error: None },
+                Some(child),
+            )
+        }
+        Err(e) => (
+            ServiceStatus {
                 name: "llm".into(),
                 port: config.llm.port,
                 started: false,
                 healthy: false,
                 error: Some(e.to_string()),
-            }),
-        }
-    }
-
-    // Embedding (nomic-embed-text)
-    {
-        emit_startup_stage(app, "検索用の埋め込みモデルを読み込んでいます");
-        // 詩織Ver2.0: embedding用llama-serverは会話UI・MCPサーバー・保存CLI等から
-        // 共有されるデーモンになったため(設計指示書v3、4章)、ヘルスチェック→ロック→
-        // 起動の共通ロジック(shared_daemon)を経由する。既に他プロセスが起動済みの
-        // 場合はOk(None)が返り、procs.embeddingはNoneのままになる(=「自分の管理下には
-        // 無いが動いている」ことを表す。詳細はshared_daemon.rsのコメント参照)。
-        match shared_daemon::ensure_daemon_running(
-            &root,
-            config.embedding.port,
-            ".shiori-embed.lock",
-            30,
-            || {
-                build_embedding_command(
-                    &root,
-                    &config.embedding.model_path,
-                    config.embedding.port,
-                    config.embedding.context_size,
-                    false,
-                )
             },
-        ) {
-            Ok(child) => {
-                if let Some(child) = child {
-                    procs.embedding = Some(child);
-                }
-                results.push(ServiceStatus {
-                    name: "embedding".into(),
-                    port: config.embedding.port,
-                    started: true,
-                    healthy: true,
-                    error: None,
-                });
-            }
-            Err(e) => results.push(ServiceStatus {
+            None,
+        ),
+    };
+    emit_service_status(app, &status);
+    (status, child)
+}
+
+// embedding用llama-server(nomic-embed-text)を起動する。2026-10-02で
+// start_backend_services_implから切り出した(LLMと同様、並列実行のため)。
+fn start_embedding_service(
+    root: &Path,
+    config: &AppConfig,
+    app: Option<&tauri::AppHandle>,
+) -> (ServiceStatus, Option<Child>) {
+    emit_startup_stage(app, "検索用の埋め込みモデルを読み込んでいます");
+    // 詩織Ver2.0: embedding用llama-serverは会話UI・MCPサーバー・保存CLI等から
+    // 共有されるデーモンになったため(設計指示書v3、4章)、ヘルスチェック→ロック→
+    // 起動の共通ロジック(shared_daemon)を経由する。既に他プロセスが起動済みの
+    // 場合はOk(None)が返り、呼び出し元のprocs.embeddingはNoneのままになる
+    // (=「自分の管理下には無いが動いている」ことを表す。詳細はshared_daemon.rsの
+    // コメント参照)。
+    let (status, child) = match shared_daemon::ensure_daemon_running(
+        root,
+        config.embedding.port,
+        ".shiori-embed.lock",
+        30,
+        || {
+            build_embedding_command(
+                root,
+                &config.embedding.model_path,
+                config.embedding.port,
+                config.embedding.context_size,
+                false,
+            )
+        },
+    ) {
+        Ok(child) => (
+            ServiceStatus {
+                name: "embedding".into(),
+                port: config.embedding.port,
+                started: true,
+                healthy: true,
+                error: None,
+            },
+            child,
+        ),
+        Err(e) => (
+            ServiceStatus {
                 name: "embedding".into(),
                 port: config.embedding.port,
                 started: false,
                 healthy: false,
                 error: Some(e),
-            }),
+            },
+            None,
+        ),
+    };
+    emit_service_status(app, &status);
+    (status, child)
+}
+
+// LLM/embedding/RAGサーバーを起動する。
+//
+// 【2026-10-02変更】以前はこの関数全体(=呼び出し元が握るBackendStateのロック)の
+// 中でLLM→embedding→RAGを順番に起動し、各サービスのヘルスチェック完了を
+// 待ってから次へ進んでいた。RAGサーバーの初回起動(ライブラリ全件のembedding
+// 計算で数十秒〜数分かかりうる)の間、get_system_info等の他コマンドが
+// BackendStateのロック待ちでブロックされ続け、アプリ全体が応答なしに見える
+// 不具合が実機で繰り返し発生した(2026-09-17・2026-10-02)。
+//
+// 【重要】最初の対策として各サービスをstd::thread::spawnするだけに留めた版を
+// 実機確認したところ、起動画面のカーソルがビーチボールになりボタンも反応しない
+// (=メインスレッドがブロックされたまま)という、修正前と同じ症状が再発した。
+// 原因は、tauriの同期コマンド(async fnでない#[tauri::command])はIPCを処理する
+// メインスレッド上でそのまま実行され、その中でスレッドのjoin()を待っても
+// メインスレッドのブロックは一切解消しない、という認識の誤りだった。この関数と
+// 呼び出し元のコマンド自体をasync fnにし、重い処理はtauri::async_runtime::
+// spawn_blocking(tokioのブロッキングスレッドプール)に積んで.awaitする形に
+// 変更している(これならメインスレッドは他のIPCメッセージを処理し続けられる)。
+//
+// LLMとembeddingは互いに独立なため並列に起動し、両方の起動処理(ヘルスチェック
+// 待ちを含む)が完了してから、結果(Child)を格納する瞬間だけ短時間ロックを取る
+// 設計にした。RAGサーバーはembedding-server起動後でないと起動できない(起動時の
+// _initial_index_syncがembeddingへ問い合わせるため)ため、LLM/embeddingの完了を
+// 待ってから続けて起動する。
+async fn start_backend_services_impl(
+    state: &BackendState,
+    app: Option<&tauri::AppHandle>,
+) -> Result<Vec<ServiceStatus>, String> {
+    let root = project_root();
+    let config = load_config(&root)?;
+
+    let llm_app = app.cloned();
+    let llm_root = root.clone();
+    let llm_config = config.clone();
+    let llm_task = tauri::async_runtime::spawn_blocking(move || {
+        start_llm_service(&llm_root, &llm_config, llm_app.as_ref())
+    });
+
+    let embedding_app = app.cloned();
+    let embedding_root = root.clone();
+    let embedding_config = config.clone();
+    let embedding_task = tauri::async_runtime::spawn_blocking(move || {
+        start_embedding_service(&embedding_root, &embedding_config, embedding_app.as_ref())
+    });
+
+    let (llm_status, llm_child) =
+        llm_task.await.map_err(|_| "LLM起動タスクが異常終了しました".to_string())?;
+    let (embedding_status, embedding_child) = embedding_task
+        .await
+        .map_err(|_| "embedding起動タスクが異常終了しました".to_string())?;
+
+    {
+        let mut procs = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(child) = llm_child {
+            procs.llm = Some(child);
+        }
+        if let Some(child) = embedding_child {
+            procs.embedding = Some(child);
         }
     }
 
-    // RAG検索サーバー(services/rag、Python/uvicorn)。以前はTauri側から起動する
-    // 処理が無く、図書館機能を使うたびに手動で`uvicorn`を起動する必要があった
-    // (2026-08-13、ウィンドウ表示崩れ修正の確認作業で発覚)。llm/embeddingと同じく
-    // 子プロセスとして自動起動し、タスクマネージャー上でもshiori-folio.exeの
-    // 子プロセスとして管理できるようにする。
-    //
-    // restart_llm_services経由でこの関数が再度呼ばれることがあるが、RAGサーバーは
-    // llm/embeddingの設定変更とは無関係なので、既に起動済みなら再起動しない
-    // (procs.rag.is_none()で判定)。
-    if procs.rag.is_none() {
-        results.push(start_rag_service(procs, app, &root, &config));
+    // RAG検索サーバー(services/rag、Python/uvicorn)。embeddingの起動完了後に
+    // 続けて起動する(依存関係)。restart_llm_services経由でこの関数が再度
+    // 呼ばれることがあるが、RAGはllm/embeddingの設定変更とは無関係なので、
+    // 既に起動済みなら再起動しない(procs.rag.is_none()で判定、元の挙動のまま
+    // 結果リストにも含めない)。
+    let rag_needs_start = {
+        let procs = state.0.lock().map_err(|e| e.to_string())?;
+        procs.rag.is_none()
+    };
+    let rag_status = if rag_needs_start {
+        let rag_app = app.cloned();
+        let rag_root = root.clone();
+        let rag_config = config.clone();
+        let (status, child) = tauri::async_runtime::spawn_blocking(move || {
+            start_rag_service_core(rag_app.as_ref(), &rag_root, &rag_config)
+        })
+        .await
+        .map_err(|_| "RAG起動タスクが異常終了しました".to_string())?;
+        {
+            let mut procs = state.0.lock().map_err(|e| e.to_string())?;
+            if procs.rag.is_none() {
+                if let Some(child) = child {
+                    procs.rag = Some(child);
+                }
+            }
+        }
+        Some(status)
+    } else {
+        None
+    };
+    if let Some(status) = &rag_status {
+        emit_service_status(app, status);
     }
 
     // STT(whisper.cpp)はVRAM軽量化のため常時起動せず、録音開始時にオンデマンドで
@@ -593,6 +694,10 @@ fn start_backend_services_impl(
     // 音声合成が失敗するため、このフェーズでは起動対象に含めない。
 
     emit_startup_stage(app, "準備が整いました");
+    let mut results = vec![llm_status, embedding_status];
+    if let Some(status) = rag_status {
+        results.push(status);
+    }
     Ok(results)
 }
 
@@ -649,6 +754,27 @@ pub fn build_embedding_command(
 // 共有デーモンとして起動できるようTauri固有の型に依存しない形で切り出した。
 // quiet_stdioはspawn_server参照(MCPサーバーからの起動時はtrueを渡すこと。
 // 理由はこのファイル内のquiet_stdioの説明コメントを参照)。
+// ChromaDBのRust版SQLiteバインディングが、外部SSD(ExFAT、macOSの新しいfskit
+// 経由マウント)上で新規DB作成の最初の接続から「attempt to write a readonly
+// database」で失敗する不具合が実機で見つかった(2026-10-02)。Python標準の
+// sqlite3モジュール(WALモード含む)では同じボリュームで問題なく書き込める
+// ことを確認済みで、ファイルシステムそのものではなくChromaDB側のSQLite実装が
+// 使うロック機構とfskitの組み合わせ固有の非互換と見られる。Windows側では
+// 同条件で問題が出ていないため、macOS限定でvectordbをMacのローカルディスク
+// (~/Library/Application Support/Shiori/vectordb)に逃がす。vectordbは
+// library/から再構築可能な派生データなので、OSごとに別々に持っても実害はない。
+#[cfg(target_os = "macos")]
+fn macos_local_vectordb_dir() -> Option<PathBuf> {
+    let home = std::env::var("HOME").ok()?;
+    Some(
+        Path::new(&home)
+            .join("Library")
+            .join("Application Support")
+            .join("Shiori")
+            .join("vectordb"),
+    )
+}
+
 pub fn build_rag_command(root: &Path, port: u16, quiet_stdio: bool) -> std::io::Result<Child> {
     let rag_dir = root.join("services/rag");
     // 【2026-08-13修正】ポータブル版(bin/<os>/rag-venv)はuv python installで
@@ -701,6 +827,12 @@ pub fn build_rag_command(root: &Path, port: u16, quiet_stdio: bool) -> std::io::
         // 強制する(2026-09-10追加)。
         .env("HF_HUB_OFFLINE", "1")
         .env("TRANSFORMERS_OFFLINE", "1");
+    #[cfg(target_os = "macos")]
+    if let Some(dir) = macos_local_vectordb_dir() {
+        if std::fs::create_dir_all(&dir).is_ok() {
+            cmd.env("SHIORI_VECTORDB_DIR", &dir);
+        }
+    }
     if quiet_stdio {
         // 【2026-09-10追加】真因はこちら。stdinを明示指定しないとCommandは
         // デフォルトで親プロセスの標準入力を継承する。MCPサーバー
@@ -741,14 +873,14 @@ pub fn load_search_backend_config(root: &Path) -> Result<SearchBackendConfig, St
 }
 
 // RAGサーバー(services/rag、uvicorn)を起動し、ヘルスチェックの結果を含めて返す。
-// start_backend_services_impl(初回起動)とretry_rag_service(起動画面の再試行ボタン)
-// の両方から呼ばれる共通処理として切り出した。
-fn start_rag_service(
-    procs: &mut BackendProcesses,
+// BackendProcessesのロックを取らない版(2026-10-02追加)。start_backend_services_impl
+// からspawn_blockingで(ロックの外で)呼べるようにするための分離で、起動ロジック
+// 自体は変更していない。
+fn start_rag_service_core(
     app: Option<&tauri::AppHandle>,
     root: &Path,
     config: &AppConfig,
-) -> ServiceStatus {
+) -> (ServiceStatus, Option<Child>) {
     emit_startup_stage(app, "詩織の図書館(検索インデックス)を読み込んでいます");
     // 詩織Ver2.0: RAG Pythonサーバーも会話UI・MCPサーバー・保存CLI等から共有
     // されるデーモンになったため(設計指示書v3、4章)、embedding用llama-serverと
@@ -758,26 +890,31 @@ fn start_rag_service(
     match shared_daemon::ensure_daemon_running(root, config.rag.port, ".shiori-rag.lock", 60, || {
         build_rag_command(root, config.rag.port, false)
     }) {
-        Ok(child) => {
-            if let Some(child) = child {
-                procs.rag = Some(child);
-            }
-            ServiceStatus {
-                name: "rag".into(),
-                port: config.rag.port,
-                started: true,
-                healthy: true,
-                error: None,
-            }
-        }
-        Err(e) => ServiceStatus {
-            name: "rag".into(),
-            port: config.rag.port,
-            started: false,
-            healthy: false,
-            error: Some(e),
-        },
+        Ok(child) => (
+            ServiceStatus { name: "rag".into(), port: config.rag.port, started: true, healthy: true, error: None },
+            child,
+        ),
+        Err(e) => (
+            ServiceStatus { name: "rag".into(), port: config.rag.port, started: false, healthy: false, error: Some(e) },
+            None,
+        ),
     }
+}
+
+// start_rag_service_coreを呼び、結果のChildをBackendProcessesへ格納するところまで
+// 行う薄いラッパー。retry_rag_service(同期的な呼び出しで十分な再試行ボタン用途)と
+// 既存テストはこちらを使う。
+fn start_rag_service(
+    procs: &mut BackendProcesses,
+    app: Option<&tauri::AppHandle>,
+    root: &Path,
+    config: &AppConfig,
+) -> ServiceStatus {
+    let (status, child) = start_rag_service_core(app, root, config);
+    if let Some(child) = child {
+        procs.rag = Some(child);
+    }
+    status
 }
 
 // RAGサーバーが起動失敗、またはヘルスチェックが通らないまま残ってしまった場合の
@@ -786,37 +923,57 @@ fn start_rag_service(
 // 呼び出し元が結果を見て明示的にこちらを呼ぶ必要がある)。
 // プロセスが残っていれば(起動はしたがヘルスチェックが通らなかった場合)一旦
 // 終了してから再度起動を試みる。
+// 【2026-10-02 async化】旧実装はこの関数全体(#[tauri::command]のasyncでない
+// fn)がtauriのIPC処理スレッド上でそのまま実行され、ensure_daemon_running内の
+// ヘルスチェックループ(最大60回×2.5秒)をメインスレッドで直接ブロックしていた。
+// 「再試行」ボタンを押した後アプリ全体が応答なしになる不具合の原因の一つだった
+// ため、重い処理をtauri::async_runtime::spawn_blockingへ逃がすasync fnに変更した。
 #[tauri::command]
-fn retry_rag_service(
-    state: tauri::State<BackendState>,
-    sys: tauri::State<Mutex<sysinfo::System>>,
+async fn retry_rag_service(
+    state: tauri::State<'_, BackendState>,
+    sys: tauri::State<'_, Mutex<sysinfo::System>>,
     app: tauri::AppHandle,
 ) -> Result<ServiceStatus, String> {
     let root = project_root();
     let config = load_config(&root)?;
-    let mut procs = state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(mut c) = procs.rag.take() {
-        let _ = c.kill();
-        let _ = c.wait();
-    } else {
-        // 共有デーモン化により、RAGがこのプロセスの管理下に無い(procsに
-        // 保持されていない、外部プロセスが起動した)場合がある。その場合は
-        // ロックファイルに記録されたPIDを頼りにkillする
-        // (2026-08-14、Ver2.0 Phase 2フォローアップ)。
-        let mut sys = sys.lock().map_err(|e| e.to_string())?;
-        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-        shared_daemon::kill_daemon(&sys, &root, ".shiori-rag.lock");
+    {
+        let mut procs = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(mut c) = procs.rag.take() {
+            let _ = c.kill();
+            let _ = c.wait();
+        } else {
+            // 共有デーモン化により、RAGがこのプロセスの管理下に無い(procsに
+            // 保持されていない、外部プロセスが起動した)場合がある。その場合は
+            // ロックファイルに記録されたPIDを頼りにkillする
+            // (2026-08-14、Ver2.0 Phase 2フォローアップ)。
+            let mut sys = sys.lock().map_err(|e| e.to_string())?;
+            sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+            shared_daemon::kill_daemon(&sys, &root, ".shiori-rag.lock");
+        }
     }
-    Ok(start_rag_service(&mut procs, Some(&app), &root, &config))
+    let rag_app = Some(app);
+    let rag_root = root;
+    let rag_config = config;
+    let (status, child) = tauri::async_runtime::spawn_blocking(move || {
+        start_rag_service_core(rag_app.as_ref(), &rag_root, &rag_config)
+    })
+    .await
+    .map_err(|e| format!("RAG再試行タスクが異常終了しました: {e}"))?;
+    {
+        let mut procs = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(child) = child {
+            procs.rag = Some(child);
+        }
+    }
+    Ok(status)
 }
 
 #[tauri::command]
-fn start_backend_services(
-    state: tauri::State<BackendState>,
+async fn start_backend_services(
+    state: tauri::State<'_, BackendState>,
     app: tauri::AppHandle,
 ) -> Result<Vec<ServiceStatus>, String> {
-    let mut procs = state.0.lock().map_err(|e| e.to_string())?;
-    start_backend_services_impl(&mut procs, Some(&app))
+    start_backend_services_impl(&state, Some(&app)).await
 }
 
 // ディスクの読み書き速度は瞬間値ではなく「前回ポーリングからの差分」から算出するため、
@@ -1180,29 +1337,35 @@ fn set_config(update: ConfigUpdate) -> Result<(), String> {
 // ポート番号やコンテキストサイズの変更を反映する。既存のllm/embeddingプロセスを
 // 止めてから、新しいconfig.jsonの値で起動し直す。ユーザーの明示操作(ボタン)からのみ
 // 呼ばれ、set_config成功後に自動では走らない(意図せずサービスが落ちるのを防ぐため)。
+// 【2026-10-02 async化】start_backend_services_impl/retry_rag_serviceと同じ理由
+// (旧実装はIPC処理スレッドをブロックしていた)でasync fnに変更した。
 #[tauri::command]
-fn restart_llm_services(
-    state: tauri::State<BackendState>,
-    sys: tauri::State<Mutex<sysinfo::System>>,
+async fn restart_llm_services(
+    state: tauri::State<'_, BackendState>,
+    sys: tauri::State<'_, Mutex<sysinfo::System>>,
     app: tauri::AppHandle,
 ) -> Result<Vec<ServiceStatus>, String> {
-    let mut procs = state.0.lock().map_err(|e| e.to_string())?;
-    if let Some(mut c) = procs.llm.take() {
-        let _ = c.kill();
+    {
+        let mut procs = state.0.lock().map_err(|e| e.to_string())?;
+        if let Some(mut c) = procs.llm.take() {
+            let _ = c.kill();
+        }
+        if let Some(mut c) = procs.embedding.take() {
+            let _ = c.kill();
+        } else {
+            // 共有デーモン化により、embeddingがこのプロセスの管理下に無い
+            // (procsに保持されていない、外部プロセスが起動した)場合がある。
+            // その場合はロックファイルに記録されたPIDを頼りにkillする
+            // (2026-08-14、Ver2.0 Phase 2フォローアップ)。
+            let root = project_root();
+            let mut sys = sys.lock().map_err(|e| e.to_string())?;
+            sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+            shared_daemon::kill_daemon(&sys, &root, ".shiori-embed.lock");
+        }
+        // start_backend_services_impl自身が必要なタイミングでロックを取り直す
+        // ため、ここでロックを解放してから呼ぶ(握ったまま渡すとデッドロックする)。
     }
-    if let Some(mut c) = procs.embedding.take() {
-        let _ = c.kill();
-    } else {
-        // 共有デーモン化により、embeddingがこのプロセスの管理下に無い
-        // (procsに保持されていない、外部プロセスが起動した)場合がある。
-        // その場合はロックファイルに記録されたPIDを頼りにkillする
-        // (2026-08-14、Ver2.0 Phase 2フォローアップ)。
-        let root = project_root();
-        let mut sys = sys.lock().map_err(|e| e.to_string())?;
-        sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
-        shared_daemon::kill_daemon(&sys, &root, ".shiori-embed.lock");
-    }
-    start_backend_services_impl(&mut procs, Some(&app))
+    start_backend_services_impl(&state, Some(&app)).await
 }
 
 // ホットキーの変更はtauri-plugin-global-shortcutの動的な再登録より、アプリ全体を
@@ -3090,12 +3253,14 @@ mod tests {
     #[test]
     #[ignore]
     fn start_backend_services_starts_and_health_checks_all_three() {
-        let mut procs = BackendProcesses::default();
-        let results = start_backend_services_impl(&mut procs, None).expect("should return status list");
+        let state = BackendState(Mutex::new(BackendProcesses::default()));
+        let results = tauri::async_runtime::block_on(start_backend_services_impl(&state, None))
+            .expect("should return status list");
         for status in &results {
             assert!(status.started, "{} failed to start: {:?}", status.name, status.error);
             assert!(status.healthy, "{} did not become healthy", status.name);
         }
+        let mut procs = state.0.lock().expect("lock poisoned");
         if let Some(mut c) = procs.llm.take() {
             let _ = c.kill();
         }

@@ -9,10 +9,18 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 16px;
   background: var(--bg-deep);
   opacity: 1;
   transition: opacity 500ms ease;
+  /* 2026-10-02追加: サービス別一覧+エラーパネルが同時に表示されると、
+     小さいウィンドウ高では縦方向に収まりきらずウィンドウ外へはみ出す
+     (起動画面はposition:fixed+inset:0でウィンドウぴったりに重なるため、
+     中身があふれても自動では見えなくなるだけで、操作不能な要素〈再試行
+     ボタン等〉が生まれてしまう)。auto-scrollできるようにして、収まらない
+     場合でも必ずすべての要素を操作できる状態を保証する。 */
+  overflow-y: auto;
+  padding-block: 24px;
 }
 
 .startup-screen--fade-out {
@@ -23,6 +31,7 @@
 .startup-screen__mark-wrap {
   position: relative;
   width: clamp(120px, 22vw, 220px);
+  flex-shrink: 0;
 }
 
 .startup-screen__mark {
@@ -56,15 +65,74 @@
   color: var(--paper-dim);
 }
 
+/* サービス(LLM/embedding/RAG)ごとの起動状況を見せる一覧(2026-10-02追加)。
+   LLM/embeddingが並列起動するようになったため、単一のstage-labelだけでは
+   どのサービスが終わっていてどれがまだなのか分からない問題への対応。 */
+.startup-screen__service-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.startup-screen__service-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--paper-dim);
+}
+
+.startup-screen__service-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--paper-dim);
+  opacity: 0.4;
+}
+
+/* 起動中(まだshiori:service-statusイベントが届いていない)は控えめに明滅させ、
+   「動いている」ことを示す。 */
+.startup-screen__service-row[data-state="pending"] .startup-screen__service-dot {
+  animation: startup-service-pulse 1.4s ease-in-out infinite;
+}
+
+.startup-screen__service-row[data-state="done"] .startup-screen__service-dot {
+  background: var(--safe);
+  opacity: 1;
+}
+
+.startup-screen__service-row[data-state="failed"] .startup-screen__service-dot {
+  background: var(--danger);
+  opacity: 1;
+}
+
+.startup-screen__service-row[data-state="failed"] .startup-screen__service-name {
+  color: var(--danger);
+}
+
+@keyframes startup-service-pulse {
+  0%, 100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
 .startup-screen__error-panel {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: clamp(280px, 60vw, 420px);
-  padding: 16px;
+  /* 2026-10-02: 縦方向の余白を詰めて、小さいウィンドウ高でもできるだけ
+     はみ出さないようにする(それでも収まらない場合は親のoverflow-y:autoで
+     スクロールして対応する)。 */
+  padding: 12px 16px;
   border-radius: 10px;
   background: var(--danger-bg);
   color: var(--danger);
+  flex-shrink: 0;
 }
 
 .startup-screen__error-title {

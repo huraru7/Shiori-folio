@@ -22,6 +22,13 @@ function serviceLabel(name: string): string {
   }
 }
 
+// 起動画面に常時表示する個別サービス一覧(2026-10-02追加)。LLM/embeddingが
+// 並列起動するようになったことで、単一のstageLabelだけでは「今どのサービスが
+// 終わっていて、どれがまだなのか」が分からなくなったため、サービスごとの
+// 進捗を個別に見せる。表示順は起動処理の依存関係(llm/embeddingが並列→
+// 両方完了後にragが続く)と対応させている。
+const SERVICE_ORDER = ["llm", "embedding", "rag"] as const;
+
 // 起動画面(2026-08-13新規実装)。当初はロゴの色づきを固定2.9秒のCSSアニメーション
 // だけで演出していたが、実際のバックエンド起動(LLM/埋め込み/RAG検索サーバーの
 // 起動〜モデル読み込み完了)には数秒〜十数秒かかるため、演出と実態が大きく
@@ -48,6 +55,9 @@ function StartupScreen({ onFinished }: Props) {
   // 起動呼び出しの順を保証した上で購読している(取りこぼし防止)。ここでは購読結果の
   // stateをそのまま表示するだけ。
   const stageLabel = useShioriStore((s) => s.startupStageLabel);
+  // サービスごとの起動状況(shiori:service-statusイベント経由)。まだイベントが
+  // 届いていないサービスはundefinedのままで「起動中」として表示する。
+  const serviceStatuses = useShioriStore((s) => s.serviceStatuses);
 
   // バックエンド起動の完了を実際に待ち受ける。App.tsx側でも同じ関数を呼んでいるが、
   // モジュールスコープのPromiseで多重呼び出しを防いでいるため、実際のinvoke()は
@@ -155,6 +165,19 @@ function StartupScreen({ onFinished }: Props) {
         />
       </div>
       <div className="startup-screen__stage-label">{stageLabel}</div>
+
+      <div className="startup-screen__service-list">
+        {SERVICE_ORDER.map((name) => {
+          const status = serviceStatuses[name];
+          const state = !status ? "pending" : status.healthy ? "done" : "failed";
+          return (
+            <div className="startup-screen__service-row" key={name} data-state={state}>
+              <span className="startup-screen__service-dot" aria-hidden="true" />
+              <span className="startup-screen__service-name">{serviceLabel(name)}</span>
+            </div>
+          );
+        })}
+      </div>
 
       {failedServices && failedServices.length > 0 && (
         <div className="startup-screen__error-panel">

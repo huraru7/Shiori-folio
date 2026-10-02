@@ -71,6 +71,14 @@ interface ShioriState {
   // 起動呼び出しより先にリスナー登録を済ませることで、登録前に発火したイベントを
   // 取りこぼすレースコンディションを防いでいる)。
   startupStageLabel: string;
+
+  // サービス(llm/embedding/rag)ごとの起動状況。2026-10-02(バックエンド起動の
+  // 並列化)で新設。shiori:service-statusイベントを購読して、サービスが
+  // 起動完了・失敗するたびに該当エントリだけ更新する。LLM/embeddingが並列に
+  // 起動するようになったことで、単一のstartupStageLabelだけでは「今どのサービスが
+  // 終わっていて、どれがまだなのか」が分からなくなったため、サービス単位で
+  // 個別に状態を持つ。
+  serviceStatuses: Record<string, ServiceStatus>;
 }
 
 export const useShioriStore = create<ShioriState>((set, get) => ({
@@ -175,6 +183,7 @@ export const useShioriStore = create<ShioriState>((set, get) => ({
   },
 
   startupStageLabel: "起動しています",
+  serviceStatuses: {},
 
   ensureBackendServicesStarted: () => {
     if (!backendServicesStartup) {
@@ -182,12 +191,27 @@ export const useShioriStore = create<ShioriState>((set, get) => ({
         // Rust側は起動処理を開始した直後から段階イベントを発行するため、
         // 先にリスナーを登録してから起動を呼び出す(順序を逆にすると、
         // 登録が完了する前に発行された最初のイベントを取りこぼす)。
-        const unlisten = await listen<{ label: string }>(
+        const unlistenStage = await listen<{ label: string }>(
           "shiori:startup-stage",
           (event) => {
             set({ startupStageLabel: event.payload.label });
           },
         );
+        // サービスごとの起動状況(2026-10-02追加)。LLM/embeddingは並列起動する
+        // ため、どちらか一方が終わってももう片方がまだ動いているという状態を
+        // 都度反映する。
+        const unlistenService = await listen<ServiceStatus>(
+          "shiori:service-status",
+          (event) => {
+            set((s) => ({
+              serviceStatuses: { ...s.serviceStatuses, [event.payload.name]: event.payload },
+            }));
+          },
+        );
+        const unlisten = () => {
+          unlistenStage();
+          unlistenService();
+        };
         let results: ServiceStatus[];
         try {
           results = await api.startBackendServices();
