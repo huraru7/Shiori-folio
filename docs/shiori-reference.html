@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.3(時間認識検索: 現在モード/経緯モード)</span>
+    <span class="home__chip"><b>世代</b> Ver3.4(企画書駆動によるAI間引き継ぎ)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -763,7 +763,26 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.3</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.4</span>
+        <span class="version-list__date">2026-09-22</span>
+      </div>
+      <p class="version-list__body">
+        実装前の方針提示(implementation-planning)が会話内で完結し、承認後の内容がlibrary/に
+        残らないまま実装に流れ込んでいたことが、Claude Code以外へ引き継げない構造的な原因だった。
+        これを解消するため、方針承認後・実装着手前に企画書をlibrary/へ書類化する運用を導入した
+        (企画書駆動によるAI間引き継ぎ)。<code>_system/CLAUDE.md</code>に「企画書」節を新設して
+        テンプレート(背景・目的/やること・やらないこと/受け入れ基準/前提知識/未確定事項)と
+        運用フローを追記し、「外部AI向けガイダンス」節にも企画書を起点とした引き継ぎ手順を加えた。
+        <code>_system/tags.yaml</code>へ<code>企画書</code>タグを登録し、Claude Code側の
+        implementation-planning skillには企画書の保存工程を追加。新しいfrontmatterフィールドや
+        <code>kind</code>は増やさず、既存の<code>kind: resource</code>とタグでの識別、既存の
+        アーカイブ運用の流用で実現した。コード(Rust/Python/React)の変更はなく、
+        文書・運用面の世代。この運用が実際に機能するかは今後の実装で検証する。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.3</span>
         <span class="version-list__date">2026-09-22</span>
       </div>
       <p class="version-list__body">
