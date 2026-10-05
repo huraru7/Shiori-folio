@@ -139,7 +139,21 @@ if [ "$TARGET_OS" = "mac" ]; then
   fi
   cp "$SHIORI_SAVE_SRC" "$BIN_DIR/shiori-save"
 
-  chmod +x "$BIN_DIR/llama-server" "$BIN_DIR/whisper-server" "$BIN_DIR/piper-plus-cli" "$BIN_DIR/shiori-save"
+  # mcp_server(Ver2.0 Phase 4、読み取り専用MCPサーバー)もOSフレームワークのみに
+  # 依存するため単体コピーで問題ない。project_root()は実行ファイルの場所から
+  # 上へたどってconfig.jsonを探すため、portable/bin/<os>/に置けば実機の
+  # library/・RAGを使う。開発ツリーのtarget/release/を.mcp.jsonで指したままだと
+  # 開発用の空library/・開発側のRAGを読んでしまうので、実機のMCPはここに置いた
+  # バイナリを指すこと(2026-10-05)。名前はshiori-saveと違いリネームしない
+  # (.mcp.jsonやsetup-mcp-server.mdの記載と揃える)。
+  MCP_SERVER_SRC="$SYSTEM_DIR/src-tauri/target/release/mcp_server"
+  if [ ! -f "$MCP_SERVER_SRC" ]; then
+    echo "エラー: $MCP_SERVER_SRC が見つかりません。先に (cd system/src-tauri && cargo build --release --bin mcp_server) を実行してください。" >&2
+    exit 1
+  fi
+  cp "$MCP_SERVER_SRC" "$BIN_DIR/mcp_server"
+
+  chmod +x "$BIN_DIR/llama-server" "$BIN_DIR/whisper-server" "$BIN_DIR/piper-plus-cli" "$BIN_DIR/shiori-save" "$BIN_DIR/mcp_server"
 else
   echo "警告: $TARGET_OS 向けのバイナリ配置は未対応のためスキップしました。" >&2
 fi

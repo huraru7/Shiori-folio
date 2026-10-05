@@ -177,6 +177,19 @@ if (-not (Test-Path $ShioriSaveExe)) {
 }
 Copy-Item $ShioriSaveExe (Join-Path $BinDir "shiori-save.exe") -Force
 
+# mcp_server(Ver2.0 Phase 4、読み取り専用MCPサーバー)。Mac版と同じく単体コピーで
+# 問題ない。project_root()は実行ファイルの場所から上へたどってconfig.jsonを探すため、
+# portable\bin\win\に置けば実機のlibrary\・RAGを使う。開発ツリーのtarget\release\を
+# 指したままだと開発用のlibrary\を読んでしまう(2026-10-05)。shiori-saveと違い
+# リネームしない(.mcp.jsonやsetup-mcp-server.mdの記載と揃える)。
+Write-Host "--- mcp_server ---"
+$McpServerExe = Join-Path $SystemDir "src-tauri\target\release\mcp_server.exe"
+if (-not (Test-Path $McpServerExe)) {
+    Write-Error "$McpServerExe が見つかりません。先に (cd system\src-tauri && cargo build --release --bin mcp_server) を実行してください。"
+    exit 1
+}
+Copy-Item $McpServerExe (Join-Path $BinDir "mcp_server.exe") -Force
+
 # --- 3. RAG用の可搬版Python環境(bin/win/rag-venv/) ---
 #
 # Mac版の教訓: uv venvはbin/pythonが移動元への絶対パスシンボリックリンクに
