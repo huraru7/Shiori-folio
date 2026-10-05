@@ -152,6 +152,10 @@ pub struct SearchLibraryResultItem {
     // 実ファイルへの絶対パス(見つからなければ空文字列)。app.py側で
     // source_category配下をrglobして解決している(2026-09-16追加)。
     pub path: String,
+    // sourceが.meta(素材のサイドカー、詩織Ver3.5)のとき、対応する実体の絶対パス。
+    // pathは説明(.meta)自体を指し、こちらが素材本体を指す。無ければ空文字列。
+    #[serde(default)]
+    pub asset_path: String,
     // frontmatterのtitle(無ければ空文字列、2026-09-16追加)。
     pub title: String,
     // frontmatterのrelated(詩織Ver3.3、時間認識検索で追加)。経緯モードで
@@ -223,6 +227,9 @@ pub struct LibraryFileItem {
     // エクスプローラー風UI刷新向け)。
     pub title: String,
     pub path: String,
+    // sourceが.metaのとき、対応する実体の絶対パス(無ければ空文字列、詩織Ver3.5)。
+    #[serde(default)]
+    pub asset_path: String,
     // library_rootからの相対パス(/区切り)。GUIのフォルダツリー構築に使う。
     pub relative_path: String,
     // ファイルの更新日時(Unixタイムスタンプ)。

@@ -83,6 +83,11 @@ export const api = {
   getSourceDocument: (sourceCategory: string, source: string) =>
     invoke<string>("get_source_document", { sourceCategory, source }),
 
+  // 素材(.metaの実体、詩織Ver3.5)を既定のアプリで開く/フォルダで表示する。
+  // パスがlibrary/配下かの検証はRust側で行う。
+  openLibraryAsset: (path: string) => invoke<void>("open_library_asset", { path }),
+  revealLibraryAsset: (path: string) => invoke<void>("reveal_library_asset", { path }),
+
   // スタンドアロン図書館UI向け、検索を経由しない蔵書全件の一覧取得。
   // Phase 7(1冊=1ファイル表示単位への変更)により、ファイル単位に集約された
   // 結果を返す(2026-08-12、図書館ビジョン統合仕様書3-2)。

@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from embedding_client import get_embedding
-from indexing import reindex_single_file, sync_index
+from indexing import asset_path_for, reindex_single_file, sync_index
 from library_path import resolve_knowledge_dir, resolve_vectordb_dir
 from reranker import rerank, warmup as warmup_reranker
 
@@ -373,6 +373,9 @@ class LibraryFileItem(BaseModel):
     # 実ファイルへの絶対パス。search_libraryのpathと同じ_resolve_source_path
     # で解決する(2026-09-16追加)。
     path: str
+    # sourceが.meta(素材のサイドカー、詩織Ver3.5)のとき、対応する実体の
+    # 絶対パス。.metaでない・実体が無い(孤児)場合は空文字列。
+    asset_path: str = ""
     # library_rootからの相対パス(/区切り)。GUIがフォルダツリーを構築する際、
     # 絶対パス文字列の解析に頼らず安全に階層を取り出せるようにする
     # (2026-09-16追加)。
@@ -416,18 +419,20 @@ def list_all_library():
         if heading and heading not in [h.heading for h in existing_headings]:
             existing_headings.append(LibraryFileHeading(heading=heading))
 
-    return [
-        LibraryFileItem(
+    def _to_item(source: str) -> LibraryFileItem:
+        path, asset_path = _resolve_paths(files[source]["source_category"], source)
+        return LibraryFileItem(
             source=source,
             source_category=files[source]["source_category"],
             headings=files[source]["headings"],
             title=files[source]["title"],
-            path=_resolve_source_path(files[source]["source_category"], source),
+            path=path,
+            asset_path=asset_path,
             relative_path=files[source]["relative_path"],
             mtime=files[source]["mtime"],
         )
-        for source in sorted(order)
-    ]
+
+    return [_to_item(source) for source in sorted(order)]
 
 
 @app.post("/search", response_model=list[SearchResultItem])
@@ -494,11 +499,24 @@ class SearchLibraryResultItem(BaseModel):
     # 持たず、中間のサブディレクトリ(project識別子等)が分からないため、
     # source_category配下を都度rglobして解決する(2026-09-16追加)。
     path: str
+    # sourceが.meta(素材のサイドカー、詩織Ver3.5)のとき、対応する実体の
+    # 絶対パス。pathは説明(.meta)自体を指すのに対し、こちらが素材本体を指す。
+    # .metaでない・実体が無い(孤児)場合は空文字列。
+    asset_path: str = ""
     # frontmatterのtitle(無ければ空文字列)。2026-09-16追加。
     title: str
     # frontmatterのrelated(無ければ空リスト)。詩織Ver3.3(時間認識検索)で
     # 追加。経緯モードで新旧の記事を辿るための手がかり。
     related: list[str] = []
+
+
+def _resolve_paths(source_category: str, source: str) -> tuple[str, str]:
+    """(sourceの絶対パス, 対応する実体の絶対パス)を返す。実体のパスは、sourceが
+    .metaで実体が存在するときだけ値が入る(それ以外は空文字列)。
+    """
+    path = _resolve_source_path(source_category, source)
+    asset = asset_path_for(Path(path)) if path else None
+    return path, (str(asset) if asset else "")
 
 
 def _resolve_source_path(source_category: str, source: str) -> str:
@@ -569,16 +587,20 @@ def search_library(req: SearchLibraryRequest):
             order.append(source)
         files[source]["headings"].append(FileHeading(heading=meta.get("heading", ""), rerank_score=score))
 
-    items = [
-        SearchLibraryResultItem(
-            source=source,
-            source_category=files[source]["source_category"],
-            headings=files[source]["headings"],
-            best_score=files[source]["best_score"],
-            path=_resolve_source_path(files[source]["source_category"], source),
-            title=files[source]["title"],
-            related=files[source]["related"],
+    # パス解決はファイルごとにrglobするため、返す範囲(offset/limit)の分だけ行う。
+    items = []
+    for source in order[req.offset : req.offset + req.limit]:
+        path, asset_path = _resolve_paths(files[source]["source_category"], source)
+        items.append(
+            SearchLibraryResultItem(
+                source=source,
+                source_category=files[source]["source_category"],
+                headings=files[source]["headings"],
+                best_score=files[source]["best_score"],
+                path=path,
+                asset_path=asset_path,
+                title=files[source]["title"],
+                related=files[source]["related"],
+            )
         )
-        for source in order
-    ]
-    return items[req.offset : req.offset + req.limit]
+    return items

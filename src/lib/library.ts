@@ -92,11 +92,22 @@ export function getFileCallNo(index: number, sourceCategory: string): string {
   return `${abbr}-${String(index + 1).padStart(2, "0")}`;
 }
 
+// 表示名用に末尾の.md/.metaを取り除く。素材のサイドカー「X.zip.meta」は
+// 実体の名前「X.zip」(拡張子込み)で見せるため、.metaだけを外す(詩織Ver3.5)。
+export function stripSourceExtension(source: string): string {
+  return source.replace(/\.(md|meta)$/i, "");
+}
+
+// .meta(素材のサイドカー)かどうか。
+export function isAssetMeta(source: string): boolean {
+  return /\.meta$/i.test(source);
+}
+
 // ファイルの表紙タイトル。先頭の実見出し(chunking.pyの「(見出しなし)」
 // プレースホルダーを除く)があればそれを使い、無ければファイル名を使う。
 export function getFileTitle(source: string, headings: string[]): string {
   const firstHeading = headings.find((h) => h && h !== "(見出しなし)");
-  return firstHeading ?? source.replace(/\.md$/i, "");
+  return firstHeading ?? stripSourceExtension(source);
 }
 
 // 「司書が持ってくる棚」(3-1)の集まってくる演出で、本ごとに少しずつ違う方向

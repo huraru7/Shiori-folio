@@ -1,4 +1,4 @@
-"""library/配下のMarkdownをChromaDBへ増分同期する共通ロジック(詩織Ver2.0
+"""library/配下のMarkdown(と素材の説明ファイル.meta)をChromaDBへ増分同期する共通ロジック(詩織Ver2.0
 設計指示書v3、4章「埋め込みデーモンの起動ロジック+検索時の遅延再インデックス」)。
 
 ingest.py(手動でのコレクション全体再構築)とapp.py(検索リクエストのたびに
@@ -18,6 +18,35 @@ from chunking import chunk_markdown
 from embedding_client import get_embedding
 
 INDEX_STATE_FILENAME = ".index_state.json"
+
+# 素材ファイル(zip・png・pdf等)の説明を書いたサイドカー。「X.zip」に対して
+# 「X.zip.meta」を置く(詩織Ver3.5)。中身はmdと同じfrontmatter+本文のため、
+# mdと同じ経路でインデックスする。
+META_SUFFIX = ".meta"
+INDEXED_SUFFIXES = (".md", META_SUFFIX)
+
+
+def is_indexable_path(path: Path, knowledge_dir: Path) -> bool:
+    """インデックス対象(*.mdまたは*.meta)かを返す。library/_system/配下と、
+    「._」始まりのAppleDouble(下のsync_index参照)は対象外。
+    """
+    if path.suffix not in INDEXED_SUFFIXES:
+        return False
+    return "_system" not in path.relative_to(knowledge_dir).parts and not path.name.startswith("._")
+
+
+def list_indexable_files(knowledge_dir: Path) -> list[Path]:
+    return [p for p in knowledge_dir.rglob("*") if p.is_file() and is_indexable_path(p, knowledge_dir)]
+
+
+def asset_path_for(meta_path: Path) -> Path | None:
+    """.metaに対応する実体(.metaと同じフォルダの、.metaを除いた名前のファイル)を
+    返す。.metaでない・実体が無い(孤児)場合はNone。
+    """
+    if meta_path.suffix != META_SUFFIX:
+        return None
+    asset = meta_path.with_suffix("")
+    return asset if asset.is_file() else None
 
 # frontmatterのindexフィールド(詩織Ver3.0、データ管理法見直し2-2節)。
 # 厳密なYAMLパースは行わず、正規表現でindex: falseの1行だけを検知する
@@ -154,7 +183,9 @@ def _embed_file(
     チャンク数(0ならファイルが空・見出し/本文が無い、またはindex: falseで
     検索対象から除外されている)。
     """
-    stem = md_path.stem
+    # 「X.zip.meta」のstemは「X.zip」でX.zip.mdと衝突しうるため、.metaは
+    # 拡張子込みのファイル名をid接頭辞にする。
+    stem = md_path.name if md_path.suffix == META_SUFFIX else md_path.stem
     existing = collection.get(where={"source": md_path.name})
     if existing["ids"]:
         collection.delete(ids=existing["ids"])
@@ -276,11 +307,7 @@ def sync_index(
     # しないとread_text(utf-8)がUnicodeDecodeErrorで落ち、起動時の全件
     # スキャン(このsync_index)がアプリ起動そのものを道連れにしてしまう
     # (2026-08-25、実機でRAGサーバーが起動直後にクラッシュする不具合として発覚)。
-    md_files = [
-        p
-        for p in knowledge_dir.rglob("*.md")
-        if "_system" not in p.relative_to(knowledge_dir).parts and not p.name.startswith("._")
-    ]
+    md_files = list_indexable_files(knowledge_dir)
     current_paths = {str(p.relative_to(knowledge_dir)): p for p in md_files}
 
     added: list[str] = []

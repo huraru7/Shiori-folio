@@ -145,3 +145,26 @@
   font-size: 0.8rem;
   word-break: break-all;
 }
+
+/* 素材(.metaの実体、詩織Ver3.5)を開く/フォルダで表示する操作行。 */
+.article-detail__asset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.article-detail__asset-button {
+  background: var(--glass-bg, transparent);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.article-detail__asset-button:hover {
+  background: var(--glass-border);
+}

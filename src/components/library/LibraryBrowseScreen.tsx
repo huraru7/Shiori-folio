@@ -8,6 +8,8 @@ import {
   findTreeFolder,
   formatMtime,
   getCategoryMeta,
+  isAssetMeta,
+  stripSourceExtension,
 } from "../../lib/library";
 import type { TreeFolder } from "../../lib/library";
 import { useShioriStore } from "../../store/useShioriStore";
@@ -21,7 +23,7 @@ const RETRY_INTERVAL_MS = 3000;
 
 type View =
   | { mode: "list" }
-  | { mode: "detail"; source: string; sourceCategory: string; callNo: string };
+  | { mode: "detail"; source: string; sourceCategory: string; assetPath: string; callNo: string };
 
 // パンくず・ツリーのラベル表示。トップレベル(00-inbox等)は詩織の色分け
 // ラベルを、それ以外(project名・kind名)はフォルダ名をそのまま使う。
@@ -232,7 +234,13 @@ function LibraryBrowseScreen() {
   };
 
   const openFile = (file: LibraryFile, callNo: string) =>
-    setView({ mode: "detail", source: file.source, sourceCategory: file.sourceCategory, callNo });
+    setView({
+      mode: "detail",
+      source: file.source,
+      sourceCategory: file.sourceCategory,
+      assetPath: file.assetPath,
+      callNo,
+    });
 
   if (view.mode === "detail") {
     return (
@@ -240,6 +248,7 @@ function LibraryBrowseScreen() {
         <ArticleDetail
           source={view.source}
           sourceCategory={view.sourceCategory}
+          assetPath={view.assetPath}
           callNo={view.callNo}
           onBack={() => setView({ mode: "list" })}
         />
@@ -394,17 +403,29 @@ function FolderContentsTable({
               onClick={() => onOpenFile(file, `${getCategoryMeta(file.sourceCategory).abbr}-${String(i + 1).padStart(2, "0")}`)}
             >
               <td>
-                <span className="library-browse-screen__icon">📄</span>
-                {file.title || file.source.replace(/\.md$/i, "")}
+                <span className="library-browse-screen__icon">{fileIcon(file)}</span>
+                {file.title || stripSourceExtension(file.source)}
               </td>
               <td className="library-browse-screen__dim">{formatMtime(file.mtime) || "—"}</td>
-              <td className="library-browse-screen__dim">記事</td>
+              <td className="library-browse-screen__dim">{fileKindLabel(file)}</td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   );
+}
+
+// 素材のサイドカー(.meta)は実体の行として扱い、実体が無い(孤児)ものは警告
+// アイコンで見分けられるようにする(詩織Ver3.5)。
+function fileIcon(file: LibraryFile): string {
+  if (!isAssetMeta(file.source)) return "📄";
+  return file.assetPath ? "📦" : "⚠️";
+}
+
+function fileKindLabel(file: LibraryFile): string {
+  if (!isAssetMeta(file.source)) return "記事";
+  return file.assetPath ? "素材" : "素材(実体なし)";
 }
 
 // 絞り込み検索結果(フラット表示、フォルダ階層に依存しない)。
@@ -431,8 +452,8 @@ function FileTable({
               onClick={() => onOpen(file, `${getCategoryMeta(file.sourceCategory).abbr}-${String(i + 1).padStart(2, "0")}`)}
             >
               <td>
-                <span className="library-browse-screen__icon">📄</span>
-                {file.title || file.source.replace(/\.md$/i, "")}
+                <span className="library-browse-screen__icon">{fileIcon(file)}</span>
+                {file.title || stripSourceExtension(file.source)}
               </td>
               <td className="library-browse-screen__dim">{formatMtime(file.mtime) || "—"}</td>
               <td className="library-browse-screen__dim">{getCategoryMeta(file.sourceCategory).label}</td>

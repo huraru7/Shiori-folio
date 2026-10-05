@@ -30,6 +30,9 @@ export interface LibraryFile {
   // (2026-09-16追加、エクスプローラー風UI刷新向け)。
   title: string;
   path: string;
+  // .meta(素材のサイドカー)のとき対応する実体の絶対パス。.metaでない・実体が
+  // 無い(孤児)場合は空文字列(詩織Ver3.5)。
+  assetPath: string;
   // library_rootからの相対パス(/区切り)。フォルダツリー構築に使う。
   relativePath: string;
   // ファイルの更新日時(Unixタイムスタンプ、秒)。
@@ -51,6 +54,8 @@ export interface SearchLibraryResult {
   bestScore: number;
   // 実ファイルへの絶対パス・frontmatterのtitle(2026-09-16追加)。
   path: string;
+  // .metaのとき対応する実体の絶対パス(無ければ空文字列、詩織Ver3.5)。
+  assetPath: string;
   title: string;
 }
 

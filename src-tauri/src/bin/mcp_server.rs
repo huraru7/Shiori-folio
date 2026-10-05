@@ -107,7 +107,7 @@ impl ShioriLibrary {
     }
 
     #[tool(
-        description = "詩織のライブラリ(library/)をクエリで検索し、ファイル単位に集約した見出し一覧を返す(本文は含まない。棚の場所を教えるだけで内容の合成はしない)。各結果には実ファイルへの絶対パス(path)が含まれるため、本文を読みたい場合はReadツール等で直接開ける。スコアによる足切りは行わないため、返却件数がlimit未満になるまでoffsetを増やして同じクエリで呼び直すと、関連しうる候補を漏らさず確認できる。「前はどうだったか」のように時系列・変遷が重要な質問にはinclude_history: trueを指定すると、deprecated/アーカイブ済みの記事も含め新しい順に並べ替えて返す"
+        description = "詩織のライブラリ(library/)をクエリで検索し、ファイル単位に集約した見出し一覧を返す(本文は含まない。棚の場所を教えるだけで内容の合成はしない)。各結果には実ファイルへの絶対パス(path)が含まれるため、本文を読みたい場合はReadツール等で直接開ける。素材ファイル(zip・png・pdf等)は説明用の「.meta」サイドカーがヒットし、pathは.meta自体、asset_pathは素材の実体を指す(素材には実体が無い場合や.meta以外の結果では空文字列)。スコアによる足切りは行わないため、返却件数がlimit未満になるまでoffsetを増やして同じクエリで呼び直すと、関連しうる候補を漏らさず確認できる。「前はどうだったか」のように時系列・変遷が重要な質問にはinclude_history: trueを指定すると、deprecated/アーカイブ済みの記事も含め新しい順に並べ替えて返す"
     )]
     async fn search_library(
         &self,
@@ -181,7 +181,8 @@ impl ServerHandler for ShioriLibrary {
                 "詩織のライブラリ(セカンドブレイン)を検索するためのMCPサーバーです。\
                  セッション開始時にまずget_context_profileを呼び、その後は必要に応じて\
                  search_libraryで検索してください。書き込みはこのMCPサーバー経由ではなく\
-                 library/への直接ファイル操作(frontmatter付きmd)で行います。保存時の\
+                 library/への直接ファイル操作(frontmatter付きmd。素材は同名の.metaを添えて\
+                 shiori-saveで取り込む)で行います。保存時の\
                  配置ルールはlibrary/_system/CLAUDE.mdを参照してください。"
                     .to_string(),
             )

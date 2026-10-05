@@ -46,6 +46,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
 anyhow = "1"
 # 保存CLI(src/bin/shiori_save.rs)のfrontmatter・tags.yaml/projects.yaml解析向け。
 serde_yaml = "0.9"
+# 素材の取り込み(詩織Ver3.5)でコピー前後の一致をSHA-256で照合する。
+sha2 = "0.10"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = [

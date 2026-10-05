@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { marked } from "marked";
 import { api } from "../../api/tauri";
-import { getCategoryMeta, hexToRgba } from "../../lib/library";
+import { getCategoryMeta, hexToRgba, stripSourceExtension } from "../../lib/library";
 import type { SourceFrontmatter } from "../../types";
 import "./ArticleDetail.css";
 
 interface Props {
   source: string;
   sourceCategory: string;
+  // sourceが.meta(素材のサイドカー)のとき、対応する実体の絶対パス。ある場合だけ
+  // 「開く」「フォルダで表示」を出す(詩織Ver3.5)。
+  assetPath?: string;
   onBack: () => void;
   // 全件閲覧画面(棚の位置に基づく番号)から開いた場合のみ渡される。検索結果
   // から開いた場合はスコア順であり棚の位置と無関係なため省略される
@@ -29,10 +32,17 @@ function stripFrontmatter(content: string): string {
 // 変更であり、会話中にLLMが内容を合成しない「司書モデル」の原則とは矛盾しない
 // (原則が適用されるのはAI側の会話応答経路のみ)。検索結果一覧とはウィンドウ内
 // 完結の「戻る」操作で行き来する(モーダルの重ね表示ではなく、ビューの切り替え)。
-function ArticleDetail({ source, sourceCategory, onBack, callNo }: Props) {
+function ArticleDetail({ source, sourceCategory, assetPath, onBack, callNo }: Props) {
   const [content, setContent] = useState<string | null>(null);
   const [frontmatter, setFrontmatter] = useState<SourceFrontmatter | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [assetError, setAssetError] = useState<string | null>(null);
+
+  const runAssetAction = (action: (path: string) => Promise<void>) => {
+    if (!assetPath) return;
+    setAssetError(null);
+    action(assetPath).catch((err) => setAssetError(String(err)));
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -64,7 +74,7 @@ function ArticleDetail({ source, sourceCategory, onBack, callNo }: Props) {
     color: meta.hex,
   };
   const html = content ? marked.parse(stripFrontmatter(content), { async: false }) : "";
-  const displayTitle = frontmatter?.title || source.replace(/\.md$/i, "");
+  const displayTitle = frontmatter?.title || stripSourceExtension(source);
 
   return (
     <div className="article-detail">
@@ -85,6 +95,24 @@ function ArticleDetail({ source, sourceCategory, onBack, callNo }: Props) {
       {!error && (
         <div className="article-detail__scroll">
           <h2 className="article-detail__title">{displayTitle}</h2>
+
+          {assetPath && (
+            <div className="article-detail__asset">
+              <button
+                className="article-detail__asset-button"
+                onClick={() => runAssetAction(api.openLibraryAsset)}
+              >
+                開く
+              </button>
+              <button
+                className="article-detail__asset-button"
+                onClick={() => runAssetAction(api.revealLibraryAsset)}
+              >
+                フォルダで表示
+              </button>
+              {assetError && <span className="article-detail__error">{assetError}</span>}
+            </div>
+          )}
 
           {frontmatter && (
             <div className="article-detail__frontmatter">

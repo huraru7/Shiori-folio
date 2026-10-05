@@ -5,15 +5,22 @@
 //! ロジックとして担う(library/_system/CLAUDE.mdの配置ルールをそのまま実装)。
 //!
 //! 使用法: `shiori-save <mdファイルのパス>`
+//!         `shiori-save [--copy] <素材>.meta`(素材ファイルの取り込み、詩織Ver3.5)
 //! 対象ファイルにはfrontmatter(title/type/tags/project/author)が付与済みで
 //! あることを前提とする。実行後、対象ファイルはlibrary/配下の決定先へ
 //! 移動される(コピーではなく移動、元の場所には残らない)。frontmatterが
 //! 不備な場合も保存自体は諦めず、00-inbox/へreasonフィールド付きで置く。
+//!
+//! 素材(zip・png・pdf等)は、同名に`.meta`を付けたサイドカー(frontmatter+本文)
+//! とペアで置き、`.meta`を指定して取り込む。素材は`files/`へ移動(コピー→SHA-256
+//! 照合→原本削除)する。mdと違い、不備があっても00-inbox/へ逃がさずエラーにする
+//! (素材だけがinboxに置かれると、実体と説明の対応が崩れるため)。
 
 use anyhow::{anyhow, bail, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::io::Write;
+use sha2::{Digest, Sha256};
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
 use shiori_folio_lib::{library_root, load_search_backend_config, project_root, rag_client};
@@ -120,12 +127,26 @@ struct TagEntry {
 }
 
 fn main() -> Result<()> {
-    let source = std::env::args()
-        .nth(1)
-        .ok_or_else(|| anyhow!("使用法: shiori-save <mdファイルのパス>"))?;
+    let mut copy_mode = false;
+    let mut source_arg = None;
+    for arg in std::env::args().skip(1) {
+        if arg == "--copy" {
+            copy_mode = true;
+        } else if source_arg.is_none() {
+            source_arg = Some(arg);
+        } else {
+            bail!("引数が多すぎます: {arg}");
+        }
+    }
+    let source = source_arg
+        .ok_or_else(|| anyhow!("使用法: shiori-save [--copy] <mdファイル または 素材.meta のパス>"))?;
     let source = PathBuf::from(source);
     if !source.is_file() {
         bail!("ファイルが見つかりません: {}", source.display());
+    }
+    let is_asset_meta = source.extension().and_then(|e| e.to_str()) == Some(ASSET_META_EXT);
+    if copy_mode && !is_asset_meta {
+        bail!("--copyは素材の.meta取り込み専用です");
     }
 
     let root = library_root();
@@ -143,6 +164,16 @@ fn main() -> Result<()> {
     // dateは常にCLI実行時刻で上書きする(Claude Codeが書いた値があっても
     // 信用しない。理由はFrontmatter構造体のコメント参照)。
     fm.date = Some(chrono::Local::now().to_rfc3339());
+
+    if is_asset_meta {
+        let mut newly_pending_tags = Vec::new();
+        fm.tags = fm
+            .tags
+            .iter()
+            .map(|raw| normalize_tag(&tags_yaml, raw, &mut newly_pending_tags))
+            .collect::<Result<Vec<_>>>()?;
+        return save_asset(&root, &projects_yaml, &source, fm, &body, copy_mode, newly_pending_tags);
+    }
 
     // タグは常に正規化する(inbox行きになる場合でも、表記ゆれの統一自体は
     // 後で見返したときに有用なため)。
@@ -172,25 +203,7 @@ fn main() -> Result<()> {
     std::fs::remove_file(&source)
         .with_context(|| format!("移動元{}の削除に失敗", source.display()))?;
 
-    // 書き込み時フック(詩織Ver3.0、データ管理法見直し2-5節)。RAGサーバーが
-    // すでに起動していれば即座にこのファイルだけre-indexし、検索の都度の
-    // 全件スキャンを待たず保存直後から検索対象にする。未起動時はここで
-    // 起動を試みない(起動待ちでCLIの応答を遅らせないため)。次回のRAGサーバー
-    // 起動時に行われる全件mtimeスキャンが安全網として拾う。
-    if let Ok(relative) = dest_path.strip_prefix(&root) {
-        let relative_str = relative.to_string_lossy();
-        match load_search_backend_config(&project_root()) {
-            Ok(backend) if rag_client::is_running(backend.rag_port) => {
-                if let Err(e) = rag_client::reindex_file(backend.rag_port, &relative_str) {
-                    eprintln!(
-                        "警告: 即時re-indexに失敗しました({e})。次回のRAGサーバー起動時に反映されます。"
-                    );
-                }
-            }
-            Ok(_) => {}
-            Err(e) => eprintln!("警告: 検索バックエンド設定の読み込みに失敗しました({e})。"),
-        }
-    }
+    reindex_saved_file(&root, &dest_path);
 
     let result = serde_json::json!({
         "destination": dest_path.display().to_string(),
@@ -391,4 +404,221 @@ fn unique_destination(dir: &Path, source: &Path) -> Result<PathBuf> {
         n += 1;
     }
     Ok(candidate)
+}
+
+// 書き込み時フック(詩織Ver3.0、データ管理法見直し2-5節)。RAGサーバーが
+// すでに起動していれば即座にこのファイルだけre-indexし、検索の都度の
+// 全件スキャンを待たず保存直後から検索対象にする。未起動時はここで
+// 起動を試みない(起動待ちでCLIの応答を遅らせないため)。次回のRAGサーバー
+// 起動時に行われる全件mtimeスキャンが安全網として拾う。
+fn reindex_saved_file(root: &Path, dest_path: &Path) {
+    let Ok(relative) = dest_path.strip_prefix(root) else {
+        return;
+    };
+    let relative_str = relative.to_string_lossy();
+    match load_search_backend_config(&project_root()) {
+        Ok(backend) if rag_client::is_running(backend.rag_port) => {
+            if let Err(e) = rag_client::reindex_file(backend.rag_port, &relative_str) {
+                eprintln!(
+                    "警告: 即時re-indexに失敗しました({e})。次回のRAGサーバー起動時に反映されます。"
+                );
+            }
+        }
+        Ok(_) => {}
+        Err(e) => eprintln!("警告: 検索バックエンド設定の読み込みに失敗しました({e})。"),
+    }
+}
+
+// ---- 素材の取り込み(詩織Ver3.5) ----
+
+// 素材のサイドカーの拡張子。「X.zip」に対し「X.zip.meta」を置く。
+const ASSET_META_EXT: &str = "meta";
+
+// 素材の実体名として拒否する、名前から明らかな秘密情報(中身は検査しない)。
+// libraryはMCP経由で外部AIにも読めるため、秘密鍵・環境変数ファイルを置かせない。
+fn secret_name_reason(file_name: &str) -> Option<&'static str> {
+    let lower = file_name.to_ascii_lowercase();
+    if lower.starts_with("id_") && !lower.ends_with(".pub") {
+        return Some("SSH秘密鍵(id_*)");
+    }
+    if lower.ends_with(".pem") || lower.ends_with(".ppk") || lower.ends_with(".key") {
+        return Some("秘密鍵・証明書(.pem/.ppk/.key)");
+    }
+    if lower == ".env" || lower.starts_with(".env.") {
+        return Some("環境変数ファイル(.env)");
+    }
+    if lower == "key.txt" {
+        return Some("鍵ファイル(key.txt)");
+    }
+    None
+}
+
+// 素材のtype/projectから保存先の`files/`を決める。mdと違い不備はinboxへ逃がさず
+// エラーにする(素材だけがinboxに置かれ、実体と説明の対応が崩れるのを防ぐ)。
+fn decide_asset_destination(root: &Path, fm: &Frontmatter, projects_yaml: &Path) -> Result<PathBuf> {
+    if fm.title.as_deref().map(str::trim).unwrap_or("").is_empty() {
+        bail!("titleが空です");
+    }
+    if fm.tags.is_empty() {
+        bail!("tagsが空です");
+    }
+    let project = fm.project.as_deref().map(str::trim).filter(|p| !p.is_empty());
+    match fm.kind.as_deref() {
+        Some("project") | Some("area") => {
+            let p = project.ok_or_else(|| {
+                anyhow!("typeがproject/areaの素材にはprojectが必要です(保存先が決まりません)")
+            })?;
+            ensure_project_registered(projects_yaml, p)?;
+            let top = if fm.kind.as_deref() == Some("project") { "10-projects" } else { "20-areas" };
+            Ok(root.join(top).join(p).join("files"))
+        }
+        Some("resource") => Ok(root.join("30-resources").join("files")),
+        Some("profile") => bail!("type: profileには素材を置けません"),
+        other => bail!("typeが不正です(値: {other:?}, 素材で許可: project/area/resource)"),
+    }
+}
+
+fn sha256_of(path: &Path) -> Result<String> {
+    let mut file =
+        std::fs::File::open(path).with_context(|| format!("{}を開けません", path.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1024 * 1024];
+    loop {
+        let n = file.read(&mut buf).with_context(|| format!("{}の読み込みに失敗", path.display()))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
+}
+
+// 保存先で素材・.metaのどちらとも衝突しない名前の組を返す。衝突時は実体と
+// .metaに同じ連番を付ける(X.zip → X-2.zip と X-2.zip.meta)。
+fn unique_asset_destination(dir: &Path, asset_name: &str) -> (PathBuf, PathBuf) {
+    let (stem, ext) = match asset_name.rfind('.') {
+        Some(i) if i > 0 => (&asset_name[..i], &asset_name[i..]),
+        _ => (asset_name, ""),
+    };
+    let mut n = 1;
+    loop {
+        let name = if n == 1 { asset_name.to_string() } else { format!("{stem}-{n}{ext}") };
+        let asset = dir.join(&name);
+        let meta = dir.join(format!("{name}.{ASSET_META_EXT}"));
+        if !asset.exists() && !meta.exists() {
+            return (asset, meta);
+        }
+        n += 1;
+    }
+}
+
+fn save_asset(
+    root: &Path,
+    projects_yaml: &Path,
+    meta_source: &Path,
+    mut fm: Frontmatter,
+    body: &str,
+    copy_mode: bool,
+    newly_pending_tags: Vec<String>,
+) -> Result<()> {
+    // 素材は.metaと同じフォルダに、.metaを除いた同名で置かれている前提。
+    let asset_source = meta_source.with_extension("");
+    if !asset_source.is_file() {
+        bail!("素材が見つかりません(.metaの隣に同名で置いてください): {}", asset_source.display());
+    }
+    let asset_name = asset_source
+        .file_name()
+        .ok_or_else(|| anyhow!("素材のファイル名の取得に失敗"))?
+        .to_string_lossy()
+        .to_string();
+    if let Some(reason) = secret_name_reason(&asset_name) {
+        bail!("秘密情報の可能性があるため取り込めません({reason}): {asset_name}");
+    }
+
+    let dest_dir = decide_asset_destination(root, &fm, projects_yaml)?;
+    std::fs::create_dir_all(&dest_dir)
+        .with_context(|| format!("{}の作成に失敗", dest_dir.display()))?;
+    let (asset_dest, meta_dest) = unique_asset_destination(&dest_dir, &asset_name);
+
+    // 移動は「コピー→SHA-256照合→一致したら原本を削除」の順で行う。別ドライブ間
+    // でも安全に動かすためで、不一致や途中の失敗では原本を残し、作った分を片付ける。
+    let source_hash = sha256_of(&asset_source)?;
+    let size = std::fs::metadata(&asset_source)?.len();
+    let cleanup = |paths: &[&Path]| {
+        for p in paths {
+            let _ = std::fs::remove_file(p);
+        }
+    };
+    std::fs::copy(&asset_source, &asset_dest)
+        .with_context(|| format!("素材のコピーに失敗: {}", asset_dest.display()))?;
+    let dest_hash = match sha256_of(&asset_dest) {
+        Ok(h) => h,
+        Err(e) => {
+            cleanup(&[&asset_dest]);
+            return Err(e);
+        }
+    };
+    if dest_hash != source_hash {
+        cleanup(&[&asset_dest]);
+        bail!("コピー後のSHA-256が一致しません。原本は残しました: {}", asset_source.display());
+    }
+
+    // sha256・サイズ・dateはCLIが決定的に書く(人・AIが書いた値は上書きする)。
+    fm.date = Some(chrono::Local::now().to_rfc3339());
+    fm.extra.insert("sha256".to_string(), serde_yaml::Value::String(source_hash));
+    fm.extra.insert("size".to_string(), serde_yaml::Value::Number(size.into()));
+    let frontmatter_yaml = serde_yaml::to_string(&fm).context("frontmatterのYAML化に失敗")?;
+    let new_content = format!("---\n{frontmatter_yaml}---\n{body}");
+    if let Err(e) = std::fs::write(&meta_dest, new_content) {
+        cleanup(&[&asset_dest, &meta_dest]);
+        return Err(anyhow!(e).context(format!("{}への書き込みに失敗", meta_dest.display())));
+    }
+
+    if !copy_mode {
+        std::fs::remove_file(&asset_source)
+            .with_context(|| format!("移動元{}の削除に失敗", asset_source.display()))?;
+        std::fs::remove_file(meta_source)
+            .with_context(|| format!("移動元{}の削除に失敗", meta_source.display()))?;
+    }
+
+    reindex_saved_file(root, &meta_dest);
+
+    let result = serde_json::json!({
+        "destination": meta_dest.display().to_string(),
+        "asset_destination": asset_dest.display().to_string(),
+        "inbox_reason": serde_json::Value::Null,
+        "newly_pending_tags": newly_pending_tags,
+    });
+    println!("{}", serde_json::to_string_pretty(&result)?);
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 秘密情報の名前は拒否し公開鍵は通す() {
+        for name in ["id_ed25519", "id_rsa", "server.pem", "putty.PPK", "a.key", ".env", ".env.local", "key.txt"] {
+            assert!(secret_name_reason(name).is_some(), "{name}は拒否されるべき");
+        }
+        for name in ["id_ed25519.pub", "report.pdf", "environment.zip", "monkey.txt", "pc-backup.zip"] {
+            assert!(secret_name_reason(name).is_none(), "{name}は通すべき");
+        }
+    }
+
+    #[test]
+    fn 同名があれば実体とmetaに同じ連番を付ける() {
+        let dir = std::env::temp_dir().join(format!("shiori-save-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let (asset, meta) = unique_asset_destination(&dir, "a.tar.gz");
+        assert_eq!(asset.file_name().unwrap(), "a.tar.gz");
+        assert_eq!(meta.file_name().unwrap(), "a.tar.gz.meta");
+        // 実体が無くても.metaだけ残っていれば衝突として扱う。
+        std::fs::write(&meta, "x").unwrap();
+        let (asset2, meta2) = unique_asset_destination(&dir, "a.tar.gz");
+        assert_eq!(asset2.file_name().unwrap(), "a.tar-2.gz");
+        assert_eq!(meta2.file_name().unwrap(), "a.tar-2.gz.meta");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 }

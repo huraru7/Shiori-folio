@@ -1610,6 +1610,8 @@ pub struct LibraryFileDto {
     // エクスプローラー風UI刷新向け)。
     title: String,
     path: String,
+    // .metaのとき対応する実体の絶対パス(無ければ空文字列、詩織Ver3.5)。
+    asset_path: String,
     // library_rootからの相対パス(/区切り)。GUIのフォルダツリー構築に使う。
     relative_path: String,
     // ファイルの更新日時(Unixタイムスタンプ)。
@@ -1670,6 +1672,62 @@ fn get_source_document(source_category: String, source: String) -> Result<String
         .map_err(|e| format!("参照資料の読み込みに失敗: {e}"))
 }
 
+// 全件閲覧の素材行(詩織Ver3.5)から、素材の実体を既定のアプリで開く/
+// フォルダで表示する。フロントから渡されるパスは信頼せず、canonicalize()した
+// 結果がlibrary/配下に収まり、かつ通常ファイルであることを確認してから使う
+// (get_source_documentと同じ方針)。
+fn resolve_library_asset(path: &str) -> Result<PathBuf, String> {
+    let canonical_root = library_root()
+        .canonicalize()
+        .map_err(|e| format!("library/の解決に失敗: {e}"))?;
+    let canonical = Path::new(path)
+        .canonicalize()
+        .map_err(|_| "指定された素材が見つかりませんでした。".to_string())?;
+    if !canonical.starts_with(&canonical_root) {
+        return Err("library/の外のパスは開けません。".to_string());
+    }
+    if !canonical.is_file() {
+        return Err("指定されたパスはファイルではありません。".to_string());
+    }
+    Ok(canonical)
+}
+
+// 既定のアプリで「開く」と、そのまま実行されてしまう拡張子。libraryはMCP経由で
+// 外部AIも読み書きしうるため、素材として置かれた実行形式をワンクリックで
+// 起動できないようにする。これらは「フォルダで表示」のみ許可する。
+const NON_OPENABLE_EXTENSIONS: &[&str] = &[
+    "exe", "msi", "bat", "cmd", "com", "scr", "ps1", "vbs", "vbe", "js", "jse", "wsf", "lnk",
+    "sh", "command", "app", "jar", "pkg", "dmg", "apk", "reg", "hta",
+];
+
+#[tauri::command]
+fn open_library_asset(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let target = resolve_library_asset(&path)?;
+    let ext = target
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if NON_OPENABLE_EXTENSIONS.contains(&ext.as_str()) {
+        return Err(format!(
+            "実行形式(.{ext})は安全のため直接開けません。「フォルダで表示」を使ってください。"
+        ));
+    }
+    app.opener()
+        .open_path(target.to_string_lossy(), None::<&str>)
+        .map_err(|e| format!("素材を開けませんでした: {e}"))
+}
+
+#[tauri::command]
+fn reveal_library_asset(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let target = resolve_library_asset(&path)?;
+    app.opener()
+        .reveal_item_in_dir(&target)
+        .map_err(|e| format!("フォルダを表示できませんでした: {e}"))
+}
+
 // スタンドアロン図書館UI(Phase 7、詩織Ver2.0設計指示書v3、10章)向け。検索を
 // 経由せず、蔵書をファイル単位(1冊=1ファイル)に集約して一覧として返す。
 #[tauri::command]
@@ -1684,6 +1742,7 @@ fn list_all_knowledge() -> Result<Vec<LibraryFileDto>, String> {
             headings: f.headings.into_iter().map(|h| h.heading).collect(),
             title: f.title,
             path: f.path,
+            asset_path: f.asset_path,
             relative_path: f.relative_path,
             mtime: f.mtime,
         })
@@ -1706,6 +1765,7 @@ pub struct SearchLibraryResultDto {
     best_score: f64,
     // 実ファイルへの絶対パス・frontmatterのtitle(2026-09-16追加)。
     path: String,
+    asset_path: String,
     title: String,
 }
 
@@ -1730,6 +1790,7 @@ fn search_library(query: String, limit: u32, offset: u32) -> Result<Vec<SearchLi
                 .collect(),
             best_score: r.best_score,
             path: r.path,
+            asset_path: r.asset_path,
             title: r.title,
         })
         .collect())
@@ -4178,6 +4239,8 @@ pub fn run() {
             estimate_model_switch,
             switch_model,
             get_source_document,
+            open_library_asset,
+            reveal_library_asset,
             list_all_knowledge,
             search_library,
             get_source_frontmatter,

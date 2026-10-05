@@ -10,7 +10,9 @@ import "./LibraryScreen.css";
 // 1回の検索呼び出しで返す件数(詩織Ver3.0、検索機能向上3-3節と揃える)。
 const PAGE_SIZE = 20;
 
-type View = { mode: "results" } | { mode: "detail"; source: string; sourceCategory: string };
+type View =
+  | { mode: "results" }
+  | { mode: "detail"; source: string; sourceCategory: string; assetPath: string };
 
 // 図書館ウィンドウ(2026-08-12、デスクトップ型ウィンドウシステムの本実装3-2)。
 //
@@ -57,8 +59,8 @@ function LibraryScreen() {
 
   const handleLoadMore = () => runSearch(query.trim(), results.length);
 
-  const openDetail = (source: string, sourceCategory: string) =>
-    setView({ mode: "detail", source, sourceCategory });
+  const openDetail = (source: string, sourceCategory: string, assetPath: string) =>
+    setView({ mode: "detail", source, sourceCategory, assetPath });
 
   if (view.mode === "detail") {
     return (
@@ -66,6 +68,7 @@ function LibraryScreen() {
         <ArticleDetail
           source={view.source}
           sourceCategory={view.sourceCategory}
+          assetPath={view.assetPath}
           onBack={() => setView({ mode: "results" })}
         />
       </div>
@@ -118,7 +121,7 @@ function LibraryScreen() {
                 )}
                 sourceCategory={r.sourceCategory}
                 size="sm"
-                onClick={() => openDetail(r.source, r.sourceCategory)}
+                onClick={() => openDetail(r.source, r.sourceCategory, r.assetPath)}
               />
             ))}
           </div>

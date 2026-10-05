@@ -15,7 +15,7 @@ from pathlib import Path
 import chromadb
 import httpx
 
-from indexing import save_index_state, sync_index
+from indexing import list_indexable_files, save_index_state, sync_index
 from library_path import resolve_knowledge_dir, resolve_vectordb_dir
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -36,8 +36,8 @@ def main() -> None:
     except Exception:
         pass
 
-    if not any(KNOWLEDGE_DIR.rglob("*.md")):
-        raise SystemExit(f"Markdownファイルが見つかりません: {KNOWLEDGE_DIR}")
+    if not list_indexable_files(KNOWLEDGE_DIR):
+        raise SystemExit(f"Markdown/.metaファイルが見つかりません: {KNOWLEDGE_DIR}")
 
     # 同期状態を空にリセットしてから増分同期を呼ぶことで、実質的に全件投入になる
     # (sync_index自体は増分専用だが、コレクションを空にした直後に呼べば
