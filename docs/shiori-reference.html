@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.4(企画書駆動によるAI間引き継ぎ)</span>
+    <span class="home__chip"><b>世代</b> Ver3.5(素材ファイル対応: .metaサイドカー)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -763,7 +763,26 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.4</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.5</span>
+        <span class="version-list__date">2026-10-05</span>
+      </div>
+      <p class="version-list__body">
+        libraryはmd前提で、zip・png・pdf・mp3などの素材を置く場所とメタデータの規約がなかった。
+        素材と同じ名前に<code>.meta</code>を付けたサイドカー(frontmatter+本文)を添えて
+        <code>files/</code>(<code>10-projects/{p}/files/</code>・<code>20-areas/{p}/files/</code>・
+        <code>30-resources/files/</code>)に置く規約を導入した。<code>.meta</code>をインデックス対象に加え、
+        <code>search_library</code>は<code>.meta</code>がヒットすると実体の絶対パス(<code>asset_path</code>)を返す。
+        <code>shiori-save &lt;素材&gt;.meta</code>は実体を「コピー→SHA-256照合→原本削除」で移動し
+        (<code>--copy</code>で原本を残す)、<code>sha256</code>・サイズ・<code>date</code>を自動で書く。
+        <code>id_*</code>・<code>*.pem</code>・<code>.env</code>等の名前の素材は拒否する。全件閲覧では実体の行を
+        📦で表示し、詳細画面から「開く」「フォルダで表示」で実体に辿れる(library外のパスと実行形式は開けない)。
+        あわせて、10/02の「vectordbをMacのローカルへ退避」するPython側の修正(<code>resolve_vectordb_dir</code>)が
+        gitに入っていなかったため取り込み、アーカイブ移動後の再起動で同名の移動先チャンクが消える不具合も修正した。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.4</span>
         <span class="version-list__date">2026-09-22</span>
       </div>
       <p class="version-list__body">
@@ -984,7 +1003,7 @@
     rag_server: {
       eyebrow: "セカンドブレイン",
       title: "RAGサーバー(FastAPI)",
-      body: "<p><code>/search</code>・<code>/search_library</code>・<code>/list_all_library</code>等を持つFastAPIサーバー。書き込み時フックが主軸で、shiori-save CLI等がファイル保存直後に<code>/reindex_file</code>を呼び、そのファイル1件だけ即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。RAGサーバー未起動時も書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p><p>Ver3.3(時間認識検索)で<code>mode</code>パラメータを追加。デフォルトの現在モードは<code>status: deprecated</code>を候補プールの時点で除外し、frontmatterの<code>date</code>が新しいほど有利になる時間減衰(直近30日は減衰なし、30〜365日で1.0→0.8へ線形減衰、365日超は0.8で下げ止め)をrerank_scoreに掛ける。経緯モードはdeprecated/archive込みで絞り込みをかけず、rerank_scoreではなくdate降順で並べ替える。</p>",
+      body: "<p><code>/search</code>・<code>/search_library</code>・<code>/list_all_library</code>等を持つFastAPIサーバー。書き込み時フックが主軸で、shiori-save CLI等がファイル保存直後に<code>/reindex_file</code>を呼び、そのファイル1件だけ即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。RAGサーバー未起動時も書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p><p>Ver3.5で<code>*.meta</code>(素材のサイドカー)もインデックス対象になり、<code>/search_library</code>・<code>/list_all_library</code>は<code>.meta</code>の結果に実体の絶対パス<code>asset_path</code>を付ける(実体が無い孤児は空)。Ver3.3(時間認識検索)で<code>mode</code>パラメータを追加。デフォルトの現在モードは<code>status: deprecated</code>を候補プールの時点で除外し、frontmatterの<code>date</code>が新しいほど有利になる時間減衰(直近30日は減衰なし、30〜365日で1.0→0.8へ線形減衰、365日超は0.8で下げ止め)をrerank_scoreに掛ける。経緯モードはdeprecated/archive込みで絞り込みをかけず、rerank_scoreではなくdate降順で並べ替える。</p>",
       paths: ["system/services/rag/app.py", "system/services/rag/indexing.py — sync_index()"]
     },
     chromadb: {
@@ -1002,7 +1021,7 @@
     library_dir: {
       eyebrow: "データ本体",
       title: "library/ — セカンドブレインの書庫",
-      body: "<p>library/は<code>00-inbox</code> / <code>10-projects</code> / <code>20-areas</code> / <code>30-resources</code> / <code>40-profile</code> / <code>90-archive</code>の6フォルダと、設定置き場の<code>_system/</code>で構成される。</p><p>project/areaの記事は<code>kind</code>(<code>journal</code> | <code>resource</code>)を持ち、<code>10-projects/{project}/{kind}/</code>・<code>20-areas/{project}/{kind}/</code>という3階層に置かれる。journalは作業ログ、resourceはそこから生まれた意思決定・知見。トップレベルの<code>30-resources/</code>は「project/areaに紐づかない外部知識」専用。</p><p><code>40-profile/</code>はふらるさん自身についての記録専用で、<code>category</code>(6分類)によるサブフォルダを持つ。<code>temperament-and-thinking</code>・<code>values</code>・<code>life-history</code>・<code>relationships</code>・<code>self-image</code>・<code>daily-and-work</code>の6つで、category未指定の記事(<code>profile-huraru.md</code>等)は直下に置く。</p><p><code>90-archive/</code>は<code>_system/</code>と自身を除くトップレベル5分類を1階層だけ再現する(project名・kind・categoryのサブフォルダまでは掘らない)。<code>_system/</code>は検索対象から除外(設定ファイル置き場のため)。</p><p>例外: memo_guard(音声メモ)はshiori-save CLIを経由せず、typeを持たないまま<code>00-inbox/</code>へ直接書き込む。記事本文の表示・検索結果のパス解決は、フォルダ階層が深くなったことに伴い再帰探索方式に変更済み。</p>",
+      body: "<p>library/は<code>00-inbox</code> / <code>10-projects</code> / <code>20-areas</code> / <code>30-resources</code> / <code>40-profile</code> / <code>90-archive</code>の6フォルダと、設定置き場の<code>_system/</code>で構成される。</p><p>project/areaの記事は<code>kind</code>(<code>journal</code> | <code>resource</code>)を持ち、<code>10-projects/{project}/{kind}/</code>・<code>20-areas/{project}/{kind}/</code>という3階層に置かれる。journalは作業ログ、resourceはそこから生まれた意思決定・知見。トップレベルの<code>30-resources/</code>は「project/areaに紐づかない外部知識」専用。</p><p><code>40-profile/</code>はふらるさん自身についての記録専用で、<code>category</code>(6分類)によるサブフォルダを持つ。<code>temperament-and-thinking</code>・<code>values</code>・<code>life-history</code>・<code>relationships</code>・<code>self-image</code>・<code>daily-and-work</code>の6つで、category未指定の記事(<code>profile-huraru.md</code>等)は直下に置く。</p><p><code>90-archive/</code>は<code>_system/</code>と自身を除くトップレベル5分類を1階層だけ再現する(project名・kind・categoryのサブフォルダまでは掘らない)。<code>_system/</code>は検索対象から除外(設定ファイル置き場のため)。</p><p>Ver3.5で、素材(zip・png・pdf等)は<code>files/</code>フォルダに実体と<code>.meta</code>のペアで置く規約が加わった(project/areaは<code>{p}/files/</code>、resourceは<code>30-resources/files/</code>)。<code>90-archive/</code>でも<code>files/</code>は保持する(サブフォルダは掘らないという上の規則の例外)。</p><p>例外: memo_guard(音声メモ)はshiori-save CLIを経由せず、typeを持たないまま<code>00-inbox/</code>へ直接書き込む。記事本文の表示・検索結果のパス解決は、フォルダ階層が深くなったことに伴い再帰探索方式に変更済み。</p>",
       paths: ["library/00-inbox〜90-archive/, library/_system/", "library/_system/CLAUDE.md — 保存ルール", "library/_system/tags.yaml, projects.yaml"]
     },
     claude_code: {
@@ -1014,13 +1033,13 @@
     mcp_server: {
       eyebrow: "外部連携",
       title: "MCPサーバー(mcp_server.rs)",
-      body: "<p>会話UIとは別バイナリの、読み取り専用stdioベースMCPサーバー。<code>get_context_profile</code>(<code>_system/tier1-profile.md</code>を丸ごと返す)と<code>search_library</code>(ファイル単位の見出し一覧を返す、本文は含めない)の2ツールのみ持ち、書き込みツールは意図的に持たせていない。呼び出し時に埋め込み/RAGデーモンの起動確認も自分で行うため、会話UIなしでも単体で検索が完結する。</p><p>Ver3.3(時間認識検索)で<code>search_library</code>に<code>include_history</code>引数を追加。trueにすると経緯モード(deprecated/archive込み、date降順)で検索する。「前はどうだったか」のような時系列・変遷が重要な質問かどうかは、外部AI(呼び出し元)側の判断に委ねる設計。</p>",
+      body: "<p>会話UIとは別バイナリの、読み取り専用stdioベースMCPサーバー。<code>get_context_profile</code>(<code>_system/tier1-profile.md</code>を丸ごと返す)と<code>search_library</code>(ファイル単位の見出し一覧を返す、本文は含めない。Ver3.5以降、素材の<code>.meta</code>がヒットした結果には実体の<code>asset_path</code>も含む)の2ツールのみ持ち、書き込みツールは意図的に持たせていない。呼び出し時に埋め込み/RAGデーモンの起動確認も自分で行うため、会話UIなしでも単体で検索が完結する。</p><p>Ver3.3(時間認識検索)で<code>search_library</code>に<code>include_history</code>引数を追加。trueにすると経緯モード(deprecated/archive込み、date降順)で検索する。「前はどうだったか」のような時系列・変遷が重要な質問かどうかは、外部AI(呼び出し元)側の判断に委ねる設計。</p>",
       paths: ["system/src-tauri/src/bin/mcp_server.rs"]
     },
     shiori_save: {
       eyebrow: "外部連携",
       title: "shiori-save CLI",
-      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは<code>_system/tags.yaml</code>で正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(PendingModalで承認・却下)。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層に、resourceは<code>30-resources/</code>直下に、profileは<code>category</code>指定があれば<code>40-profile/{category}/</code>(未指定なら直下)に振り分ける。</p><p>Ver3.3(時間認識検索)で<code>date</code>(記事の作成日時、ISO8601)を保存の都度、実行時刻で決定的に上書きするようになった。type/kindの判定と同じく、日時のような機械的に決まる値はAIの手動入力に委ねず、CLI側で確実に付与する。</p>",
+      body: "<p>frontmatterを解析し、typeやprojectから配置先ディレクトリを決定的に決めて(LLMの裁量に任せない)library/へファイルを移動するCLI。タグの表記ゆれは<code>_system/tags.yaml</code>で正規化し、未知のタグ/プロジェクトはpendingとして自己登録される(PendingModalで承認・却下)。project/areaは<code>{10-projects|20-areas}/{project}/{kind}/</code>という3階層に、resourceは<code>30-resources/</code>直下に、profileは<code>category</code>指定があれば<code>40-profile/{category}/</code>(未指定なら直下)に振り分ける。</p><p>Ver3.5で素材の取り込みに対応。<code>shiori-save [--copy] &lt;素材&gt;.meta</code>は、素材を<code>files/</code>へ「コピー→SHA-256照合→原本削除」の順で移動し(照合不一致なら原本を残して中断)、<code>.meta</code>に<code>sha256</code>・サイズ・<code>date</code>を決定的に書く。同名があれば実体と<code>.meta</code>に同じ連番を付ける。mdと違い、不備があってもinboxへ逃がさずエラーにする(素材だけがinboxに置かれて実体と説明の対応が崩れるのを防ぐ)。<code>id_*</code>(<code>.pub</code>を除く)・<code>*.pem</code>・<code>*.ppk</code>・<code>*.key</code>・<code>.env</code>・<code>key.txt</code>は名前で拒否する。</p><p>Ver3.3(時間認識検索)で<code>date</code>(記事の作成日時、ISO8601)を保存の都度、実行時刻で決定的に上書きするようになった。type/kindの判定と同じく、日時のような機械的に決まる値はAIの手動入力に委ねず、CLI側で確実に付与する。</p>",
       paths: ["system/src-tauri/src/bin/shiori_save.rs — decide_destination()"]
     },
     shared_daemon_concept: {
@@ -1050,7 +1069,7 @@
     ui_browse: {
       eyebrow: "デスクトップUI",
       title: "全件閲覧",
-      body: "<p>Finder風のエクスプローラー画面。検索結果ベースの図書館ウィンドウとは別に、library/の全件を一覧・閲覧する用途を担う。</p>",
+      body: "<p>Finder風のエクスプローラー画面。検索結果ベースの図書館ウィンドウとは別に、library/の全件を一覧・閲覧する用途を担う。</p><p>Ver3.5で素材(<code>.meta</code>)に対応。実体の行は📦(実体の無い孤児の<code>.meta</code>は⚠️)で表示し、詳細画面の「開く」「フォルダで表示」で実体に辿れる。パスがlibrary配下かをRust側で検証し、実行形式(.exe・.sh・.app等)は直接開かずフォルダ表示のみ許可する。</p>",
       paths: ["system/src/components/library/LibraryBrowseScreen.tsx"]
     },
     ui_settings: {
