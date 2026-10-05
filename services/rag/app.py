@@ -17,14 +17,17 @@ from pydantic import BaseModel
 
 from embedding_client import get_embedding
 from indexing import reindex_single_file, sync_index
-from library_path import resolve_knowledge_dir
+from library_path import resolve_knowledge_dir, resolve_vectordb_dir
 from reranker import rerank, warmup as warmup_reranker
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # 開発ツリー/ポータブル版どちらでも正しいlibrary/を指すよう、
 # library_path.resolve_knowledge_dir()に判定を委譲する(詳細はそちら参照)。
 KNOWLEDGE_DIR = resolve_knowledge_dir(PROJECT_ROOT)
-VECTORDB_DIR = PROJECT_ROOT / "data" / "vectordb"
+# 外部SSD(ExFAT/fskit)でのChromaDB書き込み不具合の回避のため、環境変数
+# SHIORI_VECTORDB_DIRが設定されていればそちらを使う(詳細はlibrary_path参照)。
+VECTORDB_DIR = resolve_vectordb_dir(PROJECT_ROOT)
+VECTORDB_DIR.mkdir(parents=True, exist_ok=True)
 COLLECTION_NAME = "shiori_knowledge"
 
 app = FastAPI()

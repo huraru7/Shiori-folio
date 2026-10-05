@@ -16,13 +16,15 @@ import chromadb
 import httpx
 
 from indexing import save_index_state, sync_index
-from library_path import resolve_knowledge_dir
+from library_path import resolve_knowledge_dir, resolve_vectordb_dir
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 # 開発ツリー/ポータブル版どちらでも正しいlibrary/を指すよう、
 # library_path.resolve_knowledge_dir()に判定を委譲する(詳細はそちら参照)。
 KNOWLEDGE_DIR = resolve_knowledge_dir(PROJECT_ROOT)
-VECTORDB_DIR = PROJECT_ROOT / "data" / "vectordb"
+# app.pyと同じ理由(外部SSDでのChromaDB書き込み不具合回避)でVECTORDB_DIRを解決する。
+VECTORDB_DIR = resolve_vectordb_dir(PROJECT_ROOT)
+VECTORDB_DIR.mkdir(parents=True, exist_ok=True)
 COLLECTION_NAME = "shiori_knowledge"
 
 
