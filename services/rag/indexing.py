@@ -287,9 +287,15 @@ def sync_index(
     updated: list[str] = []
     removed: list[str] = []
 
+    # チャンクはファイル名(source)単位で管理しているため、ファイルを別フォルダへ
+    # 移動(アーカイブ等)した場合、旧パスの削除でsource名が同じ移動先のチャンクまで
+    # 消えてしまう(移動先がreindex_file済みでmtime一致のとき、再投入もされない)。
+    # 同名のファイルが現存するときは、チャンクの削除はせず状態だけ更新する。
+    current_names = {Path(rel).name for rel in current_paths}
     for rel in list(state.keys()):
         if rel not in current_paths:
-            _remove_file(collection, Path(rel).name)
+            if Path(rel).name not in current_names:
+                _remove_file(collection, Path(rel).name)
             del state[rel]
             removed.append(rel)
 
