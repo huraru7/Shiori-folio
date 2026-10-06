@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.5(素材ファイル対応: .metaサイドカー)</span>
+    <span class="home__chip"><b>世代</b> Ver3.6(ローカルLLMだけの会話の検証と改修)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -569,7 +569,7 @@
       <g class="node node--accent-clay" tabindex="0" role="button" data-detail="tts" transform="translate(40,590)">
         <rect width="260" height="52" rx="8"/>
         <text x="14" y="24" font-size="12.5">TTS — piper-plus-cli</text>
-        <text class="node__sub" x="14" y="40" font-size="10">現状: 手動プレビューのみ</text>
+        <text class="node__sub" x="14" y="40" font-size="10">応答のたびに都度呼び出して読み上げ</text>
       </g>
       <g class="node node--accent-task" tabindex="0" role="button" data-detail="conversation_log" transform="translate(340,590)">
         <rect width="260" height="52" rx="8"/>
@@ -739,8 +739,9 @@
     </div>
     <figcaption>
       音声入力からSTT・会話判定ロジック(identity_guard→memo_guard→
-      history_guard→passive recallの優先順位。Ver3.3でhistory_guardを追加、
-      図中は省略しているため詳細は右のツール一覧を参照)・LLM・TTSに至る
+      history_guard→app_state_guard→passive recallの優先順位。Ver3.3でhistory_guard、
+      Ver3.6でapp_state_guardと応答後のfact_guardを追加。図中は省略しているため
+      詳細は右のツール一覧とLLMの項を参照)・LLM・TTSに至る
       会話フロー(左)、library/を土台にRAGサーバー・ChromaDB・rerankerが
       支えるセカンドブレイン(右上)、外部AIが検索/保存に使うMCPサーバーと
       shiori-save CLI(中央下)、それらを画面として束ねるデスクトップUI・
@@ -763,7 +764,24 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.5</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.6</span>
+        <span class="version-list__date">2026-10-06</span>
+      </div>
+      <p class="version-list__body">
+        Claudeとつながず、ローカルLLM(Qwen3-8B)との会話だけで作業が完結できるかを、10のシナリオで測った。
+        改修前は、確かめていないことを「記録がある」「メモした」「要確認のタグはない」と言う作り話・虚偽の報告が
+        あった。会話履歴もなく(「さっきの件」が通じない)、録音後のwhisper-serverの起動待ちでUIが応答なしになっていた。
+        改修したのは4点。1つ目は会話履歴で、直近4ターンをプロセス内に保持し、案内した記録の見出しも添える。
+        履歴があるときは、今回の発言の直前に「会話の続き」と念押しする。2つ目は、応答後の事実確認(fact_guard)と
+        app_state_guard。3つ目はmemo_guardの口語の言い回し(12通り)。4つ目は、録音停止・<code>send_message</code>・
+        ホットキー処理をメインスレッドの外へ移したことと、無音・whisperの非発話出力を弾くこと。
+        改修前に「できない」だった6シナリオは、すべて「できる」になった。Qwen3-8Bは、プロンプトの例文を写しやすく、
+        プロンプトだけでは作り話を防ぎきれない。Rust側の決定的なガードとの組み合わせで成り立っている、という所見を得た。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.5</span>
         <span class="version-list__date">2026-10-05</span>
       </div>
       <p class="version-list__body">
@@ -925,13 +943,13 @@
     hotkey_record: {
       eyebrow: "音声入力",
       title: "ホットキー / マイクボタン",
-      body: "<p>グローバルホットキー(既定 <code>Ctrl+Alt+S</code>)またはVoiceBarのマイクボタンから録音を開始する。どちらも同じstate更新に収束する。</p>",
+      body: "<p>グローバルホットキー(既定 <code>Ctrl+Alt+S</code>)またはVoiceBarのマイクボタンから録音を開始する。どちらも同じstate更新に収束する。</p><p>Ver3.6で、音量ピークが0.005未満の録音を無音として文字起こしに回さないようにした(以前は、ミュートしたマイクの無音からwhisperが作った幻聴が、そのまま発言として送られていた)。録音停止〜文字起こしの失敗は、<code>voice:failed</code>イベントで会話ログに「音声を聞き取れませんでした」と表示する。</p>",
       paths: ["system/src/components/VoiceBar.tsx", "system/src-tauri/src/audio.rs"]
     },
     stt: {
       eyebrow: "音声認識",
       title: "STT — whisper-server",
-      body: "<p>録音のたびにwhisper.cppを起動し、<code>POST /inference</code>にwavを送って文字起こしする(<code>SttManager</code>)。VRAM節約のため常時起動はせず、アイドル15秒でバックグラウンド停止する。5秒間隔のポーリングで検知するため、最後の呼び出しから最大20秒ほどプロセスが残ることがある。</p>",
+      body: "<p>録音のたびにwhisper.cppを起動し、<code>POST /inference</code>にwavを送って文字起こしする(<code>SttManager</code>)。VRAM節約のため常時起動はせず、アイドル15秒でバックグラウンド停止する。5秒間隔のポーリングで検知するため、最後の呼び出しから最大20秒ほどプロセスが残ることがある。</p><p>Ver3.6で、起動待ち〜文字起こし(<code>transcribe_when_ready</code>)を、マイクボタン経路は<code>spawn_blocking</code>、ホットキー経路は別スレッドで行うようにした。以前はメインスレッドで最大十数秒ブロックし、UIが応答なしになっていた。この間は<code>in_use</code>フラグでアイドル監視を止め、起動中のwhisper-serverを止めてしまう不具合も直した。whisperが<code>[音声なし]</code>のような括弧書きの注記だけを返したときは、発話ではないとして弾く。</p>",
       paths: ["system/src-tauri/src/whisper_client.rs — transcribe()", "system/src-tauri/src/lib.rs — SttManager"]
     },
     identity_guard: {
@@ -943,7 +961,7 @@
     memo_guard: {
       eyebrow: "会話判定ロジック(優先度2)",
       title: "memo_guard",
-      body: "<p>「〜についてメモして」等の保存意図を検知すると、<code>library/00-inbox/</code>へMarkdownとして書き出し、RAGサーバーの<code>/add_document</code>で即座にChromaDBへも登録する(直後の会話から想起できるように)。</p>",
+      body: "<p>「〜についてメモして」等の保存意図を検知すると、<code>library/00-inbox/</code>へMarkdownとして書き出し、RAGサーバーの<code>/add_document</code>で即座にChromaDBへも登録する(直後の会話から想起できるように)。</p><p>Ver3.6で、「メモして」「記録して」「覚えておいて」に加えて、「メモしといて」「忘れないようにしといて」「覚えといて」などの口語の言い回し(計12通り)を検知するようにした。「これ:〜」のように指示語の後ろに内容が続く形にも対応する。保存の判断をLLMのツールに任せる案は、過去の検証で信頼できないと分かっているため採らなかった。</p>",
       paths: ["system/src-tauri/src/lib.rs — parse_memo_intent() / build_memo_guard_context()"]
     },
     history_guard: {
@@ -953,7 +971,7 @@
       paths: ["system/src-tauri/src/lib.rs — is_history_question() / build_history_guard_context()", "system/src-tauri/src/rag_client.rs — search_history()"]
     },
     passive_recall: {
-      eyebrow: "会話判定ロジック(優先度3・既定)",
+      eyebrow: "会話判定ロジック(優先度5・既定)",
       title: "passive recall(常時軽量検索)",
       body: "<p>通常の発話では毎回RAGサーバーへ軽量検索を投げ、関連度が閾値(<code>config.json</code>の<code>rag.passiveRecallThreshold</code>)を超えればsystemメッセージとしてLLMへ注入する。LLMに検索ツールを呼ばせずとも、自然に過去の記憶を踏まえた応答ができる。</p>",
       paths: ["system/src-tauri/src/lib.rs — build_passive_recall_context()"]
@@ -961,7 +979,7 @@
     llm: {
       eyebrow: "推論",
       title: "LLM — llama-server(Qwen3-8B)",
-      body: "<p>OpenAI互換の<code>/v1/chat/completions</code>にsystem(プロンプト+context)・userを送信し、Function Calling用に<code>tools=[search_knowledge]</code>を渡す。<code>enable_thinking: false</code>でQwen3の思考モードを止めており、雑談の応答遅延が最大22.79秒→5.96秒に短縮された実測がある。<code>tool_calls</code>が返れば<code>execute_tool()</code>で実行し、結果を会話履歴に積んで再度問い合わせる(最大反復回数まで)。</p>",
+      body: "<p>OpenAI互換の<code>/v1/chat/completions</code>にsystem(プロンプト+context)・userを送信し、Function Calling用に<code>tools=[search_knowledge]</code>を渡す。<code>enable_thinking: false</code>でQwen3の思考モードを止めており、雑談の応答遅延が最大22.79秒→5.96秒に短縮された実測がある。<code>tool_calls</code>が返れば<code>execute_tool()</code>で実行し、結果を会話履歴に積んで再度問い合わせる(最大反復回数まで)。</p><p>Ver3.6で、次の3つを追加した。</p><p><b>会話履歴</b>:直近4ターン(1発言400字まで)をプロセス内に保持し、system(プロンプト)の後ろに積む。再起動すると消える。案内した記録の見出し・ファイル名も添え、「その2つ目のやつ」に答えられるようにした。渡すだけではQwen3-8Bが使わなかったため、履歴があるときは今回の発言の直前に「会話の続きです」と念押しを置く。</p><p><b>app_state_guard</b>(優先度4、passive recallより先): 「要確認」「未承認」など、会話の中で確かめる手段のないアプリの状態を尋ねる発言を検知し、「確認できない」と答えさせる。</p><p><b>fact_guard</b>(応答後): 3種類の作り話を検知して、正直な決まった文に置き換える。参照情報がないのに「記録があります」「〜目の記録は」と言う応答。保存の処理が動いていないのに「メモしました」と言う応答。app_state_guardの発動時に「確認でき」を含まない応答。プロンプトだけではQwen3-8Bの作り話を防ぎきれないことが、測定で分かったため。</p>",
       paths: ["system/src-tauri/src/llm_client.rs — chat_with_tools()", "system/src-tauri/src/lib.rs — send_message_impl()"]
     },
     tool_search_knowledge: {
@@ -973,7 +991,7 @@
     tts: {
       eyebrow: "音声合成",
       title: "TTS — piper-plus-cli",
-      body: "<p>現状、起動時のサイドカーとしては無効化されている(アップストリームの<code>speaker_embedding</code>次元不一致という既知の不具合のため)。設定画面(音声設定ページ)の「試し読み」プレビューでのみ、その場でコマンドを都度呼び出す。</p>",
+      body: "<p>常駐のサイドカーとしては起動しない。応答のたびに、フロントの<code>synthesize_speech</code>から<code>piper-plus-cli</code>を都度呼び出し、wavを合成してrodioで再生する(<code>spawn_blocking</code>で実行するため、読み上げ中もUIは固まらない)。設定画面の「試し読み」も同じ仕組み。</p><p>以前は、アップストリームの<code>speaker_embedding</code>次元不一致で合成に失敗していた。不具合の影響を受けないWavLM版モデルにピン留めしてからは動作しており、Ver3.6の測定では全ターンで合成・再生に成功した(<code>tts_failures</code>は0件)。失敗しても会話は止めず、デバッグ画面のTTS失敗履歴に記録する。</p>",
       paths: ["system/src-tauri/src/piper_client.rs", "system/src-tauri/src/lib.rs — start_backend_services_impl()内のコメント参照"]
     },
     conversation_log: {
