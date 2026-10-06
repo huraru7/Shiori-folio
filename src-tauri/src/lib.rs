@@ -2435,6 +2435,88 @@ fn build_passive_recall_context(
 // ルールの中身はprompts/transforms/person-correction.jsonにあり、ここでは
 // text_transformエンジンを呼び出すだけの薄いラッパーにしている。
 // 各ルールの追加経緯・リスク判断はdocs/voice-consistency-policy.mdを参照。
+// 応答後の事実確認ガード(詩織Ver3.6)。Ver3.6の測定で、確かめていないことを
+// 「ある/やった」と言う作り話が見つかった(参照情報が無いのに「宇宙旅行の記録が
+// ありますね。開いてみますか?」、保存の処理が動いていないのに「メモしておき
+// ましたよ」)。プロンプトの指示だけではQwen3-8Bが守りきれないため、identity_guard
+// と同じく、LLMの協力に頼らずRust側で検知して正直な文に置き換える。
+//
+// 否定形(「記録がありません」「残っていません」)に当たらないよう、肯定形の
+// 言い回しだけを並べている。
+const RECORD_EXISTENCE_CLAIMS: [&str; 8] = [
+    // 「2つ目の記録は〜」のように、前のターンで案内した記録を指す言い方。
+    // 前のターンに記録がないのにこう答える作り話が再測定で見つかった。
+    "目の記録",
+    "記録があります",
+    "記録があるかも",
+    "記録が残っています",
+    "メモがあります",
+    "メモがあるかも",
+    "メモが残っています",
+    "開いてみますか",
+];
+const SAVE_CLAIMS: [&str; 8] = [
+    "メモしておきました",
+    "メモしました",
+    "保存しておきました",
+    "保存しました",
+    "記録しておきました",
+    "記録しました",
+    "覚えておきました",
+    "覚えました",
+];
+const NO_RECORD_REPLY: &str =
+    "それについての記録は、見当たらないみたいです。";
+const NOT_SAVED_REPLY: &str =
+    "すみません、まだ保存はしていません。残しておきたいときは「〜ってメモして」のように言ってもらえれば、記録しておきますね。";
+
+const APP_STATE_REPLY: &str =
+    "すみません、それは私からは確認できないんです。要確認の画面で見てもらえますか？";
+
+fn correct_unverified_claims(
+    reply: &str,
+    user_text: &str,
+    memo_executed: bool,
+    has_references: bool,
+    app_state_question: bool,
+) -> String {
+    // app_state_guardの指示を受けても「記録は見当たらない」のように答えることが
+    // 再測定で見つかったため、「確認できない」と言っていなければ置き換える。
+    let corrected = if app_state_question && !reply.contains("確認でき") {
+        Some(APP_STATE_REPLY)
+    } else if !memo_executed && SAVE_CLAIMS.iter().any(|p| reply.contains(p)) {
+        Some(NOT_SAVED_REPLY)
+    } else if !has_references && RECORD_EXISTENCE_CLAIMS.iter().any(|p| reply.contains(p)) {
+        Some(NO_RECORD_REPLY)
+    } else {
+        None
+    };
+    match corrected {
+        Some(replacement) => {
+            eprintln!(
+                "[fact_guard] 確かめていない内容の応答を検知し、置き換えました。\nユーザー発話: {user_text}\n置き換え前: {reply}\n置き換え後: {replacement}"
+            );
+            replacement.to_string()
+        }
+        None => reply.to_string(),
+    }
+}
+
+// 要確認リスト(タグ・プロジェクト・inbox)のように、詩織が会話の中で確かめる手段を
+// 持たないアプリの状態を尋ねる発言。測定(Ver3.6、S9)では「要確認のタグは
+// 見かけませんね」と断定する作り話が見つかった。読み取りの道具を持たせるのは
+// Ver3.7(管理機能)の範囲のため、ここでは「確かめられない」と正直に答えさせる。
+const APP_STATE_KEYWORDS: [&str; 3] = ["要確認", "未承認", "pending"];
+
+fn is_app_state_question(text: &str) -> bool {
+    APP_STATE_KEYWORDS.iter().any(|k| text.contains(k))
+}
+
+const APP_STATE_GUARD_CONTEXT: &str = "ふらるさんは、要確認リスト(承認待ちのタグ・プロジェクト・inboxの項目)など、\n\
+     アプリの状態について尋ねています。今のあなたには、それを会話の中で確かめる手段が\n\
+     ありません。「ある」とも「ない」とも断定せず、「私からは確認できないので、\n\
+     要確認の画面で見てもらえますか」のように、正直に伝えてください。";
+
 fn correct_third_person_self_reference(text: &str, user_text: &str) -> String {
     let rules = match text_transform::load_rules("person-correction.json") {
         Ok(rules) => rules,
@@ -2782,6 +2864,94 @@ fn emit_activity_started(app: &tauri::AppHandle, tool: &str) {
     let _ = app.emit("shiori:activity", serde_json::json!({ "tool": tool }));
 }
 
+// 会話履歴(詩織Ver3.6)。以前はsend_messageのたびに「システムプロンプト+参照情報+
+// 今回の発言」だけをLLMに渡しており、「さっきの件」のような前の発言を指す話が
+// 通じなかった。直近のターンだけをプロセス内に保持し、アプリを再起動すると消える
+// (会話DBのconversationsには従来どおり全件残る)。コンテキスト(config.llm.
+// contextSize=8192)を圧迫しないよう、ターン数と1発言あたりの文字数に上限を設ける。
+const HISTORY_MAX_TURNS: usize = 4;
+const HISTORY_MAX_CHARS_PER_MESSAGE: usize = 400;
+
+struct HistoryTurn {
+    user: String,
+    assistant: String,
+    // このターンで記録を案内したか。次のターンで「その2つ目のやつ」のように
+    // 前のターンの記録を指す応答を、事実確認ガードが作り話と誤判定しないために使う。
+    had_references: bool,
+}
+
+static CONVERSATION_HISTORY: Mutex<std::collections::VecDeque<HistoryTurn>> =
+    Mutex::new(std::collections::VecDeque::new());
+
+const HISTORY_CONTINUATION_NOTE: &str = "これは上のやり取りの続きです。ふらるさんの次の発言に「さっき」「それ」「その〇つ目」のような\n\
+     言葉があれば、上のやり取りの内容を指しています。聞き返す前に、上のやり取りを\n\
+     踏まえて答えてください。";
+
+fn truncate_chars(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        text.to_string()
+    } else {
+        let head: String = text.chars().take(max).collect();
+        format!("{head}…")
+    }
+}
+
+// 履歴に積むassistant側の内容。案内した記録の見出しも添えておくことで、次の
+// ターンの「その2つ目のやつ」のような指し示しに答えられるようにする(応答本文は
+// 記録の一部にしか触れないことが多いため)。
+fn history_assistant_content(reply: &str, sources: Option<&Vec<KnowledgeResultDto>>) -> String {
+    let reply = truncate_chars(reply, HISTORY_MAX_CHARS_PER_MESSAGE);
+    match sources {
+        Some(list) if !list.is_empty() => {
+            let shelf = list
+                .iter()
+                .enumerate()
+                .map(|(i, s)| format!("{}. {}({})", i + 1, s.heading, s.source))
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!("{reply}\n\n(このとき案内した記録)\n{shelf}")
+        }
+        _ => reply,
+    }
+}
+
+fn history_messages() -> Vec<serde_json::Value> {
+    let Ok(history) = CONVERSATION_HISTORY.lock() else {
+        return Vec::new();
+    };
+    history
+        .iter()
+        .flat_map(|turn| {
+            [
+                serde_json::json!({ "role": "user", "content": turn.user }),
+                serde_json::json!({ "role": "assistant", "content": turn.assistant }),
+            ]
+        })
+        .collect()
+}
+
+fn last_turn_had_references() -> bool {
+    CONVERSATION_HISTORY
+        .lock()
+        .ok()
+        .and_then(|h| h.back().map(|t| t.had_references))
+        .unwrap_or(false)
+}
+
+fn push_history(user: &str, reply: &str, sources: Option<&Vec<KnowledgeResultDto>>) {
+    let Ok(mut history) = CONVERSATION_HISTORY.lock() else {
+        return;
+    };
+    history.push_back(HistoryTurn {
+        user: truncate_chars(user, HISTORY_MAX_CHARS_PER_MESSAGE),
+        assistant: history_assistant_content(reply, sources),
+        had_references: sources.is_some_and(|s| !s.is_empty()),
+    });
+    while history.len() > HISTORY_MAX_TURNS {
+        history.pop_front();
+    }
+}
+
 // 同期コマンドはメインスレッドで実行されるため、以前は応答を待つ数秒〜十数秒の間
 // UIが固まっていた。spawn_blockingで専用スレッドに追い出す(2026-10-06、Ver3.6)。
 #[tauri::command]
@@ -2847,10 +3017,24 @@ fn send_message_impl(
         None
     };
 
+    // 上記のどれでもない場合、確かめる手段のないアプリの状態(要確認リスト等)を
+    // 尋ねる発言でないか確認する(詩織Ver3.6)。
+    let app_state_guard_context = if identity_guard_context.is_none()
+        && memo_guard_context.is_none()
+        && history_guard_context.is_none()
+        && is_app_state_question(&text)
+    {
+        eprintln!("[app_state_guard] 確かめる手段のない状態についての質問を検知しました");
+        Some(APP_STATE_GUARD_CONTEXT.to_string())
+    } else {
+        None
+    };
+
     let passive_recall_start = std::time::Instant::now();
     let passive_recall = if identity_guard_context.is_some()
         || memo_guard_context.is_some()
         || history_guard_context.is_some()
+        || app_state_guard_context.is_some()
     {
         None
     } else {
@@ -2874,14 +3058,28 @@ fn send_message_impl(
         "role": "system",
         "content": system_prompt,
     })];
+    // 履歴は参照情報(ガード/passive recall)より前に置く。参照情報は今回の発言に
+    // ついてのものなので、今回の発言の直前にあるほうがLLMが取り違えにくい。
+    let history = history_messages();
+    let has_history = !history.is_empty();
+    messages_vec.extend(history);
     if let Some(context) = &identity_guard_context {
         messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
     } else if let Some(context) = &memo_guard_context {
         messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
     } else if let Some(context) = &history_guard_context {
         messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
+    } else if let Some(context) = &app_state_guard_context {
+        messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
     } else if let Some(context) = &passive_recall {
         messages_vec.push(serde_json::json!({ "role": "system", "content": context }));
+    }
+    // 履歴があるときは、今回の発言の直前に「会話の続きである」ことを短く念押しする。
+    // 履歴を渡すだけでは、Qwen3-8Bが「さっきの件」を前のやり取りと結びつけず、
+    // プロンプトの例文をなぞった応答を返すことが再測定で分かったため(Ver3.6)。
+    // 小さいモデルは直前に置かれた指示に最も強く従う。
+    if has_history {
+        messages_vec.push(serde_json::json!({ "role": "system", "content": HISTORY_CONTINUATION_NOTE }));
     }
     messages_vec.push(serde_json::json!({ "role": "user", "content": text }));
     let mut messages = serde_json::Value::Array(messages_vec);
@@ -2997,9 +3195,20 @@ fn send_message_impl(
     }
     .to_string();
 
+    // 直前のターンで案内した記録を指して話を続けている場合も「参照情報あり」とみなす。
+    let has_references =
+        sources.as_ref().is_some_and(|s| !s.is_empty()) || last_turn_had_references();
+    final_content = correct_unverified_claims(
+        &final_content,
+        &text,
+        memo_guard_context.is_some(),
+        has_references,
+        app_state_guard_context.is_some(),
+    );
     final_content = correct_third_person_self_reference(&final_content, &text);
 
     log_conversation(&detected_mode, &text, &final_content)?;
+    push_history(&text, &final_content, sources.as_ref());
 
     Ok(SendMessageReply {
         reply: final_content,
@@ -3342,6 +3551,87 @@ mod tests {
         assert_eq!(parse_memo_intent("メモして"), None);
         // 無関係な文章は検知しない
         assert_eq!(parse_memo_intent("こんにちは、調子はどう？"), None);
+    }
+
+    // 事実確認ガード(Ver3.6、測定シナリオS4・S6)。
+    #[test]
+    fn correct_unverified_claims_replaces_only_unbacked_claims() {
+        // 参照情報なしで記録の存在を言う → 置き換え(S4)
+        assert_eq!(
+            correct_unverified_claims(
+                "そういえば、宇宙旅行についての記録があるかもしれません。開いてみますか？",
+                "前に宇宙旅行の計画を立てたっけ?",
+                false,
+                false,
+                false,
+            ),
+            NO_RECORD_REPLY
+        );
+        // 参照情報ありなら、そのまま
+        let backed = "huraru.comのベースカラーについてのメモがありますね。開いてみますか？";
+        assert_eq!(correct_unverified_claims(backed, "", false, true, false), backed);
+        // 否定形は置き換えない
+        let negative = "記録にはポートフォリオの色についての記述が見つかりませんでした。記録がありません。";
+        assert_eq!(correct_unverified_claims(negative, "", false, false, false), negative);
+        // 保存の処理なしで保存したと言う → 置き換え(S6)
+        assert_eq!(
+            correct_unverified_claims("今、メモしておきましたよ。", "", false, false, false),
+            NOT_SAVED_REPLY
+        );
+        // 保存の処理が動いていれば、そのまま
+        let saved = "今、メモしておきましたよ。";
+        assert_eq!(correct_unverified_claims(saved, "", true, true, false), saved);
+        // 前のターンに記録がないのに「2つ目の記録は〜」と言う → 置き換え(S8)
+        assert_eq!(
+            correct_unverified_claims(
+                "2つ目の記録は、背景についてのものです。",
+                "その2つ目のやつ、いつの?",
+                false,
+                false,
+                false,
+            ),
+            NO_RECORD_REPLY
+        );
+        // 要確認の質問に「確認できない」と答えていなければ置き換え(S9)
+        assert_eq!(
+            correct_unverified_claims("それについての記録は、見当たらないみたいです。", "", false, false, true),
+            APP_STATE_REPLY
+        );
+        let honest = "私からは確認できないので、要確認の画面で見てもらえますか。";
+        assert_eq!(correct_unverified_claims(honest, "", false, false, true), honest);
+    }
+
+    #[test]
+    fn history_assistant_content_lists_shelf_and_truncates() {
+        let sources = vec![
+            KnowledgeResultDto {
+                id: "a".to_string(),
+                text: String::new(),
+                source: "a.md".to_string(),
+                heading: "見出しA".to_string(),
+                source_category: "20-areas".to_string(),
+            },
+            KnowledgeResultDto {
+                id: "b".to_string(),
+                text: String::new(),
+                source: "b.md".to_string(),
+                heading: "見出しB".to_string(),
+                source_category: "20-areas".to_string(),
+            },
+        ];
+        let content = history_assistant_content("記録が2つあります。", Some(&sources));
+        assert!(content.contains("1. 見出しA(a.md)"));
+        assert!(content.contains("2. 見出しB(b.md)"));
+
+        let long = "あ".repeat(HISTORY_MAX_CHARS_PER_MESSAGE + 10);
+        let truncated = history_assistant_content(&long, None);
+        assert_eq!(truncated.chars().count(), HISTORY_MAX_CHARS_PER_MESSAGE + 1);
+    }
+
+    #[test]
+    fn app_state_question_detection() {
+        assert!(is_app_state_question("要確認のタグってある?"));
+        assert!(!is_app_state_question("今日は何しようかな"));
     }
 
     // Ver3.6で追加した口語の言い回し(測定シナリオS6)。
