@@ -2654,13 +2654,48 @@ fn build_history_guard_context(
 // LLMの判断を経由せず直接メモを保存する(identity_guardと同じ考え方。以前の
 // task_guardと同様、「保存すべきかどうか」をLLMの判断に委ねると、呼び出しを
 // 試みない・形式が漏れる等、信頼できないことがこれまでの検証で分かっている)。
-const MEMO_TRIGGER_KEYWORDS: [&str; 3] = ["メモして", "記録して", "覚えておいて"];
+//
+// Ver3.6(2026-10-06)で、口語の言い回しを追加した。「これ忘れないようにしといて:〜」
+// がキーワードに当たらず保存されないまま、LLMが「メモしておきましたよ」と答える
+// 虚偽の報告が測定で見つかったため(保存をツールにしてLLMに判断させる案は、上記の
+// 理由で採らなかった)。先頭から順に照合するため、長い言い回しを先に置く。
+const MEMO_TRIGGER_KEYWORDS: [&str; 12] = [
+    "忘れないようにしておいて",
+    "忘れないようにしといて",
+    "メモしておいて",
+    "メモしといて",
+    "メモっといて",
+    "メモして",
+    "記録しておいて",
+    "記録しといて",
+    "記録して",
+    "覚えておいて",
+    "覚えといて",
+    "忘れないで",
+];
 
 fn parse_memo_intent(text: &str) -> Option<String> {
     let trigger = MEMO_TRIGGER_KEYWORDS.iter().copied().find(|k| text.contains(k))?;
     let content = text.replacen(trigger, "", 1);
-    let content = content.trim().trim_end_matches(['。', '、']).trim().to_string();
-    if content.is_empty() {
+    let content = content.trim();
+    // 「これ忘れないようにしといて:〜」のように、指示語+区切り記号で内容が
+    // 後ろに続く形は、指示語を取り除く(「これから〜」のような語は残す)。
+    let content = ["これ", "それ"]
+        .iter()
+        .find_map(|p| {
+            content
+                .strip_prefix(p)
+                .filter(|rest| rest.starts_with([':', '：']))
+        })
+        .unwrap_or(content);
+    let content = content
+        .trim_start_matches([':', '：', '、', ' ', '　'])
+        .trim_end_matches(['。', '、'])
+        .trim()
+        .to_string();
+    // 指示語だけが残った場合(「これ忘れないようにしといて」)は、何を保存すべきか
+    // 分からないため保存しない。
+    if content.is_empty() || content == "これ" || content == "それ" {
         None
     } else {
         Some(content)
@@ -3307,6 +3342,28 @@ mod tests {
         assert_eq!(parse_memo_intent("メモして"), None);
         // 無関係な文章は検知しない
         assert_eq!(parse_memo_intent("こんにちは、調子はどう？"), None);
+    }
+
+    // Ver3.6で追加した口語の言い回し(測定シナリオS6)。
+    #[test]
+    fn parse_memo_intent_handles_colloquial_phrases() {
+        assert_eq!(
+            parse_memo_intent("これ忘れないようにしといて:Ver3.6の測定結果はシナリオ記事に追記する"),
+            Some("Ver3.6の測定結果はシナリオ記事に追記する".to_string())
+        );
+        assert_eq!(
+            parse_memo_intent("それ忘れないようにしておいて：明日は休み"),
+            Some("明日は休み".to_string())
+        );
+        assert_eq!(
+            parse_memo_intent("これから本を読むって覚えといて"),
+            Some("これから本を読むって".to_string())
+        );
+        assert_eq!(
+            parse_memo_intent("明日の予定をメモしといて"),
+            Some("明日の予定を".to_string())
+        );
+        assert_eq!(parse_memo_intent("これ忘れないようにしといて"), None);
     }
 
     // parse_leaked_tool_callの2つの漏れ形式を確認する軽量テスト(LLM不要)。
