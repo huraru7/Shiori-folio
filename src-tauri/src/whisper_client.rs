@@ -33,5 +33,34 @@ pub fn transcribe(port: u16, wav_bytes: &[u8]) -> Result<String, String> {
         .into_json()
         .map_err(|e| format!("whisper-server応答の解析に失敗: {e}"))?;
 
-    Ok(response.text.trim().to_string())
+    let text = response.text.trim().to_string();
+    if is_non_speech(&text) {
+        return Err(format!("発話を認識できませんでした(whisperの出力: {text})"));
+    }
+    Ok(text)
+}
+
+// whisperは発話が無い・聞き取れない録音に対して、「[音声なし]」「(音楽)」
+// 「[BLANK_AUDIO]」のような括弧書きの注記だけを返すことがある。これを発言として
+// 送ると、詩織が意味のない応答を返してしまうため弾く(2026-10-06、Ver3.6の再測定で発見)。
+fn is_non_speech(text: &str) -> bool {
+    const BRACKETS: [(char, char); 4] = [('[', ']'), ('(', ')'), ('（', '）'), ('【', '】')];
+    text.is_empty()
+        || BRACKETS
+            .iter()
+            .any(|(open, close)| text.starts_with(*open) && text.ends_with(*close))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_speech_annotations_are_detected() {
+        assert!(is_non_speech("[音声なし]"));
+        assert!(is_non_speech("(音楽)"));
+        assert!(is_non_speech("[BLANK_AUDIO]"));
+        assert!(is_non_speech(""));
+        assert!(!is_non_speech("この機能実装するか迷ってて"));
+    }
 }

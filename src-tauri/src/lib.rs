@@ -2747,9 +2747,15 @@ fn emit_activity_started(app: &tauri::AppHandle, tool: &str) {
     let _ = app.emit("shiori:activity", serde_json::json!({ "tool": tool }));
 }
 
+// 同期コマンドはメインスレッドで実行されるため、以前は応答を待つ数秒〜十数秒の間
+// UIが固まっていた。spawn_blockingで専用スレッドに追い出す(2026-10-06、Ver3.6)。
 #[tauri::command]
-fn send_message(app: tauri::AppHandle, text: String) -> Result<SendMessageReply, String> {
-    send_message_impl(text, |tool| emit_activity_started(&app, tool))
+async fn send_message(app: tauri::AppHandle, text: String) -> Result<SendMessageReply, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        send_message_impl(text, |tool| emit_activity_started(&app, tool))
+    })
+    .await
+    .map_err(|e| format!("応答生成タスクの実行に失敗: {e}"))?
 }
 
 // 本体。activity通知はコールバックとして受け取ることで、AppHandleを必要と
@@ -2977,6 +2983,11 @@ const STT_IDLE_CHECK_INTERVAL: Duration = Duration::from_secs(5);
 pub struct SttManager {
     child: Mutex<Option<Child>>,
     last_used: Mutex<Instant>,
+    // 起動待ち〜文字起こしの最中はtrue。この間はアイドル監視で停止させない。
+    // 以前は起動待ち(wait_healthy)の間にlast_usedが更新されず、モデルの読み込みが
+    // 15秒を超えると、まだ起動中のwhisper-serverをアイドル監視が止めてしまい、
+    // 起動待ちがタイムアウトする不具合があった(2026-10-06、Ver3.6の測定で発見)。
+    in_use: std::sync::atomic::AtomicBool,
 }
 
 impl SttManager {
@@ -2994,6 +3005,7 @@ impl SttManager {
         let manager = Arc::new(Self {
             child: Mutex::new(None),
             last_used: Mutex::new(Instant::now()),
+            in_use: std::sync::atomic::AtomicBool::new(false),
         });
         let watcher = manager.clone();
         std::thread::spawn(move || loop {
@@ -3035,17 +3047,28 @@ impl SttManager {
         Ok(())
     }
 
-    fn touch(&self) {
-        if let Ok(mut t) = self.last_used.lock() {
-            *t = Instant::now();
-        }
-    }
-
-    fn wait_healthy(&self, port: u16, attempts: u32) -> bool {
-        wait_for_health(port, attempts)
+    // 録音停止後に呼ぶ。whisper-serverの起動を待って文字起こしし、成否にかかわらず
+    // 即座にアンロードしてVRAMピークを短くする。起動待ち・文字起こしに数十秒かかる
+    // ことがあるため、メインスレッド(UIスレッド)から直接呼ばないこと。
+    // マイクボタン経路(stop_recording_and_transcribe)とホットキー経路
+    // (handle_hotkey_toggle)で共有する。
+    fn transcribe_when_ready(&self, port: u16, wav: &[u8]) -> Result<String, String> {
+        use std::sync::atomic::Ordering;
+        self.in_use.store(true, Ordering::SeqCst);
+        let result = if wait_for_health(port, 30) {
+            whisper_client::transcribe(port, wav)
+        } else {
+            Err("STT(whisper-server)の起動待ちでタイムアウトしました".to_string())
+        };
+        self.in_use.store(false, Ordering::SeqCst);
+        self.stop_now("文字起こし完了のため");
+        result
     }
 
     fn stop_if_idle(&self) {
+        if self.in_use.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
         let idle_for = match self.last_used.lock() {
             Ok(t) => t.elapsed(),
             Err(_) => return,
@@ -3106,22 +3129,23 @@ pub struct TranscribeResult {
     text: String,
 }
 
+// 同期コマンドはメインスレッドで実行されるため、以前は起動待ち・文字起こしの間
+// UIが「応答なし」になっていた(2026-10-06、Ver3.6の測定で発見)。
+// synthesize_speechと同じくspawn_blockingで専用スレッドに追い出す。
 #[tauri::command]
-fn stop_recording_and_transcribe(
-    state: tauri::State<audio::RecordingState>,
-    stt: tauri::State<Arc<SttManager>>,
+async fn stop_recording_and_transcribe(
+    state: tauri::State<'_, audio::RecordingState>,
+    stt: tauri::State<'_, Arc<SttManager>>,
 ) -> Result<TranscribeResult, String> {
     let wav = audio::stop_and_encode_wav(&state)?;
     let config = app_config()?;
-
-    stt.touch();
-    if !stt.wait_healthy(config.stt.port, 30) {
-        return Err("STT(whisper-server)の起動待ちでタイムアウトしました".to_string());
-    }
-    let text = whisper_client::transcribe(config.stt.port, &wav);
-    // 文字起こしの成否にかかわらず、用が済んだら即座にアンロードしてVRAMピークを短くする
-    stt.stop_now("文字起こし完了のため");
-    Ok(TranscribeResult { text: text? })
+    let stt = stt.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let text = stt.transcribe_when_ready(config.stt.port, &wav)?;
+        Ok(TranscribeResult { text })
+    })
+    .await
+    .map_err(|e| format!("文字起こしタスクの実行に失敗: {e}"))?
 }
 
 // TTSはspeaker_embedding次元不一致の既知の不具合により失敗することがあるが、
@@ -4039,7 +4063,7 @@ mod tests {
             .ensure_started(&exe, &model_path, config.stt.port)
             .expect("起動に失敗");
         assert!(
-            manager.wait_healthy(config.stt.port, 60),
+            wait_for_health(config.stt.port, 60),
             "起動後にhealthyにならなかった"
         );
         println!("起動確認OK");
@@ -4151,12 +4175,17 @@ fn handle_hotkey_toggle(app: &tauri::AppHandle) {
             Err(e) => eprintln!("録音開始に失敗: {e}"),
         }
     } else {
-        let wav_result = audio::stop_and_encode_wav(&recording_state);
+        // 失敗はログだけでなくフロントにも通知する(以前はeprintln!のみで、画面上は
+        // 何も起きないように見えていた)。
+        let notify_failure = |message: String| {
+            eprintln!("{message}");
+            let _ = app.emit("voice:failed", serde_json::json!({ "message": message }));
+        };
 
-        let wav = match wav_result {
+        let wav = match audio::stop_and_encode_wav(&recording_state) {
             Ok(w) => w,
             Err(e) => {
-                eprintln!("録音停止に失敗: {e}");
+                notify_failure(format!("録音停止に失敗: {e}"));
                 return;
             }
         };
@@ -4164,26 +4193,25 @@ fn handle_hotkey_toggle(app: &tauri::AppHandle) {
         let config = match app_config() {
             Ok(c) => c,
             Err(e) => {
-                eprintln!("config読み込みに失敗: {e}");
+                notify_failure(format!("config読み込みに失敗: {e}"));
                 return;
             }
         };
 
-        stt.touch();
-        if !stt.wait_healthy(config.stt.port, 30) {
-            eprintln!("STT(whisper-server)の起動待ちでタイムアウトしました");
-            return;
-        }
-
-        let result = whisper_client::transcribe(config.stt.port, &wav);
-        // 成否にかかわらず即座にアンロードしてVRAMピークを短くする
-        stt.stop_now("文字起こし完了のため");
-        match result {
+        // ホットキーのハンドラはメインスレッドで呼ばれるため、起動待ち・文字起こしは
+        // 別スレッドで行う(stop_recording_and_transcribeのコメント参照)。
+        let app = app.clone();
+        let stt = stt.inner().clone();
+        std::thread::spawn(move || match stt.transcribe_when_ready(config.stt.port, &wav) {
             Ok(text) => {
                 let _ = app.emit("voice:transcribed", TranscribeResult { text });
             }
-            Err(e) => eprintln!("文字起こしに失敗: {e}"),
-        }
+            Err(e) => {
+                let message = format!("文字起こしに失敗: {e}");
+                eprintln!("{message}");
+                let _ = app.emit("voice:failed", serde_json::json!({ "message": message }));
+            }
+        });
     }
 }
 

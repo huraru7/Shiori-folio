@@ -57,6 +57,11 @@ interface ShioriState {
   isRecording: boolean;
   toggleRecording: () => Promise<void>;
 
+  // 録音停止〜文字起こしの失敗(無音・whisper-serverの起動待ちタイムアウト等)を
+  // 会話ログに表示し、オーブの状態を戻す。マイクボタン経由(例外)とホットキー経由
+  // (voice:failedイベント)の両方がここに収束する。
+  reportVoiceFailure: (message: string) => void;
+
   // ホットキー(Rust側)からのイベントを購読し、マイクボタン経由と同じstate更新に
   // 収束させる。App.tsxのマウント時に1回だけ呼び、返り値のクリーンアップ関数を
   // アンマウント時に呼ぶことでリスナーの重複登録を防ぐ。
@@ -140,9 +145,24 @@ export const useShioriStore = create<ShioriState>((set, get) => ({
       get().setOrbStatus("listening");
     } else {
       set({ isRecording: false });
-      const { text } = await api.stopRecordingAndTranscribe();
+      let text: string;
+      try {
+        ({ text } = await api.stopRecordingAndTranscribe());
+      } catch (err) {
+        get().reportVoiceFailure(String(err));
+        return;
+      }
       await get().processUserText(text);
     }
+  },
+
+  reportVoiceFailure: (message) => {
+    set({ isRecording: false });
+    get().addMessage({
+      role: "assistant",
+      text: `音声を聞き取れませんでした: ${message}`,
+    });
+    get().setOrbStatus("idle");
   },
 
   subscribeToBackendEvents: () => {
@@ -160,6 +180,10 @@ export const useShioriStore = create<ShioriState>((set, get) => ({
             get().processUserText(event.payload.text);
           },
         );
+        const unlistenFailed = await listen<{ message: string }>(
+          "voice:failed",
+          (event) => get().reportVoiceFailure(event.payload.message),
+        );
         // send_message実行中にバックエンドが「今このツールを実行している」ことを
         // 知らせるイベント(ActivityIndicator/OrbCoreの一時表示用)。
         const unlistenActivity = await listen<{ tool: string }>(
@@ -174,6 +198,7 @@ export const useShioriStore = create<ShioriState>((set, get) => ({
         return () => {
           unlistenStarted();
           unlistenTranscribed();
+          unlistenFailed();
           unlistenActivity();
           backendEventsSetup = null;
         };

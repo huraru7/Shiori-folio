@@ -11,6 +11,12 @@ use std::sync::{Arc, Mutex};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
+// 音量ピーク(-1.0〜1.0の振幅の絶対値の最大)がこれ未満なら無音とみなし、
+// 文字起こしに回さない。無音をwhisperに渡すと「サブタイトル:ひかり」のような
+// 幻聴が作られ、それが発言として送られてしまうため(2026-10-06、Ver3.6の測定で、
+// ミュート状態のマイクで0.0000〜0.0001を観測)。普通の発話は0.05以上になる。
+const SILENCE_PEAK_THRESHOLD: f32 = 0.005;
+
 enum AudioCommand {
     Start(Sender<Result<(), String>>),
     Stop(Sender<Result<Vec<u8>, String>>),
@@ -69,6 +75,12 @@ impl RecordingState {
                                 channels,
                                 peak
                             );
+                            if peak < SILENCE_PEAK_THRESHOLD {
+                                return Err(
+                                    "マイクの入力が無音でした(ミュートや入力デバイスの設定を確認してください)"
+                                        .to_string(),
+                                );
+                            }
                             encode_wav(&samples, sample_rate, channels)
                         })();
                         if let Ok(mut r) = recording_for_thread.lock() {
