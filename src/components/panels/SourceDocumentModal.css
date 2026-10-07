@@ -30,14 +30,14 @@
 .source-document-modal__title {
   font-family: var(--font-body);
   color: var(--paper);
-  font-size: 0.95rem;
+  font-size: var(--fs-lg);
 }
 
 .source-document-modal__close {
   background: none;
   border: none;
   color: var(--paper-dim);
-  font-size: 1.3rem;
+  font-size: var(--fs-2xl);
   line-height: 1;
   cursor: pointer;
 }

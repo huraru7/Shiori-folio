@@ -30,11 +30,81 @@
   border: none;
   outline: none;
   color: var(--paper);
-  font-size: 11px;
+  font-size: var(--fs-base);
+}
+
+.library-screen__clear {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--paper-dim);
+  font-size: var(--fs-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.library-screen__clear:hover {
+  color: var(--paper);
+  background: var(--glass);
 }
 
 .library-screen__search input::placeholder {
   color: var(--paper-dim);
+}
+
+/* 絞り込みの行(詩織Ver3.9)。 */
+.library-filter {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 14px 12px;
+  font-size: var(--fs-sm);
+  color: var(--paper-dim);
+}
+
+.library-filter__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.library-filter__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.library-filter__chip {
+  font: inherit;
+  padding: 2px 10px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--paper-dim);
+  cursor: pointer;
+}
+
+.library-filter__chip:hover {
+  color: var(--paper);
+}
+
+.library-filter__chip--active {
+  background: var(--glass);
+}
+
+.library-filter__select {
+  font: inherit;
+  padding: 3px 8px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: 6px;
+  background: var(--bg-deep);
+  color: var(--paper);
 }
 
 .library-screen__scroll {
@@ -47,7 +117,7 @@
 
 .library-screen__status {
   color: var(--paper-dim);
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
 }
 
 .library-screen__status--error {
@@ -65,14 +135,99 @@
   background: transparent;
   color: var(--danger);
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: var(--fs-md);
   cursor: pointer;
 }
 
-.library-screen__shelf {
+/* 何も検索していないときの背景(詩織Ver3.9)。ロゴを薄く中央に置く。 */
+.library-screen__empty {
+  height: 100%;
+  min-height: 240px;
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+}
+
+.library-screen__watermark {
+  height: min(45%, 320px);
+  width: auto;
+  opacity: 0.08;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* 検索結果の一覧(詩織Ver3.9)。検索エンジンの結果のように、属性・タイトル・
+   冒頭の文の順に並べる。 */
+.library-results {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  max-width: 760px;
+}
+
+.library-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.library-result__meta {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px 8px;
+  font-size: var(--fs-sm);
+  color: var(--paper-dim);
+}
+
+.library-result__chip {
+  padding: 0 7px;
+  border: 0.5px solid var(--glass-border);
+  border-radius: 999px;
+  font-size: var(--fs-xs);
+}
+
+.library-result__chip--stale {
+  color: var(--caution);
+  border-color: var(--caution);
+}
+
+.library-result__title {
+  align-self: flex-start;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-task);
+  font-family: var(--font-body);
+  font-size: var(--fs-xl);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-result__title:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.library-result__summary {
+  margin: 0;
+  color: var(--paper-dim);
+  font-size: var(--fs-md);
+  line-height: 1.7;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .library-screen__load-more {
@@ -84,7 +239,7 @@
   background: transparent;
   color: var(--paper-dim);
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: var(--fs-md);
   cursor: pointer;
 }
 

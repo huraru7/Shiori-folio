@@ -21,6 +21,6 @@
   transform: translateX(-50%);
   white-space: nowrap;
   font-family: var(--font-body);
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
 }

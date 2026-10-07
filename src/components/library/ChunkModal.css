@@ -36,7 +36,7 @@
 
 .chunk-modal__callno {
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.1em;
   margin-bottom: 6px;
 }
@@ -44,12 +44,12 @@
 .chunk-modal__title {
   font-family: var(--font-display);
   color: var(--paper);
-  font-size: 1.05rem;
+  font-size: var(--fs-xl);
 }
 
 .chunk-modal__tag {
   font-family: var(--font-body);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   padding: 3px 10px;
   border-radius: 10px;
   border: 1px solid;
@@ -60,7 +60,7 @@
   background: none;
   border: none;
   color: var(--paper-dim);
-  font-size: 1.2rem;
+  font-size: var(--fs-2xl);
   line-height: 1;
   cursor: pointer;
 }
@@ -75,12 +75,12 @@
   color: var(--paper);
   font-family: var(--font-body);
   line-height: 1.9;
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
 }
 
 .chunk-modal__body h4 {
   font-family: var(--font-display);
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
   color: var(--paper);
   margin: 18px 0 8px;
 }

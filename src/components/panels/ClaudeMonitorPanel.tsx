@@ -1,14 +1,14 @@
 import { useState } from "react";
-import { useWindowStore } from "../../store/useWindowStore";
+import { useMainViewStore } from "../../store/useMainViewStore";
 import ClaudeSessionsView from "./ClaudeSessionsView";
 import ClaudeStatsView from "./ClaudeStatsView";
 import "./ClaudeMonitorPanel.css";
 
 type Tab = "sessions" | "stats";
 
-// Claudeモニターウィンドウ。稼働状況(詩織Ver3.7)と利用統計(詩織Ver3.9)をタブで切り替える。
+// Claudeモニター画面。稼働状況(詩織Ver3.7)と利用統計(詩織Ver3.9)をタブで切り替える。
 function ClaudeMonitorPanel() {
-  const visible = useWindowStore((s) => s.windows["claude-monitor"]?.visible ?? false);
+  const visible = useMainViewStore((s) => s.active === "claude");
   const [tab, setTab] = useState<Tab>("sessions");
 
   return (

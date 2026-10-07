@@ -388,7 +388,7 @@ function FolderContentsTable({
               className="library-browse-screen__row"
               onClick={() => onOpenFolder(folder.path)}
             >
-              <td>
+              <td title={folderLabel(folder.name, depth)}>
                 <span className="library-browse-screen__icon">📁</span>
                 {folderLabel(folder.name, depth)}
               </td>
@@ -402,7 +402,7 @@ function FolderContentsTable({
               className="library-browse-screen__row"
               onClick={() => onOpenFile(file, `${getCategoryMeta(file.sourceCategory).abbr}-${String(i + 1).padStart(2, "0")}`)}
             >
-              <td>
+              <td title={file.title || stripSourceExtension(file.source)}>
                 <span className="library-browse-screen__icon">{fileIcon(file)}</span>
                 {file.title || stripSourceExtension(file.source)}
               </td>
@@ -451,7 +451,7 @@ function FileTable({
               className="library-browse-screen__row"
               onClick={() => onOpen(file, `${getCategoryMeta(file.sourceCategory).abbr}-${String(i + 1).padStart(2, "0")}`)}
             >
-              <td>
+              <td title={file.title || stripSourceExtension(file.source)}>
                 <span className="library-browse-screen__icon">{fileIcon(file)}</span>
                 {file.title || stripSourceExtension(file.source)}
               </td>

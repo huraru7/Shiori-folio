@@ -14,7 +14,7 @@
 .voice-bar__mic {
   background: transparent;
   border: none;
-  font-size: 1.1rem;
+  font-size: var(--fs-xl);
   cursor: pointer;
   color: var(--paper-dim);
 }
@@ -43,7 +43,7 @@
   color: var(--bg-deep);
   font-family: var(--font-body);
   font-weight: 700;
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   cursor: pointer;
   flex-shrink: 0;
 }

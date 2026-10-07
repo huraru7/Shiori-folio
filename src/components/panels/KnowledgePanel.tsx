@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useShioriStore } from "../../store/useShioriStore";
-import { useWindowStore } from "../../store/useWindowStore";
+import { useMainViewStore } from "../../store/useMainViewStore";
 import { api } from "../../api/tauri";
 import SourceDocumentModal from "./SourceDocumentModal";
 import Book from "../library/Book";
@@ -18,7 +18,7 @@ interface Batch {
 // セッション内で貯め続ける履歴の上限(件数が際限なく増えないための簡易な打ち切り)。
 const MAX_HISTORY_BATCHES = 20;
 
-// ナレッジウィンドウ(2026-08-12、デスクトップ型ウィンドウシステムの本実装3-1)。
+// ナレッジ画面(2026-08-12、詩織Ver3.9で右ゾーンのタブの1つにした)。
 // この会話セッション中に参照された記録を時系列で積み上げて表示する。
 // 明示的な検索(search_knowledge)・identity_guard・常時バックグラウンド検索
 // (passive recall)のいずれかで参考情報が使われるたびにAPI側からsourcesが返り、
@@ -33,7 +33,7 @@ function KnowledgePanel() {
   const knowledgeResults = useShioriStore((s) => s.knowledgeResults);
   const activeTool = useShioriStore((s) => s.activeTool);
   const orbStatus = useShioriStore((s) => s.orbStatus);
-  const openWindow = useWindowStore((s) => s.openWindow);
+  const setActiveView = useMainViewStore((s) => s.setActive);
 
   // 本棚→チャンクモーダル→原本ビューの2階層構成。selectedはチャンクモーダル、
   // sourceOpenはその上に重ねて開く原本ビューの開閉を表す(「抜粋に戻る」で
@@ -53,18 +53,18 @@ function KnowledgePanel() {
       if (knowledgeResults.length > 0) {
         const key = nextKeyRef.current++;
         setHistory((h) => [{ key, items: knowledgeResults, timestamp: Date.now() }, ...h].slice(0, MAX_HISTORY_BATCHES));
-        openWindow("knowledge");
+        setActiveView("knowledge");
       }
     }
-  }, [knowledgeResults, openWindow]);
+  }, [knowledgeResults, setActiveView]);
 
   // ツールが実行中(結果がまだ届いていない)の間だけ、収集中の表示を出す。
   const isCollecting = orbStatus === "thinking" && activeTool !== "idle";
   useEffect(() => {
     if (isCollecting) {
-      openWindow("knowledge");
+      setActiveView("knowledge");
     }
-  }, [isCollecting, openWindow]);
+  }, [isCollecting, setActiveView]);
 
   const handleOpenChunk = (result: KnowledgeResult) => {
     setSelected(result);

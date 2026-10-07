@@ -21,7 +21,7 @@
   align-items: center;
   gap: 8px;
   padding: 9px 12px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--paper-dim);
   cursor: pointer;
   border-right: 2px solid transparent;
@@ -78,19 +78,19 @@
 
 .control-panel__page-head h1 {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: var(--fs-2xl);
   font-weight: 500;
   letter-spacing: 0.04em;
 }
 
 .control-panel__page-head p {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
   margin-top: 6px;
 }
 
 .control-panel__error {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--danger);
   background: var(--danger-bg);
   border: 0.5px solid rgba(232, 96, 122, 0.3);
@@ -110,7 +110,7 @@
 }
 
 .control-panel__panel-label {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.1em;
   color: var(--paper-dim);
   text-transform: uppercase;
@@ -140,18 +140,18 @@
   margin-top: 14px;
   padding-top: 14px;
   border-top: 0.5px solid rgba(255, 255, 255, 0.06);
-  font-size: 11.5px;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
 }
 
 .control-panel__service-model {
   color: var(--paper-dim);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .control-panel__service-usage {
   color: var(--paper-dim);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   margin-left: 4px;
 }
 
@@ -174,7 +174,7 @@
 
 .control-panel__gauge-name {
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
   white-space: nowrap;
   overflow: hidden;
@@ -183,7 +183,7 @@
 
 .control-panel__gauge-val {
   flex-shrink: 0;
-  font-size: 18px;
+  font-size: var(--fs-xl);
   font-family: var(--font-display);
   color: var(--paper);
 }
@@ -226,7 +226,7 @@
 }
 
 .control-panel__gauge-sub {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--paper-dim);
   margin-top: 8px;
 }
@@ -241,7 +241,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12.5px;
+  font-size: var(--fs-md);
   padding: 9px 12px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.02);
@@ -254,7 +254,7 @@
 .control-panel__debug-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 
 .control-panel__debug-table th,
@@ -274,7 +274,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--paper-dim);
 }
 
@@ -287,7 +287,7 @@
 }
 
 .control-panel__pc-info {
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
   line-height: 1.8;
 }
@@ -301,7 +301,7 @@
 .control-panel__slider-top {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: var(--fs-md);
   margin-bottom: 8px;
 }
 
@@ -324,7 +324,7 @@
 }
 
 .control-panel__field-label {
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--paper-dim);
 }
 
@@ -333,7 +333,7 @@
   border: 0.5px solid var(--glass-border);
   border-radius: 6px;
   color: var(--paper);
-  font-size: 13px;
+  font-size: var(--fs-base);
   padding: 6px 10px;
   width: 160px;
   font-family: var(--font-body);
@@ -346,7 +346,7 @@
 }
 
 .control-panel__btn {
-  font-size: 12px;
+  font-size: var(--fs-md);
   padding: 9px 18px;
   border-radius: 8px;
   border: 0.5px solid var(--glass-border);
@@ -379,7 +379,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   margin-top: 14px;
   padding: 8px 12px;
   border-radius: 8px;
@@ -420,7 +420,7 @@
 
 .control-panel__page-head-danger {
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: var(--fs-2xl);
   font-weight: 500;
   letter-spacing: 0.04em;
   color: var(--danger);
@@ -437,7 +437,7 @@
   border-radius: 10px;
   padding: 12px 14px;
   margin-bottom: 16px;
-  font-size: 12px;
+  font-size: var(--fs-md);
   line-height: 1.6;
 }
 
@@ -459,20 +459,20 @@
 }
 
 .control-panel__model-name {
-  font-size: 13px;
+  font-size: var(--fs-base);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .control-panel__model-meta {
-  font-size: 10.5px;
+  font-size: var(--fs-sm);
   color: var(--paper-dim);
   margin-top: 4px;
 }
 
 .control-panel__badge {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
   padding: 2px 8px;
   border-radius: 10px;
   letter-spacing: 0.05em;
@@ -494,7 +494,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--caution);
   margin-top: 14px;
   background: var(--caution-bg);

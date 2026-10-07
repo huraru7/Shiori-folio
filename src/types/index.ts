@@ -57,6 +57,31 @@ export interface SearchLibraryResult {
   // .metaのとき対応する実体の絶対パス(無ければ空文字列、詩織Ver3.5)。
   assetPath: string;
   title: string;
+  // 一覧に添える属性と冒頭の文(詩織Ver3.9)。記事を読めなかったときは空文字列。
+  summary: string;
+  project: string;
+  entryKind: string;
+  status: string;
+  date: string;
+}
+
+// 図書館の検索の絞り込み(詩織Ver3.9)。空の項目は絞り込まない。
+export interface LibraryFilter {
+  // falseなら、アーカイブ(90-archive)とstatusがoutdated/deprecatedの記録を除く。
+  includeStale: boolean;
+  sourceCategories: string[];
+  project: string | null;
+  kind: string | null;
+}
+
+// ホームの「前回の申し送り」(詩織Ver3.9)。
+export interface Handoff {
+  title: string;
+  project: string;
+  date: string;
+  source: string;
+  sourceCategory: string;
+  items: string[];
 }
 
 // 記事詳細画面(Ver3.0、UI改善4-2節)向け。frontmatterの構造化フィールド。
@@ -176,6 +201,7 @@ export interface AppConfigDto {
   showMonth: boolean;
   showDay: boolean;
   showWeekday: boolean;
+  showSeconds: boolean;
 }
 
 // get_config()の全項目をそのままOptionalにした部分更新用の型。

@@ -5,13 +5,13 @@
 
 .claude-monitor__empty {
   color: var(--paper-dim);
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   margin: 0;
 }
 
 .claude-monitor__error {
   color: var(--danger);
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   margin: 0 0 8px;
 }
 
@@ -38,7 +38,7 @@
   flex: 0 0 auto;
   min-width: 56px;
   text-align: center;
-  font-size: 10.5px;
+  font-size: var(--fs-sm);
   padding: 3px 8px;
   border-radius: 999px;
   color: var(--paper-dim);
@@ -73,14 +73,14 @@
 }
 
 .claude-monitor__project {
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .claude-monitor__title {
-  font-size: 0.72rem;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
   white-space: nowrap;
   overflow: hidden;
@@ -92,7 +92,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--paper-dim);
 }
 
@@ -105,7 +105,7 @@
 
 .claude-monitor__tab {
   font: inherit;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   padding: 4px 12px;
   border-radius: 999px;
   border: 0.5px solid var(--glass-border);
@@ -148,7 +148,7 @@
 
 .claude-stats__chip {
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-sm);
   padding: 2px 8px;
   border: none;
   border-radius: 4px;
@@ -164,7 +164,7 @@
 
 .claude-stats__host {
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-sm);
   margin-left: auto;
   padding: 2px 6px;
   border-radius: 6px;
@@ -191,17 +191,17 @@
 }
 
 .claude-stats__label {
-  font-size: 10.5px;
+  font-size: var(--fs-sm);
   color: var(--paper-dim);
 }
 
 .claude-stats__value {
-  font-size: 1.05rem;
+  font-size: var(--fs-xl);
   font-weight: 500;
 }
 
 .claude-stats__sub {
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--paper-dim);
 }
 
@@ -213,7 +213,7 @@
 
 .claude-stats__heading {
   margin: 0;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 400;
   color: var(--paper-dim);
 }
@@ -262,7 +262,7 @@
   grid-template-columns: minmax(0, 9em) minmax(0, 1fr) auto;
   align-items: center;
   gap: 8px;
-  font-size: 10.5px;
+  font-size: var(--fs-sm);
 }
 
 .claude-stats__model-name {
@@ -295,7 +295,7 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: 8px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--paper-dim);
 }
 
@@ -307,7 +307,7 @@
 
 .claude-stats__refresh {
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-sm);
   padding: 3px 10px;
   border-radius: 999px;
   border: 0.5px solid var(--glass-border);

@@ -6,7 +6,7 @@ import "./PendingModal.css";
 interface Props {
   onClose: () => void;
   // 一覧が変化するたび(初回取得・承認/却下/保留の反映後)に呼ばれる。
-  // Dock側のバッジ件数をモーダルを開いたまま最新に保つため。
+  // 「要確認」ボタンのバッジ件数をモーダルを開いたまま最新に保つため。
   onItemsChange: (items: PendingItems) => void;
 }
 

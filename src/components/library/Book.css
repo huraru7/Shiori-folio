@@ -49,7 +49,7 @@
   padding: 7px 7px 5px;
 }
 .book--md .book__title {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
 }
 
 /* 図書館ウィンドウ用(3-2、コンパクト)。 */
@@ -59,7 +59,7 @@
   padding: 6px 6px 4px;
 }
 .book--sm .book__title {
-  font-size: 8px;
+  font-size: var(--fs-xs);
 }
 
 /* Ver3.0(2026-08-22)、library/のディレクトリ体系変更(10-projects/20-areas/

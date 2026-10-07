@@ -19,12 +19,10 @@ const NAV_ITEMS: { key: NavKey; label: string; level: "safe" | "caution" | "dang
   { key: "eject", label: "SSDの取り外し", level: "caution" },
 ];
 
-// 設定ウィンドウ(2026-08-12、デスクトップ型ウィンドウシステムの本実装3-3)。
-// 以前はスタンドアロンの全画面ビューだったが、OsWindow内のコンパクト版に
-// 作り替えた(開閉・ドラッグ・リサイズ等はOsWindow側が担うため、ここでは
-// 左ナビ+右コンテンツの2ペイン構造だけを持つ)。
+// 設定画面(2026-08-12にウィンドウ化、詩織Ver3.9で右ゾーンのタブの1つにした)。
+// 左ナビ+右コンテンツの2ペイン構造だけを持つ。
 //
-// 【重要】DesktopArea/OsWindowは常時マウント方式のため(StartupScreenは
+// 【重要】右ゾーン(MainArea)の画面は常時マウント方式のため(StartupScreenは
 // 単なるCSSオーバーレイであり、その裏でこのコンポーネントもアプリ起動直後から
 // マウントされている)、バックエンド起動(RAG/LLM等)を待たずにマウント時の
 // useEffectが走る。ここでのgetSystemInfoはRust側ネイティブAPIのみに依存し

@@ -31,14 +31,14 @@
 .pending-modal__title {
   font-family: var(--font-display);
   color: var(--paper);
-  font-size: 1.05rem;
+  font-size: var(--fs-xl);
 }
 
 .pending-modal__close {
   background: none;
   border: none;
   color: var(--paper-dim);
-  font-size: 1.2rem;
+  font-size: var(--fs-2xl);
   line-height: 1;
   cursor: pointer;
 }
@@ -59,7 +59,7 @@
   border: none;
   color: var(--paper-dim);
   font-family: var(--font-body);
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   padding: 6px 12px 10px;
   cursor: pointer;
   border-bottom: 2px solid transparent;
@@ -75,7 +75,7 @@
   overflow-y: auto;
   color: var(--paper);
   font-family: var(--font-body);
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
 }
 
 .pending-modal__status {
@@ -83,7 +83,7 @@
 }
 
 .pending-modal__section-label {
-  font-size: 0.75rem;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
   margin: 14px 0 6px;
 }
@@ -116,7 +116,7 @@
 
 .pending-modal__item-reason {
   color: var(--paper-dim);
-  font-size: 0.75rem;
+  font-size: var(--fs-md);
   margin-top: 2px;
 }
 
@@ -132,7 +132,7 @@
   border-radius: 6px;
   color: var(--paper-dim);
   font-family: var(--font-body);
-  font-size: 0.72rem;
+  font-size: var(--fs-md);
   padding: 4px 8px;
   cursor: pointer;
 }

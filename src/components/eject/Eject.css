@@ -8,7 +8,7 @@
 }
 
 .eject__label {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   letter-spacing: 0.08em;
   color: var(--paper-dim);
   margin-bottom: 8px;
@@ -16,7 +16,7 @@
 
 .eject__empty {
   margin: 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
 }
 
@@ -34,24 +34,24 @@
   background: var(--glass);
   border: 0.5px solid var(--glass-border);
   border-radius: 8px;
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
 }
 
 .eject__pid {
   margin-left: 8px;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--paper-dim);
 }
 
 .eject__note {
   margin-top: 4px;
-  font-size: 0.72rem;
+  font-size: var(--fs-md);
   color: var(--caution);
   line-height: 1.5;
 }
 
 .eject__result {
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   color: var(--paper);
   background: var(--safe-bg);
   border: 0.5px solid var(--safe);
@@ -106,12 +106,12 @@
 
 .eject-guard__title {
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: var(--fs-xl);
   margin: 0 0 6px;
 }
 
 .eject-guard__lead {
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
   margin: 0 0 14px;
   line-height: 1.6;

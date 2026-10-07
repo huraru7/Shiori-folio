@@ -9,7 +9,7 @@
   border-radius: 999px;
   padding: 6px 16px;
   font-family: var(--font-body);
-  font-size: 0.8rem;
+  font-size: var(--fs-md);
   white-space: nowrap;
   animation: activity-indicator-fade-in 0.2s ease-out;
 }

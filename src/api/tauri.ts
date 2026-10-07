@@ -5,6 +5,8 @@ import type {
   ClaudeSession,
   ClaudeStats,
   ClaudeStatsRange,
+  Handoff,
+  LibraryFilter,
   EjectOutcome,
   EjectPreview,
   KnowledgeResult,
@@ -111,8 +113,12 @@ export const api = {
   // ライブラリウィンドウの検索結果ベースUI向け(Ver3.0、UI改善4-2節)。
   // スコア閾値による足切りは行わないため、offsetを増やして同じクエリで
   // 呼び直すことでページングする(返却件数がlimit未満なら候補打ち止め)。
-  searchLibrary: (query: string, limit: number, offset: number) =>
-    invoke<SearchLibraryResult[]>("search_library", { query, limit, offset }),
+  searchLibrary: (query: string, limit: number, offset: number, filter: LibraryFilter) =>
+    invoke<SearchLibraryResult[]>("search_library", { query, limit, offset, filter }),
+  listLibraryProjects: () => invoke<string[]>("list_library_projects"),
+  // 申し送りを持つjournalが無ければnull。
+  getLatestHandoff: () => invoke<Handoff | null>("get_latest_handoff"),
+  getPortableStorage: () => invoke<{ freeGb: number; totalGb: number }>("get_portable_storage"),
 
   // 記事詳細画面向け(Ver3.0、UI改善4-2節)。frontmatterの構造化フィールドを返す。
   getSourceFrontmatter: (sourceCategory: string, source: string) =>

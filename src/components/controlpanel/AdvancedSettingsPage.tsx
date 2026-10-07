@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api/tauri";
+import { useDateDisplayStore } from "../../store/useDateDisplayStore";
 import type { AppConfigDto } from "../../types";
 import { NumberRow, SliderRow, TextRow, ToggleRow } from "./shared";
 
@@ -14,7 +15,8 @@ type FieldKey =
   | "showYear"
   | "showMonth"
   | "showDay"
-  | "showWeekday";
+  | "showWeekday"
+  | "showSeconds";
 
 // 変更内容によって「即時反映」「サービス再起動が必要」「アプリ再起動が必要」が
 // 異なるため、フィールドごとにどちらに属するかを持たせておく。
@@ -30,6 +32,7 @@ const RESTART_KIND: Record<FieldKey, "immediate" | "llm-restart" | "app-restart"
   showMonth: "immediate",
   showDay: "immediate",
   showWeekday: "immediate",
+  showSeconds: "immediate",
 };
 
 // ポート番号・ホットキー・コンテキストサイズ・自発的想起のしきい値を扱うページ。
@@ -90,8 +93,16 @@ export function AdvancedSettingsPage() {
         ...(form.showMonth !== original.showMonth && { showMonth: form.showMonth }),
         ...(form.showDay !== original.showDay && { showDay: form.showDay }),
         ...(form.showWeekday !== original.showWeekday && { showWeekday: form.showWeekday }),
+        ...(form.showSeconds !== original.showSeconds && { showSeconds: form.showSeconds }),
       };
       await api.setConfig(update);
+      useDateDisplayStore.getState().set({
+        showYear: form.showYear,
+        showMonth: form.showMonth,
+        showDay: form.showDay,
+        showWeekday: form.showWeekday,
+        showSeconds: form.showSeconds,
+      });
       setOriginal(form);
       setSaveState("saved");
     } catch (err) {
@@ -179,6 +190,11 @@ export function AdvancedSettingsPage() {
           label="曜日を表示"
           checked={form.showWeekday}
           onChange={(v) => setForm({ ...form, showWeekday: v })}
+        />
+        <ToggleRow
+          label="時刻の秒を表示"
+          checked={form.showSeconds}
+          onChange={(v) => setForm({ ...form, showSeconds: v })}
         />
       </div>
 

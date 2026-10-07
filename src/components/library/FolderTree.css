@@ -1,6 +1,6 @@
 .folder-tree {
   font-family: var(--font-body);
-  font-size: 12px;
+  font-size: var(--fs-md);
   color: var(--paper-dim);
   user-select: none;
 }
@@ -34,7 +34,7 @@
   background: none;
   border: none;
   color: var(--paper-dim);
-  font-size: 22px;
+  font-size: var(--fs-3xl);
   line-height: 1;
   cursor: pointer;
   padding: 0;

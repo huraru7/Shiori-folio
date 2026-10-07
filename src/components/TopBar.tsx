@@ -1,23 +1,9 @@
 import { useEffect, useState } from "react";
-import { api } from "../api/tauri";
+import { useDateDisplayStore, type DateDisplayConfig } from "../store/useDateDisplayStore";
 import shioriMark from "../assets/logo/shiori-mark-header.png";
 import "./TopBar.css";
 
 const WEEKDAY_LABELS = ["日", "月", "火", "水", "木", "金", "土"];
-
-interface DateDisplayConfig {
-  showYear: boolean;
-  showMonth: boolean;
-  showDay: boolean;
-  showWeekday: boolean;
-}
-
-const DEFAULT_DATE_CONFIG: DateDisplayConfig = {
-  showYear: true,
-  showMonth: true,
-  showDay: true,
-  showWeekday: false,
-};
 
 function formatDate(now: Date, cfg: DateDisplayConfig): string {
   const parts: string[] = [];
@@ -37,37 +23,28 @@ interface Props {
 
 // ヘッダー(2026-08-12、UI/UX改善指示書2章、2026-08-13ロゴ実装で仮置きから差し替え)。
 // 挨拶文・今日の手入れ件数の表示は廃止し、ロゴマークに置き換えた。図書館・設定への
-// 導線もヘッダーから削除し、タスクバー(Dock)側に統合している(App.tsx参照)。
-// 日付の年/月/日/曜日の表示・非表示は設定画面(詳細設定)から切り替えられる。
+// 導線もヘッダーから削除し、右ゾーンのタブ(MainArea)側に統合している。
+// 日付の年/月/日/曜日と時刻の秒の表示・非表示は設定画面(詳細設定)から切り替えられ、
+// 保存するとすぐ反映される(useDateDisplayStore)。
 // 左ゾーン(会話UI)の折りたたみトグル(詩織Ver3.0、UI改善4-3節)もここに配置する。
 function TopBar({ leftCollapsed, onToggleLeftCollapsed }: Props) {
   const [now, setNow] = useState(new Date());
-  const [dateConfig, setDateConfig] = useState<DateDisplayConfig>(DEFAULT_DATE_CONFIG);
+  const dateConfig = useDateDisplayStore((s) => s.config);
 
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30_000);
+    // 秒を出さないときも、分の切り替わりが遅れないよう1秒ごとに更新する。
+    const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
-    api
-      .getConfig()
-      .then((config) =>
-        setDateConfig({
-          showYear: config.showYear,
-          showMonth: config.showMonth,
-          showDay: config.showDay,
-          showWeekday: config.showWeekday,
-        }),
-      )
-      .catch(() => {
-        // 取得に失敗してもヘッダー自体は表示したいので、デフォルト値のまま続行する
-      });
+    useDateDisplayStore.getState().load();
   }, []);
 
   const timeText = now.toLocaleTimeString("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",
+    ...(dateConfig.showSeconds && { second: "2-digit" }),
   });
 
   return (

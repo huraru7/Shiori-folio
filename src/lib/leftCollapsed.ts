@@ -1,5 +1,5 @@
 // 左ゾーン(会話UI)の折りたたみ状態(詩織Ver3.0、UI改善4-3節)。
-// useWindowStoreはセッション内メモリのみで非永続だが、この状態は次回
+// 右ゾーンの画面の選択(useMainViewStore)は非永続だが、この状態は次回
 // アプリ起動時にも維持したいためlocalStorageに保存する(Tauriのwebviewは
 // ローカルにプロファイルを保持するため、通常のブラウザと同様に永続化される)。
 const STORAGE_KEY = "shiori.leftCollapsed";

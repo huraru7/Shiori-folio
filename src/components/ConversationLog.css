@@ -13,7 +13,7 @@
   padding: 8px 14px;
   border-radius: 12px;
   font-family: var(--font-body);
-  font-size: 0.85rem;
+  font-size: var(--fs-base);
   line-height: 1.5;
   max-width: min(90%, 480px);
   word-break: break-word;

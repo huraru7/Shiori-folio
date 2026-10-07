@@ -19,7 +19,7 @@
   border: 1px solid var(--glass-border);
   border-radius: 6px;
   color: var(--paper-dim);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   line-height: 1;
   padding: 5px 7px;
   cursor: pointer;
@@ -36,14 +36,21 @@
   width: auto;
 }
 
+/* 日付・時刻は薄く小さくて見づらかったため、通常の文字色にして大きくした(詩織Ver3.9)。 */
 .top-bar__datetime {
-  font-size: 10px;
-  color: var(--paper-dim);
+  color: var(--paper);
   text-align: right;
-  line-height: 1.5;
+  line-height: 1.35;
   flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
 }
 
 .top-bar__date {
-  opacity: 0.75;
+  font-size: var(--fs-md);
+}
+
+.top-bar__time {
+  font-size: var(--fs-base);
+  font-weight: 500;
+  letter-spacing: 0.02em;
 }

@@ -79,7 +79,7 @@ function FolderTreeNode({
         {meta && (
           <span className="folder-tree__swatch" style={{ background: meta.hex }} />
         )}
-        <span className="folder-tree__name">{meta ? meta.label : folder.name}</span>
+        <span className="folder-tree__name" title={meta ? meta.label : folder.name}>{meta ? meta.label : folder.name}</span>
       </div>
       {isExpanded && hasChildren && (
         <div>

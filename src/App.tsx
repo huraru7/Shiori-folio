@@ -5,8 +5,7 @@ import ActivityIndicator from "./components/ActivityIndicator";
 import VoiceBar from "./components/VoiceBar";
 import ConversationLog from "./components/ConversationLog";
 import CharacterStage from "./components/character/CharacterStage";
-import DesktopArea from "./components/desktop/DesktopArea";
-import Dock from "./components/desktop/Dock";
+import MainArea from "./components/main/MainArea";
 import DebugScreen from "./components/debug/DebugScreen";
 import StartupScreen from "./components/startup/StartupScreen";
 import CloseGuard from "./components/eject/CloseGuard";
@@ -14,10 +13,10 @@ import { useShioriStore } from "./store/useShioriStore";
 import "./App.css";
 
 // 全体レイアウト。ヘッダー(全幅)＋本体行(左ゾーン flex:3＝Live2D/オーブ・
-// チャット・入力欄、右ゾーン flex:7＝デスクトップ型フリースペース＋Dock)の
-// 構成。図書館・設定はデスクトップ型ウィンドウシステムの本実装(2026-08-12)
-// により、フリースペース内のOsWindowとして表示される(DesktopArea参照)。
-// デバッグのみ、内部が複雑な既存UIのため引き続き独立した全画面表示のまま。
+// チャット・入力欄、右ゾーン flex:7＝タブで1画面ずつ切り替えるMainArea)の構成。
+// 右ゾーンは2026-08-12からデスクトップ型のウィンドウとDockだったが、あまり
+// 使わなかったため詩織Ver3.9でタブ切り替えに戻した。デバッグのみ、内部が
+// 複雑な既存UIのため独立した全画面表示のまま。
 // タスク管理機能(ProjectPanel)は廃止済み(メモ機能に置き換え、2026-08-08)。
 // Zustandはグローバルフックのため、Providerは不要。
 function App() {
@@ -83,8 +82,7 @@ function App() {
             </div>
           </section>
           <section className="app__right">
-            <DesktopArea />
-            <Dock onOpenDebug={() => setIsDebugOpen(true)} />
+            <MainArea onOpenDebug={() => setIsDebugOpen(true)} />
           </section>
         </div>
       </div>

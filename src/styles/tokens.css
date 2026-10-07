@@ -88,4 +88,15 @@
 
   --font-display: 'Shippori Mincho', serif;
   --font-body: 'Noto Sans JP', sans-serif;
+
+  /* 文字サイズの段階(詩織Ver3.9)。それまで各CSSに10〜12pxが直接書かれていて小さく、
+     見づらかったため、ここにまとめて全体を1段ずつ大きくした。新しく書くときもこの段階を使う。 */
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-base: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 19px;
+  --fs-2xl: 22px;
+  --fs-3xl: 24px;
 }
