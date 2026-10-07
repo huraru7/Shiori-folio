@@ -23,7 +23,8 @@ INDEX_STATE_FILENAME = ".index_state.json"
 # 埋め込みの作り方(何を前置して埋め込むか等)を変えたときに上げる。保存済みの値と違えば、
 # 起動時の同期(sync_index)が全ファイルを埋め込み直す。
 # 2: 記事のタイトル+要約を前置して埋め込み、メタデータにsummaryを持つ(詩織Ver3.8)。
-INDEX_SCHEMA_VERSION = 2
+# 3: メタデータにproject/type/authorを持つ(/search_libraryのfilterが常に0件になる不具合の修正)。
+INDEX_SCHEMA_VERSION = 3
 INDEX_SCHEMA_FILENAME = ".index_schema"
 # 素材の抽出結果のキャッシュ置き場(vectordbと同じく、libraryから作り直せる派生データ)と、
 # 抽出できなかった・飛ばした素材の記録。
@@ -72,6 +73,10 @@ _SUMMARY_RE = re.compile(r"^summary:\s*(.+?)\s*$", re.MULTILINE)
 _EXTRACT_FALSE_RE = re.compile(r"^extract:\s*false\s*$", re.MULTILINE | re.IGNORECASE)
 _STATUS_RE = re.compile(r"^status:\s*(.+?)\s*$", re.MULTILINE)
 _DATE_RE = re.compile(r"^date:\s*(.+?)\s*$", re.MULTILINE)
+# /search_libraryのfilter(author/type/project)の絞り込み先。
+_PROJECT_RE = re.compile(r"^project:\s*(.+?)\s*$", re.MULTILINE)
+_TYPE_RE = re.compile(r"^type:\s*(.+?)\s*$", re.MULTILINE)
+_AUTHOR_RE = re.compile(r"^author:\s*(.+?)\s*$", re.MULTILINE)
 
 
 def _is_indexable(text: str) -> bool:
@@ -139,6 +144,18 @@ def _extract_date(text: str) -> str:
     フォールバックで、呼び出し側は空文字列を「不明」として扱う)。
     """
     return _extract_frontmatter_field(_DATE_RE, text)
+
+
+def _extract_filter_fields(text: str) -> dict[str, str]:
+    """/search_libraryのfilterで絞り込むfrontmatterのproject/type/authorを取り出す。
+    ChromaDBのwhereは完全一致のため、メタデータに無いと絞り込みが常に0件になる。
+    無い項目は空文字列(status/dateと同じ扱い)。
+    """
+    return {
+        "project": _extract_frontmatter_field(_PROJECT_RE, text),
+        "type": _extract_frontmatter_field(_TYPE_RE, text),
+        "author": _extract_frontmatter_field(_AUTHOR_RE, text),
+    }
 
 
 def _extract_related(text: str) -> list[str]:
@@ -324,6 +341,7 @@ def _embed_file(
     status = _extract_status(text)
     date = _extract_date(text)
     related = _extract_related(text)
+    filter_fields = _extract_filter_fields(text)
 
     ids: list[str] = []
     documents: list[str] = []
@@ -360,6 +378,7 @@ def _embed_file(
                 # ChromaDBのmetadataはスカラー値のみ受け付けるため、リストは
                 # "|"区切りの1文字列に畳んで保存する(app.py側でsplitして復元)。
                 "related": "|".join(related),
+                **filter_fields,
             }
         )
 
