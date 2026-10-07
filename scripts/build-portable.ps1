@@ -181,6 +181,14 @@ if (-not (Test-Path $ShioriSaveExe)) {
 }
 Copy-Item $ShioriSaveExe (Join-Path $BinDir "shiori-save.exe") -Force
 
+# shiori-eject(実機SSDを取り外せる状態にするCLI)。shiori-saveと同じく単体コピーで問題なく、
+# 呼び出し名(shiori-eject)に合わせてリネームする。
+$ShioriEjectExe = Join-Path $SystemDir "src-tauri\target\release\shiori_eject.exe"
+if (-not (Test-Path $ShioriEjectExe)) {
+    Write-Error "$ShioriEjectExe が見つかりません。先に (cd system\src-tauri && cargo build --release --bin shiori_eject) を実行してください。"
+}
+Copy-Item $ShioriEjectExe (Join-Path $BinDir "shiori-eject.exe") -Force
+
 # mcp_server(Ver2.0 Phase 4、読み取り専用MCPサーバー)。Mac版と同じく単体コピーで
 # 問題ない。project_root()は実行ファイルの場所から上へたどってconfig.jsonを探すため、
 # portable\bin\win\に置けば実機のlibrary\・RAGを使う。開発ツリーのtarget\release\を

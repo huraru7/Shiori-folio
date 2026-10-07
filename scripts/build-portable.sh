@@ -157,7 +157,16 @@ if [ "$TARGET_OS" = "mac" ]; then
   fi
   cp "$MCP_SERVER_SRC" "$BIN_DIR/mcp_server"
 
-  chmod +x "$BIN_DIR/llama-server" "$BIN_DIR/whisper-server" "$BIN_DIR/piper-plus-cli" "$BIN_DIR/shiori-save" "$BIN_DIR/mcp_server"
+  # shiori-eject(実機SSDを取り外せる状態にするCLI)。shiori-saveと同じく単体コピーで問題なく、
+  # 呼び出し名(shiori-eject)に合わせてリネームする。
+  SHIORI_EJECT_SRC="$SYSTEM_DIR/src-tauri/target/release/shiori_eject"
+  if [ ! -f "$SHIORI_EJECT_SRC" ]; then
+    echo "エラー: $SHIORI_EJECT_SRC が見つかりません。先に (cd system/src-tauri && cargo build --release --bin shiori_eject) を実行してください。" >&2
+    exit 1
+  fi
+  cp "$SHIORI_EJECT_SRC" "$BIN_DIR/shiori-eject"
+
+  chmod +x "$BIN_DIR/llama-server" "$BIN_DIR/whisper-server" "$BIN_DIR/piper-plus-cli" "$BIN_DIR/shiori-save" "$BIN_DIR/mcp_server" "$BIN_DIR/shiori-eject"
 else
   echo "警告: $TARGET_OS 向けのバイナリ配置は未対応のためスキップしました。" >&2
 fi

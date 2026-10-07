@@ -1085,7 +1085,7 @@
     mcp_server: {
       eyebrow: "外部連携",
       title: "MCPサーバー(mcp_server.rs)",
-      body: "<p>会話UIとは別バイナリの、読み取り専用stdioベースMCPサーバー。<code>get_context_profile</code>(<code>_system/tier1-profile.md</code>を丸ごと返す)と<code>search_library</code>(ファイル単位の見出し一覧を返す、本文は含めない。Ver3.5以降、素材の<code>.meta</code>がヒットした結果には実体の<code>asset_path</code>も含む)の2ツールのみ持ち、書き込みツールは意図的に持たせていない。呼び出し時に埋め込み/RAGデーモンの起動確認も自分で行うため、会話UIなしでも単体で検索が完結する。</p><p>Ver3.3(時間認識検索)で<code>search_library</code>に<code>include_history</code>引数を追加。trueにすると経緯モード(deprecated/archive込み、date降順)で検索する。「前はどうだったか」のような時系列・変遷が重要な質問かどうかは、外部AI(呼び出し元)側の判断に委ねる設計。</p>",
+      body: "<p>会話UIとは別バイナリの、読み取り専用stdioベースMCPサーバー。<code>get_context_profile</code>(<code>_system/tier1-profile.md</code>を丸ごと返す)と<code>search_library</code>(ファイル単位の見出し一覧を返す、本文は含めない。Ver3.5以降、素材の<code>.meta</code>がヒットした結果には実体の<code>asset_path</code>も含む)の2ツールのみ持ち、書き込みツールは意図的に持たせていない。呼び出し時に埋め込み/RAGデーモンの起動確認も自分で行うため、会話UIなしでも単体で検索が完結する。</p><p>Ver3.3(時間認識検索)で<code>search_library</code>に<code>include_history</code>引数を追加。trueにすると経緯モード(deprecated/archive込み、date降順)で検索する。「前はどうだったか」のような時系列・変遷が重要な質問かどうかは、外部AI(呼び出し元)側の判断に委ねる設計。</p><p><code>shiori-eject</code>は、<code>mcp_server</code>を止めない。Claudeのセッションが標準入出力でつないで使っており、外から止めるとそのセッションのMCP接続が復旧しないため。「使用中」として、親のClaudeのプロセスとともに報告する。取り外す前に、そのセッションを閉じる(またはMCPを切る)。</p>",
       paths: ["system/src-tauri/src/bin/mcp_server.rs"]
     },
     shiori_save: {
@@ -1097,13 +1097,13 @@
     shared_daemon_concept: {
       eyebrow: "共有基盤の仕組み",
       title: "共有デーモン(shared_daemon.rs)",
-      body: "<p>埋め込みモデルとRAGサーバーは、会話UI・MCPサーバー・保存CLIのどこから先に呼ばれても良いよう「ヘルスチェック→ロック取得→起動→ロック解放」という共通手順で管理される。起動プロセスは呼び出し元から意図的にデタッチし、稼働判定はプロセスハンドルではなく<strong>ロックファイルに記録したPIDの生存確認</strong>で行う。</p>",
+      body: "<p>埋め込みモデルとRAGサーバーは、会話UI・MCPサーバー・保存CLIのどこから先に呼ばれても良いよう「ヘルスチェック→ロック取得→起動→ロック解放」という共通手順で管理される。起動プロセスは呼び出し元から意図的にデタッチし、稼働判定はプロセスハンドルではなく<strong>ロックファイルに記録したPIDの生存確認</strong>で行う。</p><p>SSDの取り外しの妨げになる点: 詩織本体は終了時に、自分が起動した子プロセスだけを止める。MCPや別のセッションが先に起動した共有デーモンは残る。<code>shiori-eject</code>(<code>eject.rs</code>)は、実行ファイルのパスがSSD(<code>portable/</code>)配下にある、自分のユーザーのプロセスを選んで穏やかに止める(<code>SIGTERM</code>→最大10秒待って強制終了)。名前ではなくパスで選ぶので、プロセスが増えても手直しが要らない。取り外し(Finderで取り出す操作)自体は行わない。</p>",
       paths: ["system/src-tauri/src/shared_daemon.rs — ensure_daemon_running()"]
     },
     desktop_ui: {
       eyebrow: "画面構成",
       title: "デスクトップ領域",
-      body: "<p>右ゾーンに配置される、macOSのDockを模したフリースペース型ウィンドウシステム。5つのウィンドウ(ナレッジ/図書館/全件閲覧/Claudeモニター/設定)は<code>OsWindow</code>としてドラッグ・リサイズ可能な形で共存する。Claudeモニター(Ver3.7)は、ウィンドウが見えている間だけ3秒ごとに<code>list_claude_sessions</code>で<code>data/claude-status/</code>を読み、セッションを一覧する読み取り専用の画面。死活はプロセスの生死で判定する(フックが起動元のClaude Codeのpidを記録し、同じPCのセッションは詩織がそのpidを見る)。生きていれば、長いビルドなどで無音が続いても状態を信じる。プロセスが消えて終了の報告が無いものは「終了」とし、5分で一覧から外す。別のPCのセッションやpidが取れないものは確かめようがないので、更新が1時間止まった作業中・入力待ちを「応答なし」とみなす。デバッグ画面のみ例外的に独立した全画面表示。</p>",
+      body: "<p>右ゾーンに配置される、macOSのDockを模したフリースペース型ウィンドウシステム。5つのウィンドウ(ナレッジ/図書館/全件閲覧/Claudeモニター/設定)は<code>OsWindow</code>としてドラッグ・リサイズ可能な形で共存する。Claudeモニター(Ver3.7)は、ウィンドウが見えている間だけ3秒ごとに<code>list_claude_sessions</code>で<code>data/claude-status/</code>を読み、セッションを一覧する読み取り専用の画面。死活はプロセスの生死で判定する(フックが起動元のClaude Codeのpidを記録し、同じPCのセッションは詩織がそのpidを見る)。生きていれば、長いビルドなどで無音が続いても状態を信じる。プロセスが消えて終了の報告が無いものは「終了」とし、5分で一覧から外す。別のPCのセッションやpidが取れないものは確かめようがないので、更新が1時間止まった作業中・入力待ちを「応答なし」とみなす。デバッグ画面のみ例外的に独立した全画面表示。</p><p>設定ウィンドウの「SSDの取り外し」ページから、実機SSDを使っているプロセスを確認し、止めて詩織を終了できる。詩織のウィンドウを閉じるときは、詩織を閉じても残る共有デーモンがあれば「関連するプロセスも停止しますか?」と聞く(<code>Cmd+Q</code>・Dockからの終了は通らない)。手順は<code>system/docs/setup-ssd-eject.md</code>。</p>",
       paths: ["system/src/components/desktop/DesktopArea.tsx", "system/src/components/desktop/Dock.tsx", "system/src/components/panels/ClaudeMonitorPanel.tsx", "system/src-tauri/src/claude_status.rs", "portable/scripts/claude-report.js"]
     },
     ui_knowledge: {
