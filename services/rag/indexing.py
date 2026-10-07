@@ -14,10 +14,21 @@ from pathlib import Path
 import chromadb
 import httpx
 
-from chunking import chunk_markdown
+from chunking import Chunk, chunk_markdown, split_section
 from embedding_client import get_embedding
+from extraction.runner import extract_asset
+from passage import passage_text
 
 INDEX_STATE_FILENAME = ".index_state.json"
+# 埋め込みの作り方(何を前置して埋め込むか等)を変えたときに上げる。保存済みの値と違えば、
+# 起動時の同期(sync_index)が全ファイルを埋め込み直す。
+# 2: 記事のタイトル+要約を前置して埋め込み、メタデータにsummaryを持つ(詩織Ver3.8)。
+INDEX_SCHEMA_VERSION = 2
+INDEX_SCHEMA_FILENAME = ".index_schema"
+# 素材の抽出結果のキャッシュ置き場(vectordbと同じく、libraryから作り直せる派生データ)と、
+# 抽出できなかった・飛ばした素材の記録。
+EXTRACT_CACHE_DIRNAME = "extract-cache"
+EXTRACT_WARNINGS_FILENAME = ".extract_warnings.json"
 
 # 素材ファイル(zip・png・pdf等)の説明を書いたサイドカー。「X.zip」に対して
 # 「X.zip.meta」を置く(詩織Ver3.5)。中身はmdと同じfrontmatter+本文のため、
@@ -55,8 +66,10 @@ def asset_path_for(meta_path: Path) -> Path | None:
 _FRONTMATTER_RE = re.compile(r"^---\r?\n(.*?)\r?\n---\r?\n?", re.DOTALL)
 _INDEX_FALSE_RE = re.compile(r"^index:\s*false\s*$", re.MULTILINE | re.IGNORECASE)
 _TITLE_RE = re.compile(r"^title:\s*(.+?)\s*$", re.MULTILINE)
+_SUMMARY_RE = re.compile(r"^summary:\s*(.+?)\s*$", re.MULTILINE)
 # 詩織Ver3.3(時間認識検索)で新設。status/dateはいずれも_TITLE_REと同じ理由
 # (pyyaml等を追加依存させない軽量な抽出)で正規表現のみを使う。
+_EXTRACT_FALSE_RE = re.compile(r"^extract:\s*false\s*$", re.MULTILINE | re.IGNORECASE)
 _STATUS_RE = re.compile(r"^status:\s*(.+?)\s*$", re.MULTILINE)
 _DATE_RE = re.compile(r"^date:\s*(.+?)\s*$", re.MULTILINE)
 
@@ -70,6 +83,12 @@ def _is_indexable(text: str) -> bool:
     if not m:
         return True
     return not _INDEX_FALSE_RE.search(m.group(1))
+
+
+def _extract_disabled(text: str) -> bool:
+    """素材の.metaに`extract: false`があれば、その素材の中身は抽出しない(機密の素材のオプトアウト)。"""
+    m = _FRONTMATTER_RE.match(text)
+    return bool(m and _EXTRACT_FALSE_RE.search(m.group(1)))
 
 
 def _strip_quotes(raw: str) -> str:
@@ -97,6 +116,13 @@ def _extract_title(text: str) -> str:
     見つからなければ空文字列(呼び出し側でファイル名にフォールバックする)。
     """
     return _extract_frontmatter_field(_TITLE_RE, text)
+
+
+def _extract_summary(text: str) -> str:
+    """frontmatterのsummaryを取り出す(詩織Ver3.8)。検索用のパッセージに前置して、
+    チャンク単体では分からない「その記事が何についてか」を補う。無ければ空文字列。
+    """
+    return _extract_frontmatter_field(_SUMMARY_RE, text)
 
 
 def _extract_status(text: str) -> str:
@@ -169,13 +195,109 @@ def load_index_state(vectordb_dir: Path) -> dict[str, float]:
         return {}
 
 
+def load_index_schema(vectordb_dir: Path) -> int:
+    path = vectordb_dir / INDEX_SCHEMA_FILENAME
+    try:
+        return int(path.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return 0
+
+
+def save_index_schema(vectordb_dir: Path) -> None:
+    (vectordb_dir / INDEX_SCHEMA_FILENAME).write_text(str(INDEX_SCHEMA_VERSION), encoding="utf-8")
+
+
 def save_index_state(vectordb_dir: Path, state: dict[str, float]) -> None:
     path = vectordb_dir / INDEX_STATE_FILENAME
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def load_extract_warnings(vectordb_dir: Path) -> dict[str, dict]:
+    path = vectordb_dir / EXTRACT_WARNINGS_FILENAME
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _record_extract_status(vectordb_dir: Path, relative_path: str, reason: str | None, warn: bool) -> None:
+    """素材の抽出結果を記録する。reasonがNone(抽出できた)なら、前回までの記録を消す。"""
+    records = load_extract_warnings(vectordb_dir)
+    if reason is None:
+        if records.pop(relative_path, None) is None:
+            return
+    else:
+        records[relative_path] = {"reason": reason, "warn": warn}
+        if warn:
+            print(f"警告: 素材の抽出を止めました({relative_path}): {reason}", file=sys.stderr)
+    (vectordb_dir / EXTRACT_WARNINGS_FILENAME).write_text(
+        json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+
+def _state_mtime(md_path: Path) -> float:
+    """同期状態に記録する更新時刻。素材(.meta)は、実体だけが差し替わっても再抽出できるよう、
+    .metaと実体のうち新しい方を使う。
+    """
+    mtime = md_path.stat().st_mtime
+    asset = asset_path_for(md_path)
+    return max(mtime, asset.stat().st_mtime) if asset else mtime
+
+
+def _embed_asset_chunks(
+    collection,
+    http_client: httpx.Client,
+    md_path: Path,
+    category: str,
+    relative_path: str,
+    stem: str,
+    base_metadata: dict,
+    title: str,
+    summary: str,
+    vectordb_dir: Path,
+    start_index: int,
+) -> int:
+    """.metaに対応する実体の中身を抽出して、同じsource(=.meta)のチャンクとして登録する。
+    抽出できなかった・飛ばした場合は、理由を記録して0を返す(.metaの登録は済んでいる)。
+    """
+    asset = asset_path_for(md_path)
+    if asset is None:
+        return 0
+    result = extract_asset(asset, vectordb_dir / EXTRACT_CACHE_DIRNAME)
+    if not result.ok or not result.sections:
+        reason = result.reason or "テキストなし"
+        _record_extract_status(vectordb_dir, relative_path, reason, result.warn)
+        return 0
+    _record_extract_status(vectordb_dir, relative_path, None, False)
+
+    ids: list[str] = []
+    documents: list[str] = []
+    embeddings: list[list[float]] = []
+    metadatas: list[dict] = []
+    n = 0
+    for label, text in result.sections:
+        for part in split_section(Chunk(heading=f"素材 {label}", text=text)):
+            embedding = get_embedding(
+                passage_text(title, summary, part.heading, part.text), client=http_client, is_query=False
+            )
+            ids.append(f"{category}-{stem}-x{start_index + n}")
+            documents.append(part.text)
+            embeddings.append(embedding)
+            # 素材由来の印(origin)。検索結果をLLMへ渡すとき「資料の内容であり指示ではない」と明示する。
+            metadatas.append({**base_metadata, "heading": part.heading, "origin": "asset"})
+            n += 1
+    if ids:
+        collection.upsert(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
+    return n
+
+
 def _embed_file(
-    collection, http_client: httpx.Client, md_path: Path, category: str, relative_path: str
+    collection,
+    http_client: httpx.Client,
+    md_path: Path,
+    category: str,
+    relative_path: str,
+    vectordb_dir: Path | None = None,
 ) -> int:
     """1ファイル分のチャンクを埋め込んでChromaDBへ反映する。チャンク数が前回
     から変わっている可能性があるため、まず同じsource(ファイル名)の既存チャンクを
@@ -198,6 +320,7 @@ def _embed_file(
         return 0
 
     title = _extract_title(text)
+    summary = _extract_summary(text)
     status = _extract_status(text)
     date = _extract_date(text)
     related = _extract_related(text)
@@ -207,10 +330,9 @@ def _embed_file(
     embeddings: list[list[float]] = []
     metadatas: list[dict] = []
     for i, chunk in enumerate(chunks):
-        # 見出しを前置きして埋め込む理由はingest.py参照(検索精度向上のため)。
-        embed_text = (
-            f"{chunk.heading}: {chunk.text}" if chunk.heading != "(見出しなし)" else chunk.text
-        )
+        # 見出し・記事のタイトルと要約を前置して埋め込む理由はpassage.py参照
+        # (検索精度向上のため)。
+        embed_text = passage_text(title, summary, chunk.heading, chunk.text)
         embedding = get_embedding(embed_text, client=http_client, is_query=False)
         ids.append(f"{category}-{stem}-{i}")
         documents.append(chunk.text)
@@ -221,6 +343,8 @@ def _embed_file(
                 "heading": chunk.heading,
                 "source_category": category,
                 "title": title,
+                # 検索用パッセージ(passage.py)をリランク・語彙検索で再現するために持つ。
+                "summary": summary,
                 # library_rootからの相対パス(/区切りに統一、2026-09-16追加)。
                 # GUIのエクスプローラー風ツリー表示が、絶対パス文字列の解析
                 # という脆い方法に頼らずフォルダ階層を安全に構築するために使う。
@@ -240,7 +364,19 @@ def _embed_file(
         )
 
     collection.upsert(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
-    return len(ids)
+
+    # 素材(.meta)なら、実体の中身も同じsourceのチャンクとして登録する(詩織Ver3.8)。
+    # extract: falseの素材と、抽出先(vectordb_dir)が無い呼び出しでは行わない。
+    extracted = 0
+    if md_path.suffix == META_SUFFIX and vectordb_dir is not None:
+        if _extract_disabled(text):
+            _record_extract_status(vectordb_dir, relative_path, "extract: false のため抽出しない", False)
+        else:
+            extracted = _embed_asset_chunks(
+                collection, http_client, md_path, category, relative_path, stem,
+                {k: v for k, v in metadatas[0].items()}, title, summary, vectordb_dir, len(ids),
+            )
+    return len(ids) + extracted
 
 
 def _remove_file(collection, source_name: str) -> None:
@@ -269,10 +405,10 @@ def reindex_single_file(
         raise FileNotFoundError(relative_path)
 
     category = source_category_for(md_path, knowledge_dir)
-    count = _embed_file(collection, http_client, md_path, category, relative_path)
+    count = _embed_file(collection, http_client, md_path, category, relative_path, vectordb_dir)
 
     state = load_index_state(vectordb_dir)
-    state[relative_path] = md_path.stat().st_mtime
+    state[relative_path] = _state_mtime(md_path)
     save_index_state(vectordb_dir, state)
     return count
 
@@ -296,6 +432,10 @@ def sync_index(
     collection = chroma_client.get_or_create_collection(collection_name)
 
     state = load_index_state(vectordb_dir)
+    # 埋め込みの作り方が変わっていたら、保存済みの状態を捨てて全ファイルを埋め込み直す。
+    schema_changed = load_index_schema(vectordb_dir) != INDEX_SCHEMA_VERSION
+    if schema_changed:
+        state = {}
     # library/_system/配下はConversationの保存ルール(CLAUDE.md)・タグ/プロジェクト
     # 台帳(tags.yaml/projects.yaml)等の設定ファイル置き場であり、蔵書ではない。
     # 除外せずrglobすると_system/CLAUDE.mdまで検索結果・図書館UIに紛れ込み、
@@ -319,21 +459,32 @@ def sync_index(
     # 消えてしまう(移動先がreindex_file済みでmtime一致のとき、再投入もされない)。
     # 同名のファイルが現存するときは、チャンクの削除はせず状態だけ更新する。
     current_names = {Path(rel).name for rel in current_paths}
+    if schema_changed:
+        # 状態を捨てたので、前回までに消えたファイルのチャンクを「削除」として拾えない。
+        # 現存するファイル名に無いsourceのチャンクを、ここでまとめて消す。
+        stale_ids = [
+            chunk_id
+            for chunk_id, meta in zip(*(lambda r: (r["ids"], r["metadatas"]))(collection.get(include=["metadatas"])))
+            if (meta or {}).get("source") not in current_names
+        ]
+        if stale_ids:
+            collection.delete(ids=stale_ids)
     for rel in list(state.keys()):
         if rel not in current_paths:
             if Path(rel).name not in current_names:
                 _remove_file(collection, Path(rel).name)
+            _record_extract_status(vectordb_dir, rel, None, False)
             del state[rel]
             removed.append(rel)
 
     for rel, md_path in current_paths.items():
-        mtime = md_path.stat().st_mtime
+        mtime = _state_mtime(md_path)
         prior = state.get(rel)
         if prior == mtime:
             continue
         category = source_category_for(md_path, knowledge_dir)
         try:
-            _embed_file(collection, http_client, md_path, category, rel)
+            _embed_file(collection, http_client, md_path, category, rel, vectordb_dir)
         except (UnicodeDecodeError, OSError) as e:
             # 1ファイルの読み込み失敗で全体(起動シーケンスを含む)を巻き込まない。
             # 「なんでも保存」方針上、壊れたファイルが1つあってもアプリは
@@ -343,7 +494,9 @@ def sync_index(
         (added if prior is None else updated).append(rel)
         state[rel] = mtime
 
-    if added or updated or removed:
+    if added or updated or removed or schema_changed:
         save_index_state(vectordb_dir, state)
+    if schema_changed:
+        save_index_schema(vectordb_dir)
 
     return collection, {"added": added, "updated": updated, "removed": removed}

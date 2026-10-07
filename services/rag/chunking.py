@@ -68,6 +68,13 @@ def _split_long_section(section: Chunk) -> list[Chunk]:
     return parts
 
 
+def split_section(section: Chunk) -> list[Chunk]:
+    """1つの区間(見出し+本文)を、長ければオーバーラップ付きで分割する。素材から抽出した
+    テキスト(Markdownではない)の分割に使う(詩織Ver3.8)。
+    """
+    return _split_long_section(section)
+
+
 def chunk_markdown(markdown: str) -> list[Chunk]:
     """見出し単位で分割し、長すぎるセクションはオーバーラップ付きでさらに分割する。"""
     sections = _split_by_heading(markdown)

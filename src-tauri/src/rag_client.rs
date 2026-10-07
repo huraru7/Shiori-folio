@@ -97,8 +97,10 @@ pub fn reindex_file(port: u16, relative_path: &str) -> Result<(), String> {
     let url = format!("http://127.0.0.1:{port}/reindex_file");
     let body = ReindexFileRequest { path: relative_path };
 
+    // 素材(PDF等)は、実体の中身を抽出して埋め込むため、記事より時間がかかる
+    // (抽出の上限60秒+埋め込み、詩織Ver3.8)。記事だけなら数秒で終わるので、待つ上限だけ延ばす。
     ureq::post(&url)
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(180))
         .send_json(&body)
         .map_err(|e| format!("即時re-indexに失敗: {e}"))?;
     Ok(())
