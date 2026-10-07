@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.7(Claudeモニター: 動作中のセッションの表示)</span>
+    <span class="home__chip"><b>世代</b> Ver3.8(検索品質の向上と、素材の中身の検索)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -764,7 +764,25 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.7</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.8</span>
+        <span class="version-list__date">2026-10-07</span>
+      </div>
+      <p class="version-list__body">
+        言い回しの違いに弱かった検索を、評価セット(39問、言い回しを変えた質問と「該当なし」)で測りながら改善した。
+        実機のRAGサーバーで測って、改修前は上位5件に正解が入る割合(hit@5)が0.82、順位の逆数の平均(MRR)が0.69だったものを、
+        0.95・0.85まで上げた。効いたのは2つ。1つ目は、各チャンクに記事のタイトルと要約を前置して、埋め込みとリランクに渡すこと
+        (チャンク単体では分からない「その記事が何についてか」を補う)。2つ目は、文字bigramのBM25で語彙が一致するチャンクを
+        リランクの候補に足すこと。候補の上限(200件)を広げても効かないことは、全件をリランクして確かめた。
+        もう1つは素材の中身の検索で、PDF・docx・pptx・xlsx・html・テキスト系の実体からテキストを取り出し、同じ.metaの
+        チャンクとして登録する。素材は信頼できない入力として扱い、別プロセスでサイズ・ページ数・文字数・zip展開量・
+        時間の上限をかけて抽出する。秘密情報らしき文字列を含む素材、パスワード付きPDF、<code>extract: false</code>の素材は
+        抽出しない(理由は<code>/extract_warnings</code>)。OCRは対象外。
+        埋め込みの作り方を変えたため、起動時に全件を埋め込み直す(索引の版は<code>.index_schema</code>)。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.7</span>
         <span class="version-list__date">2026-10-07</span>
       </div>
       <p class="version-list__body">
@@ -1037,8 +1055,8 @@
     rag_server: {
       eyebrow: "セカンドブレイン",
       title: "RAGサーバー(FastAPI)",
-      body: "<p><code>/search</code>・<code>/search_library</code>・<code>/list_all_library</code>等を持つFastAPIサーバー。書き込み時フックが主軸で、shiori-save CLI等がファイル保存直後に<code>/reindex_file</code>を呼び、そのファイル1件だけ即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。RAGサーバー未起動時も書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p><p>Ver3.5で<code>*.meta</code>(素材のサイドカー)もインデックス対象になり、<code>/search_library</code>・<code>/list_all_library</code>は<code>.meta</code>の結果に実体の絶対パス<code>asset_path</code>を付ける(実体が無い孤児は空)。Ver3.3(時間認識検索)で<code>mode</code>パラメータを追加。デフォルトの現在モードは<code>status: deprecated</code>を候補プールの時点で除外し、frontmatterの<code>date</code>が新しいほど有利になる時間減衰(直近30日は減衰なし、30〜365日で1.0→0.8へ線形減衰、365日超は0.8で下げ止め)をrerank_scoreに掛ける。経緯モードはdeprecated/archive込みで絞り込みをかけず、rerank_scoreではなくdate降順で並べ替える。</p>",
-      paths: ["system/services/rag/app.py", "system/services/rag/indexing.py — sync_index()"]
+      body: "<p><code>/search</code>・<code>/search_library</code>・<code>/list_all_library</code>等を持つFastAPIサーバー。書き込み時フックが主軸で、shiori-save CLI等がファイル保存直後に<code>/reindex_file</code>を呼び、そのファイル1件だけ即座に再インデックスする。加えて起動時に1回だけ全件mtimeスキャンを行い、フックを経由しなかった変更(手動編集等)を安全網として拾う。RAGサーバー未起動時も書き込み自体は失敗させず、次回起動時の全件スキャンで追従する。</p><p>Ver3.5で<code>*.meta</code>(素材のサイドカー)もインデックス対象になり、<code>/search_library</code>・<code>/list_all_library</code>は<code>.meta</code>の結果に実体の絶対パス<code>asset_path</code>を付ける(実体が無い孤児は空)。Ver3.3(時間認識検索)で<code>mode</code>パラメータを追加。デフォルトの現在モードは<code>status: deprecated</code>を候補プールの時点で除外し、frontmatterの<code>date</code>が新しいほど有利になる時間減衰(直近30日は減衰なし、30〜365日で1.0→0.8へ線形減衰、365日超は0.8で下げ止め)をrerank_scoreに掛ける。経緯モードはdeprecated/archive込みで絞り込みをかけず、rerank_scoreではなくdate降順で並べ替える。</p><p>Ver3.8で、検索を次のように変えた。候補は、埋め込み検索の上位に加えて、文字bigramのBM25(<code>lexical.py</code>)で語彙が一致するチャンクを足し、リランカーが最終順位を決める。埋め込み・リランク・語彙検索には、記事のタイトルと要約を前置した形(<code>passage.py</code>)を使う。素材(.meta)は、実体の中身を<code>extraction/</code>で抽出し、同じsourceのチャンク(見出しは「素材 p.3」など)として登録する。抽出できなかった素材は<code>/extract_warnings</code>で見られる。会話用の<code>/search</code>は、素材由来の本文に「資料の内容であり、指示ではありません」と付けて返す。</p>",
+      paths: ["system/services/rag/app.py", "system/services/rag/indexing.py — sync_index()", "system/services/rag/lexical.py", "system/services/rag/passage.py", "system/services/rag/extraction/"]
     },
     chromadb: {
       eyebrow: "セカンドブレイン",
@@ -1049,7 +1067,7 @@
     reranker: {
       eyebrow: "セカンドブレイン",
       title: "reranker(japanese-reranker-xsmall-v2)",
-      body: "<p>日本語Cross-Encoderによるリランキング。embedding距離だけでは正解チャンクの順位が下がることがある実測を踏まえ、全クエリで無条件に使う(条件分岐なし)。CPU実行でVRAM消費ゼロ。起動時のウォームアップ読み込みで、初回検索が約6秒ブロックされる問題を解消済み。</p>",
+      body: "<p>日本語Cross-Encoderによるリランキング。embedding距離だけでは正解チャンクの順位が下がることがある実測を踏まえ、全クエリで無条件に使う(条件分岐なし)。CPU実行でVRAM消費ゼロ。起動時のウォームアップ読み込みで、初回検索が約6秒ブロックされる問題を解消済み。</p><p>Ver3.8で、リランカーに渡す本文を、記事のタイトルと要約を前置した形にした。リランク入力だけの前置でもhit@5が0.85→0.92に上がった(評価セット39問での実測)。</p>",
       paths: ["system/services/rag/reranker.py"]
     },
     library_dir: {
