@@ -28,6 +28,9 @@ def _apply_limits() -> None:
 
 
 def main() -> int:
+    # 親(runner.py)はUTF-8として読む。Windowsではパイプの標準出力がcp932になり、
+    # 日本語を含む結果がすべて「抽出プロセスが異常終了」になっていた。
+    sys.stdout.reconfigure(encoding="utf-8")
     _apply_limits()
     path = Path(sys.argv[1])
     try:
