@@ -1750,11 +1750,14 @@ struct ModelSwitchResult {
 // 実測値としてmodels/vram_estimates.jsonに書き戻し、次回以降の見積もり精度を上げる。
 #[tauri::command]
 async fn switch_model(app: tauri::AppHandle, file_name: String) -> Result<ModelSwitchResult, String> {
-    run_blocking(move || switch_model_blocking(app.state(), file_name)).await
+    run_blocking(move || switch_model_blocking(app.state(), app.state(), file_name)).await
 }
 
+// sysはMacのRSS実測でのみ使う(Windowsは未使用)
+#[cfg_attr(windows, allow(unused_variables))]
 fn switch_model_blocking(
     state: tauri::State<BackendState>,
+    sys: tauri::State<Mutex<sysinfo::System>>,
     file_name: String,
 ) -> Result<ModelSwitchResult, String> {
     let root = project_root();
