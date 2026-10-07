@@ -1,4 +1,5 @@
 mod audio;
+mod claude_stats;
 mod claude_status;
 mod db;
 pub mod eject;
@@ -1264,6 +1265,61 @@ async fn list_claude_sessions() -> Result<Vec<claude_status::ClaudeSession>, Str
     })
         .await
         .map_err(|e| format!("Claudeの状況の読み取りに失敗: {e}"))
+}
+
+// Claudeの利用統計(詩織Ver3.9)。このPCのClaude Codeの履歴を`data/claude-stats/`の
+// 台帳へ取り込み、全端末の台帳を合算して返す。起動時の取り込みと、統計タブを開いた
+// ときの取り込みが重ならないよう、取り込みは1つずつ行う。
+static CLAUDE_STATS_REFRESH: Mutex<Option<u64>> = Mutex::new(None);
+/// 強制でない取り込みを省く間隔。統計タブを開くたびにSSDへ書き直さないため。
+const CLAUDE_STATS_REFRESH_INTERVAL_MS: u64 = 5 * 60 * 1000;
+
+fn claude_stats_dir() -> PathBuf {
+    project_root().join("data").join("claude-stats")
+}
+
+fn unix_now_ms() -> Result<u64, String> {
+    Ok(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("現在時刻の取得に失敗: {e}"))?
+        .as_millis() as u64)
+}
+
+/// 取り込みを省いたときは`None`を返す。
+fn refresh_claude_stats_blocking(force: bool) -> Result<Option<claude_stats::RefreshOutcome>, String> {
+    let mut last = CLAUDE_STATS_REFRESH
+        .lock()
+        .map_err(|_| "利用統計の取り込みの状態が壊れています".to_string())?;
+    let now_ms = unix_now_ms()?;
+    if !force && last.is_some_and(|t| now_ms.saturating_sub(t) < CLAUDE_STATS_REFRESH_INTERVAL_MS) {
+        return Ok(None);
+    }
+    let projects = claude_stats::default_projects_dir()
+        .ok_or("Claude Codeの履歴の場所(ホームフォルダ)が分かりません")?;
+    let host = sysinfo::System::host_name().unwrap_or_else(|| "unknown".to_string());
+    let outcome = claude_stats::refresh(&projects, &claude_stats_dir(), &host, now_ms)?;
+    *last = Some(now_ms);
+    Ok(Some(outcome))
+}
+
+#[tauri::command]
+async fn refresh_claude_stats(force: bool) -> Result<Option<claude_stats::RefreshOutcome>, String> {
+    tauri::async_runtime::spawn_blocking(move || refresh_claude_stats_blocking(force))
+        .await
+        .map_err(|e| format!("利用統計の取り込みに失敗: {e}"))?
+}
+
+#[tauri::command]
+async fn get_claude_stats(
+    range: claude_stats::StatsRange,
+    host: Option<String>,
+) -> Result<claude_stats::ClaudeStats, String> {
+    let now_ms = unix_now_ms()?;
+    tauri::async_runtime::spawn_blocking(move || {
+        claude_stats::summarize_local(&claude_stats_dir(), range, host.as_deref(), now_ms)
+    })
+    .await
+    .map_err(|e| format!("利用統計の集計に失敗: {e}"))
 }
 
 #[tauri::command]
@@ -4664,6 +4720,12 @@ pub fn run() {
                 .map(|c| c.hotkey)
                 .unwrap_or_else(|_| "ctrl+alt+s".to_string());
             app.global_shortcut().register(hotkey.as_str())?;
+            // SSDを挿していなかった間の分も含め、このPCのClaudeの履歴を台帳へ取り込む。
+            std::thread::spawn(|| {
+                if let Err(e) = refresh_claude_stats_blocking(true) {
+                    eprintln!("Claudeの利用統計の取り込みに失敗: {e}");
+                }
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -4677,6 +4739,8 @@ pub fn run() {
             get_system_info,
             get_config,
             list_claude_sessions,
+            refresh_claude_stats,
+            get_claude_stats,
             eject_preview,
             eject_execute,
             set_config,
