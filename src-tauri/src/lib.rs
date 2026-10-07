@@ -131,11 +131,14 @@ struct UiConfig {
     show_day: bool,
     #[serde(default)]
     show_weekday: bool,
+    // 時刻の秒の表示(詩織Ver3.9)。
+    #[serde(default)]
+    show_seconds: bool,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
-        Self { show_year: true, show_month: true, show_day: true, show_weekday: false }
+        Self { show_year: true, show_month: true, show_day: true, show_weekday: false, show_seconds: false }
     }
 }
 
@@ -207,7 +210,11 @@ pub struct TtsFailureDto {
 
 // デバッグ画面向け。直近の失敗を新しい順に返す。
 #[tauri::command]
-fn get_tts_failures() -> Result<Vec<TtsFailureDto>, String> {
+async fn get_tts_failures() -> Result<Vec<TtsFailureDto>, String> {
+    run_blocking(move || get_tts_failures_blocking()).await
+}
+
+fn get_tts_failures_blocking() -> Result<Vec<TtsFailureDto>, String> {
     let conn = db::open(&project_root())?;
     let mut stmt = conn
         .prepare("SELECT error, created_at FROM tts_failures ORDER BY id DESC LIMIT 20")
@@ -1197,6 +1204,7 @@ struct ConfigDto {
     show_month: bool,
     show_day: bool,
     show_weekday: bool,
+    show_seconds: bool,
 }
 
 // 実機SSDを取り外せる状態にする(取り外し機能)。止める対象の選び方は`eject.rs`を参照。
@@ -1274,6 +1282,19 @@ static CLAUDE_STATS_REFRESH: Mutex<Option<u64>> = Mutex::new(None);
 /// 強制でない取り込みを省く間隔。統計タブを開くたびにSSDへ書き直さないため。
 const CLAUDE_STATS_REFRESH_INTERVAL_MS: u64 = 5 * 60 * 1000;
 
+/// SSD(exFAT)の読み書きやRAGへの問い合わせを行うコマンド向け。Tauri 2の同期コマンドは
+/// UIのスレッドで動き、終わるまで画面全体が固まる(図書館で「応答なし」になっていた)ため、
+/// 本体は裏のスレッドで動かす。
+async fn run_blocking<T, F>(f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("処理の実行に失敗: {e}"))?
+}
+
 fn claude_stats_dir() -> PathBuf {
     project_root().join("data").join("claude-stats")
 }
@@ -1323,7 +1344,11 @@ async fn get_claude_stats(
 }
 
 #[tauri::command]
-fn get_config() -> Result<ConfigDto, String> {
+async fn get_config() -> Result<ConfigDto, String> {
+    run_blocking(move || get_config_blocking()).await
+}
+
+fn get_config_blocking() -> Result<ConfigDto, String> {
     let config = app_config()?;
     Ok(ConfigDto {
         hotkey: config.hotkey,
@@ -1340,6 +1365,7 @@ fn get_config() -> Result<ConfigDto, String> {
         show_month: config.ui.show_month,
         show_day: config.ui.show_day,
         show_weekday: config.ui.show_weekday,
+        show_seconds: config.ui.show_seconds,
     })
 }
 
@@ -1360,6 +1386,7 @@ struct ConfigUpdate {
     show_month: Option<bool>,
     show_day: Option<bool>,
     show_weekday: Option<bool>,
+    show_seconds: Option<bool>,
 }
 
 fn validate_config_update(update: &ConfigUpdate) -> Result<(), String> {
@@ -1403,7 +1430,11 @@ fn validate_config_update(update: &ConfigUpdate) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn set_config(update: ConfigUpdate) -> Result<(), String> {
+async fn set_config(update: ConfigUpdate) -> Result<(), String> {
+    run_blocking(move || set_config_blocking(update)).await
+}
+
+fn set_config_blocking(update: ConfigUpdate) -> Result<(), String> {
     validate_config_update(&update)?;
 
     let path = project_root().join("config.json");
@@ -1453,6 +1484,9 @@ fn set_config(update: ConfigUpdate) -> Result<(), String> {
     }
     if let Some(v) = update.show_weekday {
         value["ui"]["showWeekday"] = serde_json::json!(v);
+    }
+    if let Some(v) = update.show_seconds {
+        value["ui"]["showSeconds"] = serde_json::json!(v);
     }
 
     let pretty = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
@@ -1508,7 +1542,11 @@ fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn list_available_models() -> Result<Vec<models::ModelInfo>, String> {
+async fn list_available_models() -> Result<Vec<models::ModelInfo>, String> {
+    run_blocking(move || list_available_models_blocking()).await
+}
+
+fn list_available_models_blocking() -> Result<Vec<models::ModelInfo>, String> {
     let root = project_root();
     let config = app_config()?;
     let current = Path::new(&config.llm.model_path)
@@ -1773,7 +1811,11 @@ fn find_file_by_name(dir: &Path, file_name: &str) -> Option<PathBuf> {
 // library/ディレクトリ自体をcanonicalize()した結果の配下に収まって
 // いるかを必ず確認する。
 #[tauri::command]
-fn get_source_document(source_category: String, source: String) -> Result<String, String> {
+async fn get_source_document(source_category: String, source: String) -> Result<String, String> {
+    run_blocking(move || get_source_document_blocking(source_category, source)).await
+}
+
+fn get_source_document_blocking(source_category: String, source: String) -> Result<String, String> {
     let knowledge_root = library_root();
     let search_root = if source_category == "uncategorized" {
         knowledge_root.clone()
@@ -1857,7 +1899,11 @@ fn reveal_library_asset(app: tauri::AppHandle, path: String) -> Result<(), Strin
 // スタンドアロン図書館UI(Phase 7、詩織Ver2.0設計指示書v3、10章)向け。検索を
 // 経由せず、蔵書をファイル単位(1冊=1ファイル)に集約して一覧として返す。
 #[tauri::command]
-fn list_all_knowledge() -> Result<Vec<LibraryFileDto>, String> {
+async fn list_all_knowledge() -> Result<Vec<LibraryFileDto>, String> {
+    run_blocking(move || list_all_knowledge_blocking()).await
+}
+
+fn list_all_knowledge_blocking() -> Result<Vec<LibraryFileDto>, String> {
     let config = app_config()?;
     let files = rag_client::list_all_library(config.rag.port)?;
     Ok(files
@@ -1893,20 +1939,62 @@ pub struct SearchLibraryResultDto {
     path: String,
     asset_path: String,
     title: String,
+    // 一覧に添える属性と冒頭の文(詩織Ver3.9)。記事を読めなかったときは空。
+    summary: String,
+    project: String,
+    entry_kind: String,
+    status: String,
+    date: String,
 }
 
 // ライブラリウィンドウの検索結果ベースUI(詩織Ver3.0、UI改善4-2節)向け。
 // MCPサーバー(mcp_server.rs)のsearch_libraryツールと同じ共有ロジック
 // (rag_client::search_library)をGUI側からも呼べるようにするだけの薄いラッパー。
-// author/type/projectでの絞り込みはGUI側の検索UIでは今回使わないため、
-// filterは常にNoneで呼ぶ。
+// 詩織Ver3.9で、図書館の絞り込み(アーカイブと古い記録の除外・棚・project・種類)を足した。
 #[tauri::command]
-fn search_library(query: String, limit: u32, offset: u32) -> Result<Vec<SearchLibraryResultDto>, String> {
+async fn search_library(
+    query: String,
+    limit: u32,
+    offset: u32,
+    filter: LibraryFilterDto,
+) -> Result<Vec<SearchLibraryResultDto>, String> {
+    run_blocking(move || search_library_blocking(query, limit, offset, filter)).await
+}
+
+/// 図書館の検索の絞り込み(詩織Ver3.9)。空の項目は絞り込まない。
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryFilterDto {
+    #[serde(default)]
+    include_stale: bool,
+    #[serde(default)]
+    source_categories: Vec<String>,
+    #[serde(default)]
+    project: Option<String>,
+    #[serde(default)]
+    kind: Option<String>,
+}
+
+fn search_library_blocking(
+    query: String,
+    limit: u32,
+    offset: u32,
+    filter: LibraryFilterDto,
+) -> Result<Vec<SearchLibraryResultDto>, String> {
     let config = app_config()?;
-    let results = rag_client::search_library(config.rag.port, &query, limit, offset, None, false)?;
+    let rag_filter = rag_client::LibrarySearchFilter {
+        project: filter.project.as_deref().filter(|p| !p.is_empty()),
+        entry_kind: filter.kind.as_deref().filter(|k| !k.is_empty()),
+        source_categories: (!filter.source_categories.is_empty()).then_some(filter.source_categories.as_slice()),
+        exclude_stale: !filter.include_stale,
+        ..Default::default()
+    };
+    let results = rag_client::search_library(config.rag.port, &query, limit, offset, Some(rag_filter), false)?;
     Ok(results
         .into_iter()
-        .map(|r| SearchLibraryResultDto {
+        .map(|r| {
+            let preview = read_article_preview(&r.path);
+            SearchLibraryResultDto {
             source: r.source,
             source_category: r.source_category,
             headings: r
@@ -1918,8 +2006,91 @@ fn search_library(query: String, limit: u32, offset: u32) -> Result<Vec<SearchLi
             path: r.path,
             asset_path: r.asset_path,
             title: r.title,
+            summary: preview.summary,
+            project: preview.project,
+            entry_kind: preview.entry_kind,
+            status: preview.status,
+            date: preview.date,
+            }
         })
         .collect())
+}
+
+/// 検索結果の一覧に添える、記事の属性と冒頭の文(詩織Ver3.9)。
+#[derive(Default)]
+struct ArticlePreview {
+    summary: String,
+    project: String,
+    entry_kind: String,
+    status: String,
+    date: String,
+}
+
+/// 冒頭の文として切り出す最大の文字数。一覧では2〜3行に収めて省略表示する。
+const PREVIEW_MAX_CHARS: usize = 200;
+
+/// `path`の記事(.mdまたは素材の.meta)のfrontmatterと本文から、一覧用の属性と
+/// 冒頭の文を作る。冒頭の文はfrontmatterの`summary`、無ければ本文の最初の数行。
+/// 読めない・frontmatterが壊れている記事は、分かる範囲だけ埋めて返す(一覧の
+/// 表示を止めないため)。
+fn read_article_preview(path: &str) -> ArticlePreview {
+    if !(path.ends_with(".md") || path.ends_with(".meta")) {
+        return ArticlePreview::default();
+    }
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return ArticlePreview::default();
+    };
+    let frontmatter = parse_display_frontmatter(&content).unwrap_or_default();
+    let summary = frontmatter
+        .summary
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| body_excerpt(&content));
+    ArticlePreview {
+        summary: summary.chars().take(PREVIEW_MAX_CHARS).collect(),
+        project: frontmatter.project.unwrap_or_default(),
+        entry_kind: frontmatter.entry_kind.unwrap_or_default(),
+        status: frontmatter.status,
+        date: frontmatter.date.as_ref().map(display_date).unwrap_or_default(),
+    }
+}
+
+/// frontmatterの`date`(日付だけ、日時、引用符の有無がまちまち)を`YYYY-MM-DD`にする。
+fn display_date(value: &serde_yaml::Value) -> String {
+    let text = match value {
+        serde_yaml::Value::String(s) => s.clone(),
+        other => serde_yaml::to_string(other).unwrap_or_default(),
+    };
+    text.trim().chars().take(10).collect()
+}
+
+/// frontmatterより後の本文から、見出し・表・コードなどを除いた最初の文を取り出す。
+fn body_excerpt(content: &str) -> String {
+    let body = content
+        .strip_prefix("---")
+        .and_then(|rest| rest.find("\n---").map(|end| &rest[end + 4..]))
+        .unwrap_or(content);
+    let mut excerpt = String::new();
+    let mut in_code = false;
+    for line in body.lines() {
+        let line = line.trim();
+        if line.starts_with("```") {
+            in_code = !in_code;
+            continue;
+        }
+        if in_code || line.is_empty() || line.starts_with(['#', '|', '<']) || line.starts_with("---") {
+            continue;
+        }
+        let line = line.trim_start_matches(['-', '*', '>', ' ']);
+        let line = line.replace("**", "").replace('`', "").replace("[[", "").replace("]]", "");
+        if !excerpt.is_empty() {
+            excerpt.push(' ');
+        }
+        excerpt.push_str(&line);
+        if excerpt.chars().count() >= PREVIEW_MAX_CHARS {
+            break;
+        }
+    }
+    excerpt
 }
 
 // frontmatterの必要フィールドのみを読み取る表示専用構造体。書き込み側
@@ -1937,6 +2108,11 @@ struct DisplayFrontmatter {
     project: Option<String>,
     #[serde(default)]
     summary: Option<String>,
+    // `type`(棚)とは別の、記事の種類(journal・resource・decisionなど)。
+    #[serde(rename = "kind", default)]
+    entry_kind: Option<String>,
+    #[serde(default)]
+    date: Option<serde_yaml::Value>,
     #[serde(default = "default_display_index")]
     index: bool,
     #[serde(default = "default_display_status")]
@@ -1986,8 +2162,12 @@ fn parse_display_frontmatter(content: &str) -> Result<DisplayFrontmatter, String
 // Markdown全体(frontmatter込み)を返すのみのため、frontmatterだけを
 // 構造化JSONで返す専用コマンドを別途用意する。
 #[tauri::command]
-fn get_source_frontmatter(source_category: String, source: String) -> Result<SourceFrontmatterDto, String> {
-    let content = get_source_document(source_category, source)?;
+async fn get_source_frontmatter(source_category: String, source: String) -> Result<SourceFrontmatterDto, String> {
+    run_blocking(move || get_source_frontmatter_blocking(source_category, source)).await
+}
+
+fn get_source_frontmatter_blocking(source_category: String, source: String) -> Result<SourceFrontmatterDto, String> {
+    let content = get_source_document_blocking(source_category, source)?;
     let fm = parse_display_frontmatter(&content)?;
     Ok(SourceFrontmatterDto {
         title: fm.title,
@@ -2011,6 +2191,114 @@ fn get_source_frontmatter(source_category: String, source: String) -> Result<Sou
 // 行うが、書き込みは対象エントリのブロックをテキスト上で探して該当行だけを
 // 書き換える(削除の場合はブロックごと除去する)方式にしている
 // (shiori_save.rsの追記専用方針と同じ思想)。
+
+/// ホームの「前回の申し送り」(詩織Ver3.9)。
+#[derive(Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct HandoffDto {
+    title: String,
+    project: String,
+    date: String,
+    source: String,
+    source_category: String,
+    items: Vec<String>,
+}
+
+/// 申し送りを探すとき、更新日時の新しい順に読むjournalの数。整理などで古い記事の
+/// 更新日時が変わることがあるため、少し多めに読んでからfrontmatterのdateで選ぶ。
+const HANDOFF_CANDIDATES: usize = 40;
+
+/// 最も新しいjournal(frontmatterのdate)のうち、「申し送り」を含む見出しの節を持つ
+/// ものから、その箇条書きを返す。見つからなければNone。
+#[tauri::command]
+async fn get_latest_handoff() -> Result<Option<HandoffDto>, String> {
+    run_blocking(|| {
+        let config = app_config()?;
+        let mut files = rag_client::list_all_library(config.rag.port)?;
+        files.retain(|f| f.source.ends_with(".md"));
+        files.sort_by(|a, b| b.mtime.total_cmp(&a.mtime));
+        let latest = files
+            .iter()
+            .take(HANDOFF_CANDIDATES)
+            .filter_map(|f| {
+                let content = std::fs::read_to_string(&f.path).ok()?;
+                let frontmatter = parse_display_frontmatter(&content).ok()?;
+                if frontmatter.entry_kind.as_deref() != Some("journal") {
+                    return None;
+                }
+                let items = handoff_items(&content);
+                if items.is_empty() {
+                    return None;
+                }
+                Some(HandoffDto {
+                    title: frontmatter.title.unwrap_or_default(),
+                    project: frontmatter.project.unwrap_or_default(),
+                    date: frontmatter.date.as_ref().map(display_date).unwrap_or_default(),
+                    source: f.source.clone(),
+                    source_category: f.source_category.clone(),
+                    items,
+                })
+            })
+            .max_by(|a, b| a.date.cmp(&b.date));
+        Ok(latest)
+    })
+    .await
+}
+
+/// 「申し送り」を含む見出しの節から、箇条書きの各項目を飾り(太字・コード・リンク)を
+/// 外した1行ずつにして返す。入れ子の項目は親にまとめず、そのまま1行にする。
+fn handoff_items(content: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    let mut in_section = false;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('#') {
+            in_section = trimmed.contains("申し送り");
+            continue;
+        }
+        if !in_section {
+            continue;
+        }
+        if let Some(item) = trimmed.strip_prefix("- ").or_else(|| trimmed.strip_prefix("* ")) {
+            let item = item.replace("**", "").replace('`', "").replace("[[", "").replace("]]", "");
+            items.push(item);
+        }
+    }
+    items
+}
+
+/// ホームの状態行に出す、SSD(portable)の空き容量と全体の容量(GB)。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageSpaceDto {
+    free_gb: f64,
+    total_gb: f64,
+}
+
+#[tauri::command]
+async fn get_portable_storage() -> Result<StorageSpaceDto, String> {
+    run_blocking(|| {
+        let root = project_root();
+        let gb = 1024.0 * 1024.0 * 1024.0;
+        let free = fs4::available_space(&root).map_err(|e| format!("空き容量の取得に失敗: {e}"))?;
+        let total = fs4::total_space(&root).map_err(|e| format!("容量の取得に失敗: {e}"))?;
+        Ok(StorageSpaceDto { free_gb: free as f64 / gb, total_gb: total as f64 / gb })
+    })
+    .await
+}
+
+/// 図書館の絞り込みで選べるproject(詩織Ver3.9)。projects.yamlの登録順。
+#[tauri::command]
+async fn list_library_projects() -> Result<Vec<String>, String> {
+    run_blocking(|| {
+        let path = library_root().join("_system").join("projects.yaml");
+        let text = std::fs::read_to_string(&path).map_err(|e| format!("projects.yamlの読み込みに失敗: {e}"))?;
+        let file: YamlProjectsFile =
+            serde_yaml::from_str(&text).map_err(|e| format!("projects.yamlの解析に失敗: {e}"))?;
+        Ok(file.projects.into_iter().map(|p| p.id).collect())
+    })
+    .await
+}
 
 #[derive(Deserialize)]
 struct YamlProjectEntry {
@@ -2095,7 +2383,11 @@ fn parse_inbox_frontmatter(content: &str) -> InboxFrontmatterFields {
 }
 
 #[tauri::command]
-fn list_pending_items() -> Result<PendingItemsDto, String> {
+async fn list_pending_items() -> Result<PendingItemsDto, String> {
+    run_blocking(move || list_pending_items_blocking()).await
+}
+
+fn list_pending_items_blocking() -> Result<PendingItemsDto, String> {
     let root = library_root();
 
     let tags_path = root.join("_system").join("tags.yaml");
@@ -2227,7 +2519,11 @@ fn pending_action_to_status(action: &str) -> Result<&'static str, String> {
 }
 
 #[tauri::command]
-fn resolve_pending_tag(canonical: String, action: String) -> Result<(), String> {
+async fn resolve_pending_tag(canonical: String, action: String) -> Result<(), String> {
+    run_blocking(move || resolve_pending_tag_blocking(canonical, action)).await
+}
+
+fn resolve_pending_tag_blocking(canonical: String, action: String) -> Result<(), String> {
     let path = library_root().join("_system").join("tags.yaml");
     if action == "reject" {
         return remove_yaml_list_item(&path, "canonical", &canonical);
@@ -2237,7 +2533,11 @@ fn resolve_pending_tag(canonical: String, action: String) -> Result<(), String> 
 }
 
 #[tauri::command]
-fn resolve_pending_project(id: String, action: String) -> Result<(), String> {
+async fn resolve_pending_project(id: String, action: String) -> Result<(), String> {
+    run_blocking(move || resolve_pending_project_blocking(id, action)).await
+}
+
+fn resolve_pending_project_blocking(id: String, action: String) -> Result<(), String> {
     let path = library_root().join("_system").join("projects.yaml");
     if action == "reject" {
         return remove_yaml_list_item(&path, "id", &id);
@@ -2288,7 +2588,11 @@ fn validate_plain_filename(filename: &str) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn resolve_pending_inbox_item(filename: String, action: String) -> Result<(), String> {
+async fn resolve_pending_inbox_item(filename: String, action: String) -> Result<(), String> {
+    run_blocking(move || resolve_pending_inbox_item_blocking(filename, action)).await
+}
+
+fn resolve_pending_inbox_item_blocking(filename: String, action: String) -> Result<(), String> {
     validate_plain_filename(&filename)?;
     let path = library_root().join("00-inbox").join(&filename);
 
@@ -2483,7 +2787,11 @@ pub struct RagasHistoryDto {
 // パースしている。ファイルが無い場合(RAGAS評価をまだ実行していない場合)は
 // エラーにせず空の表を返す。
 #[tauri::command]
-fn get_ragas_history() -> Result<RagasHistoryDto, String> {
+async fn get_ragas_history() -> Result<RagasHistoryDto, String> {
+    run_blocking(move || get_ragas_history_blocking()).await
+}
+
+fn get_ragas_history_blocking() -> Result<RagasHistoryDto, String> {
     let csv_path = project_root()
         .join("services")
         .join("rag")
@@ -3849,28 +4157,28 @@ mod tests {
     #[test]
     #[ignore]
     fn phase_control_panel_config() {
-        let before = get_config().expect("get_config失敗");
+        let before = get_config_blocking().expect("get_config失敗");
         println!(
             "取得: hotkey={} llmPort={} threshold={} lengthScale={}",
             before.hotkey, before.llm_port, before.passive_recall_threshold, before.length_scale
         );
 
         // 元の値に戻すだけの無害な更新で、書き込み→再読み込みの往復を確認する
-        set_config(ConfigUpdate {
+        set_config_blocking(ConfigUpdate {
             passive_recall_threshold: Some(before.passive_recall_threshold),
             length_scale: Some(before.length_scale),
             ..Default::default()
         })
         .expect("set_config失敗");
 
-        let after = get_config().expect("再取得失敗");
+        let after = get_config_blocking().expect("再取得失敗");
         assert_eq!(after.hotkey, before.hotkey, "無関係な項目(hotkey)が変化してはいけない");
         assert_eq!(after.llm_port, before.llm_port, "無関係な項目(llmPort)が変化してはいけない");
         assert_eq!(after.rag_port, before.rag_port, "無関係な項目(ragPort)が変化してはいけない");
         assert_eq!(after.passive_recall_threshold, before.passive_recall_threshold);
 
         // 不正値のバリデーションも確認する
-        let invalid = set_config(ConfigUpdate {
+        let invalid = set_config_blocking(ConfigUpdate {
             passive_recall_threshold: Some(99.0),
             ..Default::default()
         });
@@ -3954,7 +4262,7 @@ mod tests {
     #[test]
     #[ignore]
     fn phase_model_list_and_estimate() {
-        let models = list_available_models().expect("list_available_models失敗");
+        let models = list_available_models_blocking().expect("list_available_models失敗");
         assert!(!models.is_empty(), "modelsが空(models/llm/にggufが無い?)");
         for m in &models {
             println!(
@@ -4755,6 +5063,9 @@ pub fn run() {
             reveal_library_asset,
             list_all_knowledge,
             search_library,
+            list_library_projects,
+            get_latest_handoff,
+            get_portable_storage,
             get_source_frontmatter,
             list_pending_items,
             resolve_pending_tag,
