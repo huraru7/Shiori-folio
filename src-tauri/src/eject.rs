@@ -196,6 +196,27 @@ pub struct StopOutcome {
     pub failed: Vec<u32>,
 }
 
+/// 終了済みで、親に回収されていない(ゾンビ)か。unixのみ。
+/// sysinfoはmacOSでゾンビを更新できず、古い「実行中」の情報のまま残すため、`ps`で状態を直接見る。
+#[cfg(unix)]
+fn is_zombie(pid: u32) -> bool {
+    std::process::Command::new("ps")
+        .args(["-o", "stat=", "-p", &pid.to_string()])
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim_start().starts_with('Z'))
+        .unwrap_or(false)
+}
+
+#[cfg(not(unix))]
+fn is_zombie(_pid: u32) -> bool {
+    false
+}
+
+/// 生きているプロセスか。ゾンビは、止まったものとして扱う。
+fn is_alive(sys: &sysinfo::System, pid: sysinfo::Pid) -> bool {
+    sys.process(pid).is_some() && !is_zombie(pid.as_u32())
+}
+
 /// `pids`を停止する。unixは`SIGTERM`で穏やかに止め、`GRACEFUL_WAIT`待っても残るものは強制終了する。
 /// Windowsは穏やかな停止の手段がないため、強制終了のみ。
 pub fn stop_processes(pids: &[u32]) -> StopOutcome {
@@ -220,19 +241,18 @@ pub fn stop_processes(pids: &[u32]) -> StopOutcome {
     let deadline = Instant::now() + GRACEFUL_WAIT;
     loop {
         sys.refresh_processes(ProcessesToUpdate::Some(&targets), true);
-        if targets.iter().all(|p| sys.process(*p).is_none()) || Instant::now() >= deadline {
+        if targets.iter().all(|p| !is_alive(&sys, *p)) || Instant::now() >= deadline {
             break;
         }
         std::thread::sleep(Duration::from_millis(200));
     }
 
     for (pid, raw) in targets.iter().zip(pids) {
-        match sys.process(*pid) {
-            None => outcome.stopped.push(*raw),
-            Some(p) => {
-                p.kill();
-                outcome.forced.push(*raw);
-            }
+        if !is_alive(&sys, *pid) {
+            outcome.stopped.push(*raw);
+        } else if let Some(p) = sys.process(*pid) {
+            p.kill();
+            outcome.forced.push(*raw);
         }
     }
     // 強制終了したものが本当に消えたかを確かめる。
@@ -241,7 +261,7 @@ pub fn stop_processes(pids: &[u32]) -> StopOutcome {
         let until = Instant::now() + Duration::from_secs(3);
         loop {
             sys.refresh_processes(ProcessesToUpdate::Some(&forced), true);
-            if forced.iter().all(|p| sys.process(*p).is_none()) || Instant::now() >= until {
+            if forced.iter().all(|p| !is_alive(&sys, *p)) || Instant::now() >= until {
                 break;
             }
             std::thread::sleep(Duration::from_millis(100));
@@ -249,7 +269,7 @@ pub fn stop_processes(pids: &[u32]) -> StopOutcome {
         let (gone, alive): (Vec<u32>, Vec<u32>) = outcome
             .forced
             .iter()
-            .partition(|raw| sys.process(Pid::from_u32(**raw)).is_none());
+            .partition(|raw| !is_alive(&sys, Pid::from_u32(**raw)));
         outcome.forced = gone;
         outcome.failed = alive;
     }
@@ -438,6 +458,20 @@ mod tests {
         let _ = reaper.join();
         assert_eq!(outcome.stopped, vec![pid]);
         assert!(outcome.forced.is_empty() && outcome.failed.is_empty());
+    }
+
+    #[test]
+    fn 止めたあと親に回収されないゾンビは止まったものとして扱う() {
+        if cfg!(windows) {
+            return;
+        }
+        // 親(このテスト)が終了を回収しないと、SIGTERMで止まったプロセスはゾンビとして残る。
+        let child = std::process::Command::new("sleep").arg("60").spawn().unwrap();
+        let pid = child.id();
+        let outcome = stop_processes(&[pid]);
+        assert_eq!(outcome.stopped, vec![pid]);
+        assert!(outcome.forced.is_empty() && outcome.failed.is_empty());
+        drop(child);
     }
 
     #[test]
