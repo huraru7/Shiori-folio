@@ -1,0 +1,397 @@
+{
+ "_note": "検索品質(Ver3.8)の評価セット。正解はファイル名(source)で、expectedのどれかが上位に入れば成功。kind: title=題名に近い言い方(対照) / colloquial=口語・うろ覚え / reverse=結果や困りごとからの逆引き / not_found=該当なし(/searchの足切りで0件が正解)。libraryの外に置くこと(libraryに置くと検索対象になり測定が汚れる)。",
+ "items": [
+  {
+   "id": "Q01",
+   "kind": "title",
+   "query": "バックエンド起動の並列化",
+   "expected": [
+    "startup-services-parallelization-plan-20261002.md"
+   ],
+   "note": "元から当たっている対照"
+  },
+  {
+   "id": "Q02",
+   "kind": "colloquial",
+   "query": "詩織の起動が遅かった件",
+   "expected": [
+    "startup-services-parallelization-plan-20261002.md"
+   ],
+   "note": "Ver3.6で0件だった例。ver3.6-journalは、この質問文を引用しているため除く",
+   "ignore": [
+    "ver3.6-journal.md"
+   ]
+  },
+  {
+   "id": "Q03",
+   "kind": "reverse",
+   "query": "起動時にアプリが固まって見えた問題はどう直した?",
+   "expected": [
+    "startup-services-parallelization-plan-20261002.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q04",
+   "kind": "reverse",
+   "query": "MCPサーバーを強制終了したらClaude側の接続が戻らなくなった",
+   "expected": [
+    "decision-1790068500.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q05",
+   "kind": "reverse",
+   "query": "検索したらタイムアウトした原因は何だった?",
+   "expected": [
+    "journal-1789045573.md",
+    "embedding-ctx-size-ubatch-parallel-fix.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q06",
+   "kind": "reverse",
+   "query": "外付けSSDでデータベースの書き込みがおかしくなった件",
+   "expected": [
+    "tauri-async-and-exfat-chromadb-pitfalls-20261002.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q07",
+   "kind": "colloquial",
+   "query": "MacとWindowsで同じSSDを使うときの気をつけること",
+   "expected": [
+    "mac-windows-sync-pitfalls-20260917.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q08",
+   "kind": "colloquial",
+   "query": "開発環境っていつ消すんだっけ",
+   "expected": [
+    "dev-env-removal-after-v4-20261006.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q09",
+   "kind": "reverse",
+   "query": "手でmvしたらインデックスが古いままだった",
+   "expected": [
+    "archive-mv-reindex-pitfall.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q10",
+   "kind": "colloquial",
+   "query": "ClaudeのCLIを詩織のLLM代わりに使う案、なんでやめたんだっけ",
+   "expected": [
+    "shiori-claude-cli-backend-evaluation-20261005.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q11",
+   "kind": "colloquial",
+   "query": "過去と今を見比べる検索ってどう作った?",
+   "expected": [
+    "decision-1790001990.md",
+    "journal-1790068439.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q12",
+   "kind": "colloquial",
+   "query": "zipやpdfを詩織に置けるようにした仕組み",
+   "expected": [
+    "ver3.5-spec.md",
+    "ver3.5-journal.md",
+    "ver3.5-binary-assets-memo.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q13",
+   "kind": "reverse",
+   "query": "検索結果にファイルの場所が出るようになった理由",
+   "expected": [
+    "search-library-path-field-addition.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q14",
+   "kind": "reverse",
+   "query": "ローカルのLLMが作り話をしないようにした工夫",
+   "expected": [
+    "ver3.6-journal.md",
+    "ver3.6-spec.md",
+    "session-journal-20261006.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q15",
+   "kind": "colloquial",
+   "query": "Claudeが今動いてるか詩織で見られるようにしたやつ",
+   "expected": [
+    "ver3.7-journal.md",
+    "ver3.7-spec.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q16",
+   "kind": "colloquial",
+   "query": "詩織のこれからの予定",
+   "expected": [
+    "shiori-roadmap-rev2.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q17",
+   "kind": "reverse",
+   "query": "マイクラサーバーでお金が増殖するバグ",
+   "expected": [
+    "elyona-code-review-and-pay-overflow-fix-2026-09.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q18",
+   "kind": "colloquial",
+   "query": "エリョナのランクと称号を別プラグインに分けた件",
+   "expected": [
+    "elyona-rank-title-domain-split-2026-09.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q19",
+   "kind": "reverse",
+   "query": "テストサーバーでダンジョンが作れなかった理由",
+   "expected": [
+    "elyona-mimic-fawe-integration-and-command-audit-2026-09.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q20",
+   "kind": "colloquial",
+   "query": "タンカーのステージで行き先を教える矢印",
+   "expected": [
+    "tanker-gameplay-bugfix-waypoint-and-pause.md",
+    "tanker-stage-waypoint-plan.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q21",
+   "kind": "colloquial",
+   "query": "ゲームを止めてモジュールを選ぶ処理",
+   "expected": [
+    "tanker-module-select-pause-plan.md",
+    "tanker-gameplay-bugfix-waypoint-and-pause.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q22",
+   "kind": "reverse",
+   "query": "最後のステージをクリアしたら画面が固まる",
+   "expected": [
+    "tanker-all-stage-clear-plan.md",
+    "tanker-code-review-bugfix-and-all-stage-clear.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q23",
+   "kind": "reverse",
+   "query": "GitHub Pagesに上げたら画像とCSSが404になった",
+   "expected": [
+    "log-1788109013.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q24",
+   "kind": "reverse",
+   "query": "iPhoneのSafariでだけヘッダーが消える",
+   "expected": [
+    "journal-1788156341.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q25",
+   "kind": "colloquial",
+   "query": "リズムゲージの黄色い線の話",
+   "expected": [
+    "log-1789536000.md",
+    "log-1789532710.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q26",
+   "kind": "colloquial",
+   "query": "Unityのコマンドが日本語のフォルダだと動かない",
+   "expected": [
+    "unity-cli-loop-japanese-path-limitation.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q27",
+   "kind": "reverse",
+   "query": "AIが書いた文章が読みにくくなる理由",
+   "expected": [
+    "ai-doc-verbosity-causes.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q28",
+   "kind": "colloquial",
+   "query": "授業で習った、メソッドを切り出す話",
+   "expected": [
+    "リファクタリング講義まとめ(001-002).md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q29",
+   "kind": "colloquial",
+   "query": "大きなゲームを作るとき最初に決める土台",
+   "expected": [
+    "ゲーム基盤を考える講義まとめ.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q30",
+   "kind": "colloquial",
+   "query": "プロフィールサイトのURLをどう分けるか",
+   "expected": [
+    "decision-1788466906.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q31",
+   "kind": "colloquial",
+   "query": "名刺が宙に浮いて見えるやつの作り方",
+   "expected": [
+    "decision-1789228203.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q32",
+   "kind": "reverse",
+   "query": "庭をNotesに変えたのはなぜ",
+   "expected": [
+    "decision-1789214797.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q33",
+   "kind": "reverse",
+   "query": "PCを初期化して日本語ユーザー名の問題は直った?",
+   "expected": [
+    "pc-migration-completion-journal.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q34",
+   "kind": "colloquial",
+   "query": "ふらるはお金をどう考えている?",
+   "expected": [
+    "profile-money-values.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q35",
+   "kind": "reverse",
+   "query": "ふらるが落ち込んだときに立ち直る方法",
+   "expected": [
+    "profile-comfort-and-stress.md",
+    "profile-pride-and-self-esteem.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q36",
+   "kind": "colloquial",
+   "query": "ふらるが物事を決めるときのやり方",
+   "expected": [
+    "profile-decision-style.md",
+    "profile-judgment-criteria.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q37",
+   "kind": "colloquial",
+   "query": "ふらるにとって家族ってどんな存在",
+   "expected": [
+    "profile-family.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q38",
+   "kind": "colloquial",
+   "query": "5年後どうなっていたいか",
+   "expected": [
+    "profile-future-vision.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q39",
+   "kind": "colloquial",
+   "query": "怒ったり悲しくなったりしたときどうする人?",
+   "expected": [
+    "profile-emotional-expression.md"
+   ],
+   "note": ""
+  },
+  {
+   "id": "Q40",
+   "kind": "not_found",
+   "query": "宇宙旅行の計画",
+   "expected": [],
+   "note": "該当なし"
+  },
+  {
+   "id": "Q41",
+   "kind": "not_found",
+   "query": "明日の天気は?",
+   "expected": [],
+   "note": "該当なし"
+  },
+  {
+   "id": "Q42",
+   "kind": "not_found",
+   "query": "ふらるの血液型",
+   "expected": [],
+   "note": "該当なし"
+  }
+ ],
+ "ignore_sources": [
+  "ver3.8-spec.md",
+  "ver3.8-journal.md"
+ ]
+}

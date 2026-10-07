@@ -1,0 +1,60 @@
+{
+ "_note": "素材抽出(Ver3.8)の評価。eval/make_asset_fixtures.pyで作った素材を含む検証用libraryに対して、run_search_eval.py --datasetで測る。抽出されないはずの素材(秘密情報・extract:false・zip爆弾・暗号化PDF・スキャンPDF・壊れたPDF・実行形式)は、/extract_warningsで理由を確認する。",
+ "ignore_sources": [],
+ "items": [
+  {
+   "id": "A01",
+   "kind": "colloquial",
+   "query": "冷却ポンプはいつ点検するんだっけ",
+   "expected": [
+    "notes.txt.meta"
+   ],
+   "note": "txt"
+  },
+  {
+   "id": "A02",
+   "kind": "colloquial",
+   "query": "ゼブラトークンという合言葉",
+   "expected": [
+    "notes.txt.meta"
+   ],
+   "note": "txt"
+  },
+  {
+   "id": "A03",
+   "kind": "colloquial",
+   "query": "QUASARFLUX calibration",
+   "expected": [
+    "report.pdf.meta"
+   ],
+   "note": "pdf"
+  },
+  {
+   "id": "A04",
+   "kind": "colloquial",
+   "query": "星間通信モジュールの帯域は何で決まる?",
+   "expected": [
+    "spec.docx.meta"
+   ],
+   "note": "docx"
+  },
+  {
+   "id": "A05",
+   "kind": "colloquial",
+   "query": "ムーンベリーの売上",
+   "expected": [
+    "sales.xlsx.meta"
+   ],
+   "note": "xlsx"
+  },
+  {
+   "id": "A06",
+   "kind": "colloquial",
+   "query": "海底ケーブルの保守の計画名",
+   "expected": [
+    "page.html.meta"
+   ],
+   "note": "html"
+  }
+ ]
+}
