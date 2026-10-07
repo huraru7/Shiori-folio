@@ -9,6 +9,7 @@ import LibraryBrowseScreen from "../library/LibraryBrowseScreen";
 import ControlPanel from "../controlpanel/ControlPanel";
 import HomeScreen from "./HomeScreen";
 import PendingModal from "./PendingModal";
+import ErrorBoundary from "../shared/ErrorBoundary";
 import "./MainArea.css";
 
 interface Props {
@@ -113,7 +114,7 @@ function MainArea({ onOpenDebug }: Props) {
           className={`main-area__pane${v.selfScroll ? " main-area__pane--self-scroll" : ""}`}
           hidden={active !== v.id}
         >
-          {v.content}
+          <ErrorBoundary label={v.label}>{v.content}</ErrorBoundary>
         </div>
       ))}
 

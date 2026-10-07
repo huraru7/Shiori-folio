@@ -5,6 +5,7 @@ import type {
   ClaudeSession,
   ClaudeStats,
   ClaudeStatsRange,
+  AppMode,
   Handoff,
   LibraryFilter,
   EjectOutcome,
@@ -30,6 +31,12 @@ export interface ServiceStatus {
   started: boolean;
   healthy: boolean;
   error?: string;
+  // 外部AIモード(詩織Ver4.0)で、意図して起動しなかった。失敗ではない。
+  skipped: boolean;
+}
+
+export function isServiceFailed(s: ServiceStatus): boolean {
+  return !s.healthy && !s.skipped;
 }
 
 // 仕様書v2.0「9. Tauriコマンド」で定義した各コマンドの型付きラッパー。
@@ -71,6 +78,9 @@ export const api = {
   getConfig: () => invoke<AppConfigDto>("get_config"),
 
   listClaudeSessions: () => invoke<ClaudeSession[]>("list_claude_sessions"),
+
+  // 画面側の未処理のエラーをdata/logs/へ記録する(詩織Ver4.0)。
+  logFrontendError: (message: string) => invoke<void>("log_frontend_error", { message }),
   // forceがfalseなら、前回の取り込みから間もないときは省く。
   refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
   // hostがnullなら全端末の合算。
@@ -83,6 +93,8 @@ export const api = {
   setConfig: (update: AppConfigUpdate) => invoke<void>("set_config", { update }),
 
   restartLlmServices: () => invoke<ServiceStatus[]>("restart_llm_services"),
+  // 会話モード/外部AIモードを切り替える。返すのは切り替え後の会話用LLMの状態。
+  setAppMode: (mode: AppMode) => invoke<ServiceStatus>("set_app_mode", { mode }),
 
   // 起動画面で「再試行」ボタンから呼ばれる、RAGサーバー単体の再起動。
   retryRagService: () => invoke<ServiceStatus>("retry_rag_service"),

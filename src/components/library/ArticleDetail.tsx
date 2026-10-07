@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { marked } from "marked";
+import { handleArticleLinkClick, renderMarkdown } from "../../lib/markdown";
 import { api } from "../../api/tauri";
 import { getCategoryMeta, hexToRgba, stripSourceExtension } from "../../lib/library";
 import type { SourceFrontmatter } from "../../types";
@@ -73,7 +73,7 @@ function ArticleDetail({ source, sourceCategory, assetPath, onBack, callNo }: Pr
     borderColor: hexToRgba(meta.hex, 0.3),
     color: meta.hex,
   };
-  const html = content ? marked.parse(stripFrontmatter(content), { async: false }) : "";
+  const html = content ? renderMarkdown(stripFrontmatter(content)) : "";
   const displayTitle = frontmatter?.title || stripSourceExtension(source);
 
   return (
@@ -141,8 +141,13 @@ function ArticleDetail({ source, sourceCategory, assetPath, onBack, callNo }: Pr
 
           {!content && !error && <p className="article-detail__loading">読み込んでいます…</p>}
           {content && (
+            // renderMarkdownで無害化済み(詩織Ver4.0)。
             // eslint-disable-next-line react/no-danger
-            <div className="article-detail__body" dangerouslySetInnerHTML={{ __html: html }} />
+            <div
+              className="article-detail__body"
+              onClick={handleArticleLinkClick}
+              dangerouslySetInnerHTML={{ __html: html }}
+            />
           )}
 
           <h4 className="article-detail__source-heading">この記録の出どころ</h4>

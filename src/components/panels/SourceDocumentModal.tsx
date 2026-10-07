@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { marked } from "marked";
+import { handleArticleLinkClick, renderMarkdown } from "../../lib/markdown";
 import "./SourceDocumentModal.css";
 
 interface Props {
@@ -12,8 +12,8 @@ interface Props {
 
 // KnowledgePanelの参照情報をクリックしたときに、元のMarkdownファイル全文を
 // 表示するモーダル(v1.0スコープ機能1)。マークダウンのレンダリングは軽量な
-// markedを使い(React用の重いレンダラーは導入しない)、HTML文字列を
-// dangerouslySetInnerHTMLで挿入する。該当する見出しへの自動スクロール・
+// markedを使い(React用の重いレンダラーは導入しない)、DOMPurifyで無害化した
+// HTML文字列をdangerouslySetInnerHTMLで挿入する(lib/markdown.ts、詩織Ver4.0)。該当する見出しへの自動スクロール・
 // ハイライトは、レンダリング後にDOMを直接走査して該当する見出し要素を
 // 探す方式にしている(markedの出力をそのまま使うため、見出しテキストの
 // 前処理は不要)。
@@ -32,7 +32,7 @@ function SourceDocumentModal({ title, heading, content, error, onClose }: Props)
     }
   }, [content, heading]);
 
-  const html = content ? marked.parse(content, { async: false }) : "";
+  const html = content ? renderMarkdown(content) : "";
 
   return (
     <div className="source-document-modal__backdrop" onClick={onClose}>
@@ -48,7 +48,7 @@ function SourceDocumentModal({ title, heading, content, error, onClose }: Props)
           {!error && !content && <p>読み込み中...</p>}
           {!error && content && (
             // eslint-disable-next-line react/no-danger
-            <div dangerouslySetInnerHTML={{ __html: html }} />
+            <div onClick={handleArticleLinkClick} dangerouslySetInnerHTML={{ __html: html }} />
           )}
         </div>
       </div>

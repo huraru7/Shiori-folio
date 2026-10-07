@@ -202,7 +202,11 @@ export interface AppConfigDto {
   showDay: boolean;
   showWeekday: boolean;
   showSeconds: boolean;
+  mode: AppMode;
 }
+
+// 会話モード/外部AIモード(詩織Ver4.0)。
+export type AppMode = "conversation" | "external";
 
 // get_config()の全項目をそのままOptionalにした部分更新用の型。
 export type AppConfigUpdate = Partial<AppConfigDto>;

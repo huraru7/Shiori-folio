@@ -1,3 +1,5 @@
+import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import type { SystemInfo } from "../../types";
 import { Sparkline, formatMb, levelFor, levelForTemp } from "./shared";
 
@@ -29,12 +31,20 @@ export function SystemStatusPage({
   // Mac(Apple Silicon)にはdiscrete VRAMが存在しない(統合メモリ)ため、
   // VRAM・GPU温度ゲージ自体を表示せず、システムRAMのゲージに統合メモリである旨を添える。
   const isMac = info?.platform === "macos";
+  // tauri.conf.jsonのversion(詩織Ver4.0で4.0.0にそろえた)。
+  const [appVersion, setAppVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion()
+      .then(setAppVersion)
+      .catch(() => undefined);
+  }, []);
 
   return (
     <>
       <div className="control-panel__page-head">
         <h1>システム状態</h1>
         <p>読み取り専用です。ここでは何も変更されません。</p>
+        {appVersion && <p className="control-panel__version">詩織 Ver4.0({appVersion})</p>}
       </div>
 
       {error && <div className="control-panel__error">取得に失敗しました: {error}</div>}

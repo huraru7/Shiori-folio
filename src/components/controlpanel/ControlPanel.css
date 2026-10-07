@@ -502,3 +502,9 @@
   padding: 8px 12px;
   border-radius: 8px;
 }
+
+/* システム状態の見出しの下に出すバージョン(詩織Ver4.0)。 */
+.control-panel__version {
+  color: var(--paper-dim);
+  font-size: var(--fs-sm);
+}

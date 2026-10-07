@@ -117,7 +117,7 @@ fn build_and_play_stream() -> Result<(cpal::Stream, Arc<Mutex<Vec<f32>>>, u32, u
     let channels = config.channels();
     let buffer: Arc<Mutex<Vec<f32>>> = Arc::new(Mutex::new(Vec::new()));
     let buffer_for_stream = buffer.clone();
-    let err_fn = |err| eprintln!("録音ストリームエラー: {err}");
+    let err_fn = |err| log_error!("録音ストリームエラー: {err}");
 
     let stream = match config.sample_format() {
         cpal::SampleFormat::F32 => device.build_input_stream(

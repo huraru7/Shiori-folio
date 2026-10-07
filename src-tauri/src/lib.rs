@@ -1,3 +1,5 @@
+#[macro_use]
+mod app_log;
 mod audio;
 mod claude_stats;
 mod claude_status;
@@ -21,6 +23,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
 
 // Windowsでは、コンソールを持たないGUIサブシステムのshiori-folio.exeから
 // コンソールサブシステムの子プロセス(llama-server.exe/whisper-server.exe/
@@ -156,6 +159,33 @@ struct AppConfig {
     hotkey: String,
     #[serde(default)]
     ui: UiConfig,
+    #[serde(default)]
+    mode: AppMode,
+}
+
+/// 詩織の使い方(詩織Ver4.0)。外部AIモードは、Claudeなど外部のAIと詩織のlibraryを
+/// 使うためのモードで、VRAMを最も使う会話用LLMを起動しない。検索に要る埋め込みと
+/// RAGは起動する(MCPの`search_library`が使うのもこの2つだけ)。config.jsonに保存し、
+/// 再起動しても保たれる。
+#[derive(Deserialize, Serialize, Clone, Copy, Default, PartialEq, Debug)]
+#[serde(rename_all = "lowercase")]
+enum AppMode {
+    #[default]
+    Conversation,
+    External,
+}
+
+const EXTERNAL_MODE_MESSAGE: &str = "外部AIモードでは、詩織との会話は使えません。ヘッダーで会話モードに切り替えてください。";
+
+fn llm_skipped_status(config: &AppConfig) -> ServiceStatus {
+    ServiceStatus {
+        name: "llm".into(),
+        port: config.llm.port,
+        started: false,
+        healthy: false,
+        error: None,
+        skipped: true,
+    }
 }
 
 fn app_config() -> Result<AppConfig, String> {
@@ -197,7 +227,7 @@ fn log_tts_failure(error: &str) {
         Ok(())
     };
     if let Err(e) = record() {
-        eprintln!("TTS失敗ログの記録に失敗しました: {e}");
+        log_error!("TTS失敗ログの記録に失敗しました: {e}");
     }
 }
 
@@ -237,6 +267,8 @@ pub struct ServiceStatus {
     started: bool,
     healthy: bool,
     error: Option<String>,
+    // 外部AIモード(詩織Ver4.0)で、意図して起動しなかった。失敗とは区別する。
+    skipped: bool,
 }
 
 // 起動した子プロセスを保持する。Drop してもプロセスは止まらないが、
@@ -529,12 +561,13 @@ fn start_llm_service(
         Ok(child) => {
             let healthy = wait_for_health(config.llm.port, 30);
             (
-                ServiceStatus { name: "llm".into(), port: config.llm.port, started: true, healthy, error: None },
+                ServiceStatus { skipped: false, name: "llm".into(), port: config.llm.port, started: true, healthy, error: None },
                 Some(child),
             )
         }
         Err(e) => (
             ServiceStatus {
+                skipped: false,
                 name: "llm".into(),
                 port: config.llm.port,
                 started: false,
@@ -579,6 +612,7 @@ fn start_embedding_service(
     ) {
         Ok(child) => (
             ServiceStatus {
+                skipped: false,
                 name: "embedding".into(),
                 port: config.embedding.port,
                 started: true,
@@ -589,6 +623,7 @@ fn start_embedding_service(
         ),
         Err(e) => (
             ServiceStatus {
+                skipped: false,
                 name: "embedding".into(),
                 port: config.embedding.port,
                 started: false,
@@ -637,6 +672,11 @@ async fn start_backend_services_impl(
     let llm_root = root.clone();
     let llm_config = config.clone();
     let llm_task = tauri::async_runtime::spawn_blocking(move || {
+        if llm_config.mode == AppMode::External {
+            let status = llm_skipped_status(&llm_config);
+            emit_service_status(llm_app.as_ref(), &status);
+            return (status, None);
+        }
         start_llm_service(&llm_root, &llm_config, llm_app.as_ref())
     });
 
@@ -901,11 +941,11 @@ fn start_rag_service_core(
         build_rag_command(root, config.rag.port, false)
     }) {
         Ok(child) => (
-            ServiceStatus { name: "rag".into(), port: config.rag.port, started: true, healthy: true, error: None },
+            ServiceStatus { skipped: false, name: "rag".into(), port: config.rag.port, started: true, healthy: true, error: None },
             child,
         ),
         Err(e) => (
-            ServiceStatus { name: "rag".into(), port: config.rag.port, started: false, healthy: false, error: Some(e) },
+            ServiceStatus { skipped: false, name: "rag".into(), port: config.rag.port, started: false, healthy: false, error: Some(e) },
             None,
         ),
     }
@@ -999,7 +1039,11 @@ struct DiskMonitor {
 // コントロールパネルの「システム状態」(優先度1、読み取り専用)向け。
 // フロントエンドから1〜2秒間隔でポーリングされる想定。
 #[tauri::command]
-fn get_system_info(
+async fn get_system_info(app: tauri::AppHandle) -> Result<system_info::SystemInfoDto, String> {
+    run_blocking(move || get_system_info_blocking(app.state(), app.state(), app.state(), app.state())).await
+}
+
+fn get_system_info_blocking(
     backend: tauri::State<BackendState>,
     stt: tauri::State<Arc<SttManager>>,
     sys: tauri::State<Mutex<sysinfo::System>>,
@@ -1205,6 +1249,7 @@ struct ConfigDto {
     show_day: bool,
     show_weekday: bool,
     show_seconds: bool,
+    mode: AppMode,
 }
 
 // 実機SSDを取り外せる状態にする(取り外し機能)。止める対象の選び方は`eject.rs`を参照。
@@ -1306,6 +1351,67 @@ fn unix_now_ms() -> Result<u64, String> {
         .as_millis() as u64)
 }
 
+/// 会話モードと外部AIモードを切り替える(詩織Ver4.0)。config.jsonに保存し、
+/// 再起動せずに会話用LLMを止める・起動する。返すのは切り替え後の会話用LLMの状態。
+#[tauri::command]
+async fn set_app_mode(app: tauri::AppHandle, mode: AppMode) -> Result<ServiceStatus, String> {
+    run_blocking(move || set_app_mode_blocking(&app, mode)).await
+}
+
+fn set_app_mode_blocking(app: &tauri::AppHandle, mode: AppMode) -> Result<ServiceStatus, String> {
+    let path = project_root().join("config.json");
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("config.jsonの読み込みに失敗: {e}"))?;
+    let mut value: serde_json::Value =
+        serde_json::from_str(&text).map_err(|e| format!("config.jsonの解析に失敗: {e}"))?;
+    value["mode"] = serde_json::json!(mode);
+    let pretty = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
+    std::fs::write(&path, pretty).map_err(|e| format!("config.jsonの書き込みに失敗: {e}"))?;
+
+    let config = app_config()?;
+    let state = app.state::<BackendState>();
+    match mode {
+        AppMode::External => {
+            let child = state.0.lock().map_err(|e| e.to_string())?.llm.take();
+            if let Some(mut child) = child {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            let status = llm_skipped_status(&config);
+            emit_service_status(Some(app), &status);
+            Ok(status)
+        }
+        AppMode::Conversation => {
+            if state.0.lock().map_err(|e| e.to_string())?.llm.is_some() {
+                return Ok(ServiceStatus {
+                    name: "llm".into(),
+                    port: config.llm.port,
+                    started: true,
+                    healthy: true,
+                    error: None,
+                    skipped: false,
+                });
+            }
+            // 起動は数十秒かかりうるので、待つ間はロックを握らない。
+            let (status, child) = start_llm_service(&project_root(), &config, Some(app));
+            if let Some(child) = child {
+                state.0.lock().map_err(|e| e.to_string())?.llm = Some(child);
+            }
+            emit_service_status(Some(app), &status);
+            Ok(status)
+        }
+    }
+}
+
+/// 画面側(フロント)の未処理のエラーを記録する(詩織Ver4.0)。
+#[tauri::command]
+async fn log_frontend_error(message: String) -> Result<(), String> {
+    run_blocking(move || {
+        app_log::write("FRONT", &message);
+        Ok(())
+    })
+    .await
+}
+
 /// 取り込みを省いたときは`None`を返す。
 fn refresh_claude_stats_blocking(force: bool) -> Result<Option<claude_stats::RefreshOutcome>, String> {
     let mut last = CLAUDE_STATS_REFRESH
@@ -1366,6 +1472,7 @@ fn get_config_blocking() -> Result<ConfigDto, String> {
         show_day: config.ui.show_day,
         show_weekday: config.ui.show_weekday,
         show_seconds: config.ui.show_seconds,
+        mode: config.mode,
     })
 }
 
@@ -1571,7 +1678,11 @@ struct ModelSwitchEstimate {
 // 「使用量/総量」はWindowsはVRAM、Mac(統合メモリ)は物理メモリ全体を指す
 // (system_info::query_memory_headroom参照)。
 #[tauri::command]
-fn estimate_model_switch(
+async fn estimate_model_switch(app: tauri::AppHandle, file_name: String) -> Result<ModelSwitchEstimate, String> {
+    run_blocking(move || estimate_model_switch_blocking(app.state(), file_name)).await
+}
+
+fn estimate_model_switch_blocking(
     sys: tauri::State<Mutex<sysinfo::System>>,
     file_name: String,
 ) -> Result<ModelSwitchEstimate, String> {
@@ -1638,9 +1749,12 @@ struct ModelSwitchResult {
 // または新モデルプロセス自体のRSS(Mac、統合メモリのためVRAM差分が取れない)を
 // 実測値としてmodels/vram_estimates.jsonに書き戻し、次回以降の見積もり精度を上げる。
 #[tauri::command]
-fn switch_model(
+async fn switch_model(app: tauri::AppHandle, file_name: String) -> Result<ModelSwitchResult, String> {
+    run_blocking(move || switch_model_blocking(app.state(), file_name)).await
+}
+
+fn switch_model_blocking(
     state: tauri::State<BackendState>,
-    sys: tauri::State<Mutex<sysinfo::System>>,
     file_name: String,
 ) -> Result<ModelSwitchResult, String> {
     let root = project_root();
@@ -1869,7 +1983,11 @@ const NON_OPENABLE_EXTENSIONS: &[&str] = &[
 ];
 
 #[tauri::command]
-fn open_library_asset(app: tauri::AppHandle, path: String) -> Result<(), String> {
+async fn open_library_asset(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    run_blocking(move || open_library_asset_blocking(app, path)).await
+}
+
+fn open_library_asset_blocking(app: tauri::AppHandle, path: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     let target = resolve_library_asset(&path)?;
     let ext = target
@@ -1888,7 +2006,11 @@ fn open_library_asset(app: tauri::AppHandle, path: String) -> Result<(), String>
 }
 
 #[tauri::command]
-fn reveal_library_asset(app: tauri::AppHandle, path: String) -> Result<(), String> {
+async fn reveal_library_asset(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    run_blocking(move || reveal_library_asset_blocking(app, path)).await
+}
+
+fn reveal_library_asset_blocking(app: tauri::AppHandle, path: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     let target = resolve_library_asset(&path)?;
     app.opener()
@@ -2745,7 +2867,7 @@ fn normalize_search_query(query: &str) -> String {
     match text_transform::load_rules("query-normalization.json") {
         Ok(rules) => text_transform::apply_rules(query, &rules).0,
         Err(e) => {
-            eprintln!("[query_normalize] ルール読み込みに失敗、正規化をスキップ: {e}");
+            log_error!("[query_normalize] ルール読み込みに失敗、正規化をスキップ: {e}");
             query.to_string()
         }
     }
@@ -2955,7 +3077,7 @@ fn correct_third_person_self_reference(text: &str, user_text: &str) -> String {
     let rules = match text_transform::load_rules("person-correction.json") {
         Ok(rules) => rules,
         Err(e) => {
-            eprintln!("[self_reference_guard] ルール読み込みに失敗、補正をスキップ: {e}");
+            log_error!("[self_reference_guard] ルール読み込みに失敗、補正をスキップ: {e}");
             return text.to_string();
         }
     };
@@ -3391,6 +3513,9 @@ fn push_history(user: &str, reply: &str, sources: Option<&Vec<KnowledgeResultDto
 #[tauri::command]
 async fn send_message(app: tauri::AppHandle, text: String) -> Result<SendMessageReply, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        if app_config()?.mode == AppMode::External {
+            return Err(EXTERNAL_MODE_MESSAGE.to_string());
+        }
         send_message_impl(text, |tool| emit_activity_started(&app, tool))
     })
     .await
@@ -3778,10 +3903,17 @@ fn whisper_server_exe_path() -> PathBuf {
 }
 
 #[tauri::command]
-fn start_recording(
+async fn start_recording(app: tauri::AppHandle) -> Result<(), String> {
+    run_blocking(move || start_recording_blocking(app.state(), app.state())).await
+}
+
+fn start_recording_blocking(
     state: tauri::State<audio::RecordingState>,
     stt: tauri::State<Arc<SttManager>>,
 ) -> Result<(), String> {
+    if app_config()?.mode == AppMode::External {
+        return Err(EXTERNAL_MODE_MESSAGE.to_string());
+    }
     audio::start(&state)?;
 
     // 録音(発話)と並行してwhisper-serverを起動しておき、起動待ちを発話時間の裏に隠す
@@ -3792,10 +3924,10 @@ fn start_recording(
             Ok(config) => {
                 let model_path = project_root().join(&config.stt.model_path);
                 if let Err(e) = stt.ensure_started(&exe, &model_path, config.stt.port) {
-                    eprintln!("whisper-serverの起動に失敗: {e}");
+                    log_error!("whisper-serverの起動に失敗: {e}");
                 }
             }
-            Err(e) => eprintln!("config読み込みに失敗: {e}"),
+            Err(e) => log_error!("config読み込みに失敗: {e}"),
         }
     });
 
@@ -3852,7 +3984,7 @@ async fn synthesize_speech(text: String) -> Result<(), String> {
             &root.join(&config.tts.config_path),
             &voice,
         ) {
-            eprintln!("TTS再生に失敗しました(既知の不具合により発生する場合があります): {e}");
+            log_error!("TTS再生に失敗しました(既知の不具合により発生する場合があります): {e}");
             log_tts_failure(&e);
         }
         Ok(())
@@ -4934,6 +5066,11 @@ fn handle_hotkey_toggle(app: &tauri::AppHandle) {
     let stt = app.state::<Arc<SttManager>>();
     let is_recording = recording_state.is_recording();
 
+    if !is_recording && app_config().is_ok_and(|c| c.mode == AppMode::External) {
+        let _ = app.emit("voice:failed", serde_json::json!({ "message": EXTERNAL_MODE_MESSAGE }));
+        return;
+    }
+
     if !is_recording {
         match audio::start(&recording_state) {
             Ok(()) => {
@@ -4946,20 +5083,20 @@ fn handle_hotkey_toggle(app: &tauri::AppHandle) {
                         Ok(config) => {
                             let model_path = project_root().join(&config.stt.model_path);
                             if let Err(e) = stt.ensure_started(&exe, &model_path, config.stt.port) {
-                                eprintln!("whisper-serverの起動に失敗: {e}");
+                                log_error!("whisper-serverの起動に失敗: {e}");
                             }
                         }
-                        Err(e) => eprintln!("config読み込みに失敗: {e}"),
+                        Err(e) => log_error!("config読み込みに失敗: {e}"),
                     }
                 });
             }
-            Err(e) => eprintln!("録音開始に失敗: {e}"),
+            Err(e) => log_error!("録音開始に失敗: {e}"),
         }
     } else {
         // 失敗はログだけでなくフロントにも通知する(以前はeprintln!のみで、画面上は
         // 何も起きないように見えていた)。
         let notify_failure = |message: String| {
-            eprintln!("{message}");
+            log_error!("{message}");
             let _ = app.emit("voice:failed", serde_json::json!({ "message": message }));
         };
 
@@ -4989,7 +5126,7 @@ fn handle_hotkey_toggle(app: &tauri::AppHandle) {
             }
             Err(e) => {
                 let message = format!("文字起こしに失敗: {e}");
-                eprintln!("{message}");
+                log_error!("{message}");
                 let _ = app.emit("voice:failed", serde_json::json!({ "message": message }));
             }
         });
@@ -4999,6 +5136,7 @@ fn handle_hotkey_toggle(app: &tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri_plugin_global_shortcut::ShortcutState;
+    app_log::init(project_root().join("data").join("logs"));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -5031,7 +5169,7 @@ pub fn run() {
             // SSDを挿していなかった間の分も含め、このPCのClaudeの履歴を台帳へ取り込む。
             std::thread::spawn(|| {
                 if let Err(e) = refresh_claude_stats_blocking(true) {
-                    eprintln!("Claudeの利用統計の取り込みに失敗: {e}");
+                    log_error!("Claudeの利用統計の取り込みに失敗: {e}");
                 }
             });
             Ok(())
@@ -5048,6 +5186,8 @@ pub fn run() {
             get_config,
             list_claude_sessions,
             refresh_claude_stats,
+            log_frontend_error,
+            set_app_mode,
             get_claude_stats,
             eject_preview,
             eject_execute,
