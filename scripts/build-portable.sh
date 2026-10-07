@@ -69,6 +69,10 @@ rsync -a --delete \
   --exclude "eval" \
   "$SYSTEM_DIR/services/rag/" "$PORTABLE_DIR/services/rag/"
 
+echo "--- scripts/claude-report.js (Claudeモニター用の報告スクリプト、1ファイルのみコピー) ---"
+mkdir -p "$PORTABLE_DIR/scripts"
+cp "$SYSTEM_DIR/scripts/claude-report.js" "$PORTABLE_DIR/scripts/claude-report.js"
+
 # --- 2. OS別バイナリ配置(bin/<os>/) ---
 
 BIN_DIR="$PORTABLE_DIR/bin/$TARGET_OS"

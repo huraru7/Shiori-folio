@@ -84,6 +84,10 @@ Write-Host "--- services/rag/ (ソースのみ。.venv/__pycache__/evalは除外
 robocopy "$SystemDir\services\rag" "$PortableDir\services\rag" /MIR /NFL /NDL /NJH /NJS `
     /XD ".venv" "__pycache__" "eval" | Out-Null
 
+Write-Host "--- scripts/claude-report.js (Claudeモニター用の報告スクリプト、1ファイルのみコピー) ---"
+New-Item -ItemType Directory -Force -Path "$PortableDir\scripts" | Out-Null
+Copy-Item "$SystemDir\scripts\claude-report.js" "$PortableDir\scripts\claude-report.js" -Force
+
 # --- 2. OS別バイナリ配置(bin/win/) ---
 
 $BinDir = Join-Path $PortableDir "bin\win"
