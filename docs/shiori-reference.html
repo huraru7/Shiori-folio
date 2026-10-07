@@ -459,7 +459,7 @@
     <span class="home__chip"><b>基盤</b> Tauri(Rust) + React</span>
     <span class="home__chip"><b>会話</b> llama.cpp / whisper.cpp / piper-plus</span>
     <span class="home__chip"><b>記憶</b> ChromaDB + reranker(RAG)</span>
-    <span class="home__chip"><b>世代</b> Ver3.6(ローカルLLMだけの会話の検証と改修)</span>
+    <span class="home__chip"><b>世代</b> Ver3.7(Claudeモニター: 動作中のセッションの表示)</span>
   </div>
   <a class="home__scroll" href="#diagram">
     仕組みを見る
@@ -764,7 +764,23 @@
   <ul class="version-list">
     <li class="version-list__item">
       <div class="version-list__head">
-        <span class="version-list__tag version-list__tag--current">Ver3.6</span>
+        <span class="version-list__tag version-list__tag--current">Ver3.7</span>
+        <span class="version-list__date">2026-10-07</span>
+      </div>
+      <p class="version-list__body">
+        動いているClaude Codeのセッションを、詩織の「Claudeモニター」ウィンドウ(Dockの📡)に表示する。
+        Claude Code側のフック(SessionStart・UserPromptSubmit・Notification・Stop・SessionEnd・PostToolUse)が、
+        <code>portable/scripts/claude-report.js</code>を呼び、<code>portable/data/claude-status/&lt;session_id&gt;.json</code>に
+        状態(作業中・入力待ち・待機・終了)・プロジェクト名・セッションタイトル・Mac/Windowsの別・Claude Codeのpid・更新時刻だけを書く。
+        詩織はこのJSONを読むだけで、詩織が止まっている間もClaude側は書き続ける。MacとWindowsのセッションは、
+        SSDが共有なので同じ一覧に並ぶ。プロンプト・応答の中身は保存しない。詩織のMCPは読み取り専用のまま、
+        ポートも開けていない。5時間/週次の使用量の表示は、取得手段がなく見送った(使用量はClaude Codeの
+        ステータスラインの入力にしかなく、デスクトップアプリのCodeタブでは呼ばれなかった)。
+      </p>
+    </li>
+    <li class="version-list__item">
+      <div class="version-list__head">
+        <span class="version-list__tag">Ver3.6</span>
         <span class="version-list__date">2026-10-06</span>
       </div>
       <p class="version-list__body">
@@ -1069,8 +1085,8 @@
     desktop_ui: {
       eyebrow: "画面構成",
       title: "デスクトップ領域",
-      body: "<p>右ゾーンに配置される、macOSのDockを模したフリースペース型ウィンドウシステム。4つのウィンドウ(ナレッジ/図書館/全件閲覧/設定)は<code>OsWindow</code>としてドラッグ・リサイズ可能な形で共存する。デバッグ画面のみ例外的に独立した全画面表示。</p>",
-      paths: ["system/src/components/desktop/DesktopArea.tsx", "system/src/components/desktop/Dock.tsx"]
+      body: "<p>右ゾーンに配置される、macOSのDockを模したフリースペース型ウィンドウシステム。5つのウィンドウ(ナレッジ/図書館/全件閲覧/Claudeモニター/設定)は<code>OsWindow</code>としてドラッグ・リサイズ可能な形で共存する。Claudeモニター(Ver3.7)は、ウィンドウが見えている間だけ3秒ごとに<code>list_claude_sessions</code>で<code>data/claude-status/</code>を読み、セッションを一覧する読み取り専用の画面。死活はプロセスの生死で判定する(フックが起動元のClaude Codeのpidを記録し、同じPCのセッションは詩織がそのpidを見る)。生きていれば、長いビルドなどで無音が続いても状態を信じる。プロセスが消えて終了の報告が無いものは「終了」とし、5分で一覧から外す。別のPCのセッションやpidが取れないものは確かめようがないので、更新が1時間止まった作業中・入力待ちを「応答なし」とみなす。デバッグ画面のみ例外的に独立した全画面表示。</p>",
+      paths: ["system/src/components/desktop/DesktopArea.tsx", "system/src/components/desktop/Dock.tsx", "system/src/components/panels/ClaudeMonitorPanel.tsx", "system/src-tauri/src/claude_status.rs", "portable/scripts/claude-report.js"]
     },
     ui_knowledge: {
       eyebrow: "デスクトップUI",
