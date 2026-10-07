@@ -231,7 +231,7 @@ Remove-Item $TmpPyDir -Recurse -Force
 
 $RagPython = Join-Path $RagVenv "python.exe"
 uv pip install --python $RagPython --break-system-packages `
-    chromadb fastapi "uvicorn[standard]" httpx tiktoken sentence-transformers
+    chromadb fastapi "uvicorn[standard]" httpx tiktoken sentence-transformers pypdf defusedxml
 
 # --- 4. ランチャー ---
 

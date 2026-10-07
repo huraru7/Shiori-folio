@@ -6,3 +6,5 @@ tiktoken
 ragas
 sentence-transformers
 rapidfuzz
+pypdf
+defusedxml

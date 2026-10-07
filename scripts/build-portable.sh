@@ -182,7 +182,7 @@ rm -rf "$RAG_VENV.tmp"
 ln -sf python3.12 "$RAG_VENV/bin/python"
 
 uv pip install --python "$RAG_VENV/bin/python" --break-system-packages \
-  chromadb fastapi "uvicorn[standard]" httpx tiktoken sentence-transformers
+  chromadb fastapi "uvicorn[standard]" httpx tiktoken sentence-transformers pypdf defusedxml
 
 # --- 4. ランチャー ---
 
