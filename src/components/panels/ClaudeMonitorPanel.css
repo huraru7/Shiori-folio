@@ -95,3 +95,229 @@
   font-size: 10px;
   color: var(--paper-dim);
 }
+
+/* タブ(稼働状況/利用統計、詩織Ver3.9) */
+.claude-monitor__tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.claude-monitor__tab {
+  font: inherit;
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 0.5px solid var(--glass-border);
+  background: transparent;
+  color: var(--paper-dim);
+  cursor: pointer;
+}
+
+.claude-monitor__tab:hover {
+  color: var(--paper);
+}
+
+.claude-monitor__tab--active {
+  background: var(--glass);
+  border-color: var(--moss);
+  color: var(--paper);
+}
+
+/* 利用統計 */
+.claude-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.claude-stats__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.claude-stats__segment {
+  display: flex;
+  padding: 2px;
+  border-radius: 6px;
+  background: var(--glass);
+  border: 0.5px solid var(--glass-border);
+}
+
+.claude-stats__chip {
+  font: inherit;
+  font-size: 10.5px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--paper-dim);
+  cursor: pointer;
+}
+
+.claude-stats__chip--active {
+  background: rgba(237, 230, 214, 0.1);
+  color: var(--paper);
+}
+
+.claude-stats__host {
+  font: inherit;
+  font-size: 10.5px;
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 0.5px solid var(--glass-border);
+  background: var(--bg-deep);
+  color: var(--paper);
+}
+
+.claude-stats__tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.claude-stats__tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  background: var(--glass);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 8px;
+  min-width: 0;
+}
+
+.claude-stats__label {
+  font-size: 10.5px;
+  color: var(--paper-dim);
+}
+
+.claude-stats__value {
+  font-size: 1.05rem;
+  font-weight: 500;
+}
+
+.claude-stats__sub {
+  font-size: 10px;
+  color: var(--paper-dim);
+}
+
+.claude-stats__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.claude-stats__heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--paper-dim);
+}
+
+.claude-stats__heatmap {
+  display: flex;
+  gap: 3px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.claude-stats__week {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.claude-stats__cell {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  background: var(--glass);
+  border: 0.5px solid var(--glass-border);
+}
+
+.claude-stats__cell--l1 { background: rgba(143, 160, 107, 0.3); border-color: transparent; }
+.claude-stats__cell--l2 { background: rgba(143, 160, 107, 0.5); border-color: transparent; }
+.claude-stats__cell--l3 { background: rgba(143, 160, 107, 0.75); border-color: transparent; }
+.claude-stats__cell--l4 { background: var(--moss); border-color: transparent; }
+
+.claude-stats__cell--outside {
+  opacity: 0.3;
+}
+
+.claude-stats__models {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.claude-stats__model {
+  display: grid;
+  grid-template-columns: minmax(0, 9em) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  font-size: 10.5px;
+}
+
+.claude-stats__model-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.claude-stats__bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--glass);
+  overflow: hidden;
+}
+
+.claude-stats__bar-fill {
+  display: block;
+  height: 100%;
+  background: var(--moss);
+}
+
+.claude-stats__model-value {
+  color: var(--paper-dim);
+  min-width: 3.5em;
+  text-align: right;
+}
+
+.claude-stats__footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--paper-dim);
+}
+
+.claude-stats__hosts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.claude-stats__refresh {
+  font: inherit;
+  font-size: 10.5px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--glass-border);
+  background: transparent;
+  color: var(--paper);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+
+.claude-stats__refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

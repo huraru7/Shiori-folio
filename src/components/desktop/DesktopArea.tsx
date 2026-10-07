@@ -66,8 +66,8 @@ function DesktopArea() {
         title="Claudeモニター"
         defaultX={180}
         defaultY={100}
-        defaultWidth={420}
-        defaultHeight={320}
+        defaultWidth={460}
+        defaultHeight={460}
         minWidth={300}
         minHeight={200}
         containerRef={containerRef}

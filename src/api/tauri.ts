@@ -3,6 +3,8 @@ import type {
   AppConfigDto,
   AppConfigUpdate,
   ClaudeSession,
+  ClaudeStats,
+  ClaudeStatsRange,
   EjectOutcome,
   EjectPreview,
   KnowledgeResult,
@@ -67,6 +69,11 @@ export const api = {
   getConfig: () => invoke<AppConfigDto>("get_config"),
 
   listClaudeSessions: () => invoke<ClaudeSession[]>("list_claude_sessions"),
+  // forceがfalseなら、前回の取り込みから間もないときは省く。
+  refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
+  // hostがnullなら全端末の合算。
+  getClaudeStats: (range: ClaudeStatsRange, host: string | null) =>
+    invoke<ClaudeStats>("get_claude_stats", { range, host }),
 
   ejectPreview: () => invoke<EjectPreview>("eject_preview"),
   ejectExecute: () => invoke<EjectOutcome>("eject_execute"),

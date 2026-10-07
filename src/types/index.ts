@@ -230,6 +230,33 @@ export interface ClaudeSession {
   updatedAt: number;
 }
 
+// Claudeの利用統計(詩織Ver3.9)。「実際」は応答・発言のIDで重複を除いた値、
+// 「アプリ式」はデスクトップアプリの統計パネルと同じく履歴の行ごとに数えた値。
+export type ClaudeStatsRange = "all" | "days30" | "days7";
+export type ClaudeStatsCounting = "actual" | "app";
+
+export interface ClaudeTokens {
+  input: number;
+  cacheCreation: number;
+  cacheRead: number;
+  output: number;
+}
+
+export interface ClaudeStats {
+  hosts: { host: string; updatedAt: number }[];
+  since: string;
+  until: string;
+  sessions: number;
+  messages: number;
+  messagesApp: number;
+  activeDays: number;
+  actual: ClaudeTokens;
+  app: ClaudeTokens;
+  daily: { date: string; actual: number; app: number }[];
+  models: { model: string; actual: number; app: number }[];
+  warnings: string[];
+}
+
 // 取り外し機能。止める予定のもの(toStop)。
 export interface EjectEntry {
   pid: number;
