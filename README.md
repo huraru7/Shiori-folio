@@ -9,7 +9,7 @@
 - **記憶**: ChromaDB + reranker(RAG)によるセカンドブレイン(`library/`配下のMarkdownを検索・参照)
 - **Claude Code連携**: MCPサーバー経由でセカンドブレインの検索・保存が可能
 
-詳細な内部構成は [docs/shiori-reference.html](docs/shiori-reference.html) を参照。
+詳細な内部構成とバージョン履歴は、リファレンス(`shiori-reference.html`)にまとめている。2026-10-07にリポジトリから詩織の実機library(`library/20-areas/shiori/files/shiori-reference.html`)へ移した。公開したら、ここをその記事へのリンクにする。
 
 ## セットアップ
 
