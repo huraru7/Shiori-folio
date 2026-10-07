@@ -1218,7 +1218,7 @@ async fn eject_preview() -> Result<EjectPreview, String> {
     tauri::async_runtime::spawn_blocking(|| {
         let root = project_root();
         let (plan, _sys) = eject::current_plan(&root);
-        let skip: Vec<u32> = plan.to_stop.iter().chain(plan.in_use.iter()).map(|e| e.pid).collect();
+        let skip: Vec<u32> = plan.to_stop.iter().map(|e| e.pid).collect();
         let other_holders = eject::other_holders(&root, &skip);
         let me = std::process::id();
         let leftover_after_exit = plan.to_stop.iter().filter(|e| e.parent_pid != Some(me)).cloned().collect();

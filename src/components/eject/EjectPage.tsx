@@ -5,7 +5,7 @@ import EjectSummary from "./EjectSummary";
 import "./Eject.css";
 
 // 設定画面の「SSDの取り外し」ページ。実機SSDを使っているプロセスを確認し、まとめて止めて
-// 詩織を終了する。止める対象の選び方と、止めないもの(mcp_server)の理由は eject.rs を参照。
+// 詩織を終了する。止める対象の選び方と、mcp_serverを止める影響は eject.rs を参照。
 export function EjectPage() {
   const [preview, setPreview] = useState<EjectPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,8 +50,6 @@ export function EjectPage() {
             {outcome.failed.length
               ? `止められなかったプロセスがあります(pid ${outcome.failed.join(", ")})。詩織を終了します。`
               : "関連するプロセスを止めました。詩織を終了します。"}
-            {preview && preview.plan.inUse.length > 0 &&
-              " 使用中のもの(Claudeのセッションが使うmcp_server)は、セッションを閉じてから、Finderで取り出してください。"}
           </div>
         ) : (
           <div className="eject__actions">

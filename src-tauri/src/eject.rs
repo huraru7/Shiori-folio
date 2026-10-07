@@ -4,8 +4,9 @@
 //! 配下にある、自分のユーザーのプロセス**で選ぶ。プロセスが増えても手直しが要らず、SSDの外の
 //! 同名プロセスを誤って止めない。
 //!
-//! `mcp_server`は止めない。Claudeのセッションが標準入出力でつないで使っており、外から止めると
-//! そのセッションのMCP接続が復旧しないため(decision-1790068500)。「使用中」として報告する。
+//! `mcp_server`も止める(取り外しを妨げるため)。Claudeのセッションが標準入出力でつないで使っており、
+//! 外から止めるとそのセッションのMCP接続は復旧しない(decision-1790068500)。そのため止める前の
+//! 確認に、使っているClaudeのセッションを案内として載せる。取り外し後にMCPを使うにはセッションの開き直しが要る。
 //!
 //! 選択([`build_plan`])は、プロセス一覧を渡すだけの純粋な関数にしてあり、単体テストできる。
 
@@ -36,7 +37,7 @@ pub struct Entry {
     pub parent_pid: Option<u32>,
     pub name: String,
     pub exe: String,
-    /// 使用中のとき、何がそれを使っているか・どう対処するかの説明。止めるものでは空。
+    /// 止めたときの影響の説明(何がそれを使っているか等)。特に注意が要るものだけに付く。
     pub note: String,
 }
 
@@ -45,8 +46,6 @@ pub struct Entry {
 pub struct Plan {
     /// 止める予定のもの(停止の順に並ぶ)。
     pub to_stop: Vec<Entry>,
-    /// 止めないが、SSDを使っているもの(`mcp_server`と、それを動かしているClaude)。
-    pub in_use: Vec<Entry>,
 }
 
 fn entry(p: &ProcInfo, note: &str) -> Entry {
@@ -97,7 +96,7 @@ fn with_ancestors(by_pid: &HashMap<u32, &ProcInfo>, pid: u32) -> Vec<u32> {
     chain
 }
 
-/// プロセス一覧から、止めるもの・使用中のものを選ぶ。
+/// プロセス一覧から、止めるものを選ぶ。
 ///
 /// - `root`: SSD(portable/)のルート。実行ファイルがこの配下にあるプロセスだけが対象。
 /// - `self_user`: このプロセスのユーザー。ほかのユーザーのプロセスは対象外。
@@ -107,7 +106,6 @@ pub fn build_plan(procs: &[ProcInfo], root: &Path, self_user: Option<&str>, self
     let protected: Vec<u32> = with_ancestors(&by_pid, self_pid);
 
     let mut to_stop: Vec<&ProcInfo> = Vec::new();
-    let mut in_use: Vec<Entry> = Vec::new();
     for p in procs {
         let Some(exe) = &p.exe else { continue };
         if !exe.starts_with(root) || protected.contains(&p.pid) {
@@ -118,32 +116,36 @@ pub fn build_plan(procs: &[ProcInfo], root: &Path, self_user: Option<&str>, self
                 continue;
             }
         }
-        if is_mcp_server(p) {
-            // 動かしているClaude(親をたどった、SSDの外のプロセス)を案内に含める。
-            let holders: Vec<String> = with_ancestors(&by_pid, p.pid)
-                .into_iter()
-                .skip(1)
-                .filter_map(|pid| by_pid.get(&pid))
-                .take(3)
-                .map(|a| format!("{}(pid {})", a.name, a.pid))
-                .collect();
-            let note = if holders.is_empty() {
-                "MCPサーバー。Claudeのセッションが使用中。Claudeのセッションを閉じる(またはMCPを切る)と使えなくなる".to_string()
-            } else {
-                format!(
-                    "MCPサーバー。Claudeのセッションが使用中(親: {})。取り外す前に、そのセッションを閉じる(またはMCPを切る)",
-                    holders.join(" ← ")
-                )
-            };
-            in_use.push(entry(p, &note));
-            continue;
-        }
         to_stop.push(p);
     }
     to_stop.sort_by_key(|p| (stop_rank(p), p.pid));
     Plan {
-        to_stop: to_stop.into_iter().map(|p| entry(p, "")).collect(),
-        in_use,
+        to_stop: to_stop
+            .into_iter()
+            .map(|p| {
+                let note = if is_mcp_server(p) { mcp_note(&by_pid, p) } else { String::new() };
+                entry(p, &note)
+            })
+            .collect(),
+    }
+}
+
+/// `mcp_server`を止めたときの影響の説明。動かしているClaude(親をたどった、SSDの外のプロセス)を含める。
+fn mcp_note(by_pid: &HashMap<u32, &ProcInfo>, p: &ProcInfo) -> String {
+    let holders: Vec<String> = with_ancestors(by_pid, p.pid)
+        .into_iter()
+        .skip(1)
+        .filter_map(|pid| by_pid.get(&pid))
+        .take(3)
+        .map(|a| format!("{}(pid {})", a.name, a.pid))
+        .collect();
+    if holders.is_empty() {
+        "MCPサーバー。Claudeのセッションが使用中。止めると、そのセッションのMCPは使えなくなる".to_string()
+    } else {
+        format!(
+            "MCPサーバー。Claudeのセッションが使用中(親: {})。止めると、そのセッションのMCPは使えなくなる",
+            holders.join(" ← ")
+        )
     }
 }
 
@@ -385,11 +387,10 @@ mod tests {
         ];
         let plan = build_plan(&procs, Path::new(ROOT), Some("me"), 200);
         assert!(plan.to_stop.is_empty());
-        assert!(plan.in_use.is_empty());
     }
 
     #[test]
-    fn mcp_serverは止めずに使用中として親のclaudeを案内する() {
+    fn mcp_serverも止める対象で親のclaudeを案内する() {
         let procs = vec![
             p(1, None, Some("/sbin/launchd"), "root"),
             p(50, Some(1), Some("/Users/me/claude-code/claude"), "me"),
@@ -397,20 +398,20 @@ mod tests {
             p(70, Some(60), Some("/Volumes/SSD/portable/bin/mac/llama-server"), "me"),
         ];
         let plan = build_plan(&procs, Path::new(ROOT), Some("me"), 999);
-        assert_eq!(pids(&plan.to_stop), vec![70]);
-        assert_eq!(pids(&plan.in_use), vec![60]);
-        assert!(plan.in_use[0].note.contains("claude(pid 50)"), "{}", plan.in_use[0].note);
+        assert_eq!(pids(&plan.to_stop), vec![60, 70]);
+        let mcp = plan.to_stop.iter().find(|e| e.pid == 60).unwrap();
+        assert!(mcp.note.contains("claude(pid 50)"), "{}", mcp.note);
+        assert!(plan.to_stop.iter().find(|e| e.pid == 70).unwrap().note.is_empty());
     }
 
     #[test]
-    fn 別のセッションのmcp_serverも使用中に挙げる() {
+    fn 別のセッションのmcp_serverもすべて止める対象にする() {
         let procs = vec![
             p(60, Some(50), Some("/Volumes/SSD/portable/bin/mac/mcp_server"), "me"),
             p(61, Some(51), Some("/Volumes/SSD/portable/bin/win/mcp_server.exe"), "me"),
         ];
         let plan = build_plan(&procs, Path::new(ROOT), Some("me"), 999);
-        assert_eq!(pids(&plan.in_use), vec![60, 61]);
-        assert!(plan.to_stop.is_empty());
+        assert_eq!(pids(&plan.to_stop), vec![60, 61]);
     }
 
     #[test]

@@ -6,7 +6,7 @@
 //!         `shiori-eject --root <パス>` … SSD(portable/)のルートを指定する(省略時は実行ファイルの場所から探す)
 //!
 //! 主にClaudeがBashから呼ぶ想定。オプションなしを確認だけにしてあるのは、誤って止める事故を
-//! 防ぐため。`mcp_server`(Claudeのセッションが使用中)は止めず、「使用中」として報告する。
+//! 防ぐため。`mcp_server`も止める(止めると、使っているClaudeのセッションのMCPは使えなくなる)。
 //! 取り外し(アンマウント)自体は行わない。終了コード: 0=正常(使用中が残るだけでも0)、
 //! 1=止められなかったプロセスがある、2=引数の誤り。
 
@@ -58,7 +58,7 @@ fn main() {
     };
 
     // 停止の後に、ほかにSSDを開いているものを探す(止める予定・使用中として挙げたものは除く)。
-    let skip: Vec<u32> = plan.to_stop.iter().chain(plan.in_use.iter()).map(|e| e.pid).collect();
+    let skip: Vec<u32> = plan.to_stop.iter().map(|e| e.pid).collect();
     let other_holders = eject::other_holders(&root, &skip);
 
     let report = Report {
@@ -121,10 +121,6 @@ fn print_human(r: &Report) {
         list(&r.plan.to_stop);
     }
 
-    if !r.plan.in_use.is_empty() {
-        println!("\n使用中(止めません):");
-        list(&r.plan.in_use);
-    }
     if !r.other_holders.is_empty() {
         println!("\nほかにSSDのファイルを開いているプロセス(止めません。必要なら閉じてください):");
         for (pid, name) in &r.other_holders {
@@ -136,8 +132,8 @@ fn print_human(r: &Report) {
     let failed = r.outcome.as_ref().is_some_and(|o| !o.failed.is_empty());
     if failed {
         println!("止められなかったプロセスがあります。上の一覧を確認してください。");
-    } else if !r.plan.in_use.is_empty() || !r.other_holders.is_empty() {
-        println!("まだSSDを使っているものがあります。取り外す前に、上の「使用中」「ほかにSSDを開いているプロセス」を閉じてください(Claudeのセッションを閉じる、またはMCPを切る)。そのあと、Finder(Windowsは「ハードウェアを安全に取り外す」)で取り出してください。");
+    } else if !r.other_holders.is_empty() {
+        println!("まだSSDを使っているものがあります。取り外す前に、上の「ほかにSSDを開いているプロセス」を閉じてください。そのあと、Finder(Windowsは「ハードウェアを安全に取り外す」)で取り出してください。");
     } else if r.executed || r.plan.to_stop.is_empty() {
         println!("SSDを使っているものはありません。Finder(Windowsは「ハードウェアを安全に取り外す」)で取り出せます。");
     }

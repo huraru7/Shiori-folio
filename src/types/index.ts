@@ -230,19 +230,18 @@ export interface ClaudeSession {
   updatedAt: number;
 }
 
-// 取り外し機能。止める予定のもの(toStop)と、止めないが使っているもの(inUse)。
+// 取り外し機能。止める予定のもの(toStop)。
 export interface EjectEntry {
   pid: number;
   parentPid: number | null;
   name: string;
   exe: string;
-  // 使用中のものに付く、何が使っているか・どう対処するかの説明。
+  // 止めたときの影響の説明(mcp_serverを使っているClaudeのセッション等)。
   note: string;
 }
 
 export interface EjectPlan {
   toStop: EjectEntry[];
-  inUse: EjectEntry[];
 }
 
 export interface EjectPreview {

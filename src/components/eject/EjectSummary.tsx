@@ -15,7 +15,7 @@ function Entries({ entries }: { entries: EjectEntry[] }) {
   );
 }
 
-// 取り外しの確認結果(止める予定のもの・使用中のもの・ほかにSSDを開いているもの)の表示。
+// 取り外しの確認結果(止める予定のもの・ほかにSSDを開いているもの)の表示。
 // 設定画面の取り外しページと、詩織を閉じるときの確認の両方で使う。
 function EjectSummary({ preview }: { preview: EjectPreview }) {
   const { plan, otherHolders } = preview;
@@ -29,12 +29,6 @@ function EjectSummary({ preview }: { preview: EjectPreview }) {
           <Entries entries={plan.toStop} />
         )}
       </div>
-      {plan.inUse.length > 0 && (
-        <div className="eject__section">
-          <div className="eject__label">使用中(止めません)</div>
-          <Entries entries={plan.inUse} />
-        </div>
-      )}
       {otherHolders.length > 0 && (
         <div className="eject__section">
           <div className="eject__label">ほかにSSDのファイルを開いているもの(止めません)</div>
