@@ -492,7 +492,7 @@
     </div>
     <div class="diagram-viewport" id="diagramViewport">
     <div class="diagram-canvas" id="diagramCanvas">
-    <svg viewBox="0 0 1180 1250" role="img" aria-label="詩織の内部構成図。音声入力からSTT・会話判定ロジック・LLM・TTSに至る会話フロー、library配下のセカンドブレインを支えるRAGサーバーとChromaDB・reranker・共有埋め込みデーモン、外部AIからのMCPサーバー/shiori-save経由の連携、デスクトップUIとDockから独立して開く要確認UI/デバッグ画面の4系統を示す。">
+    <svg viewBox="0 0 1180 1250" role="img" aria-label="詩織の内部構成図。音声入力からSTT・会話判定ロジック・LLM・TTSに至る会話フロー、library配下のセカンドブレインを支えるRAGサーバーとChromaDB・reranker・共有埋め込みデーモン、外部AIからのMCPサーバー/shiori-save経由の連携、右ゾーンのタブUIと、タブ列のボタンから開く要確認UI/デバッグ画面の4系統を示す。">
       <defs>
         <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
           <path d="M0,0 L8,4 L0,8 z" fill="var(--paper-dim)"></path>
@@ -678,12 +678,12 @@
       <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M1005,750 L1005,700"/>
       <text class="flow-label" x="882" y="694">対象: 埋め込み/RAGデーモン</text>
 
-      <!-- ============ デスクトップUI ============ -->
+      <!-- ============ 右ゾーンのタブUI(Ver3.9でウィンドウとDockから変更) ============ -->
       <g class="node node--accent-task" tabindex="0" role="button" data-detail="desktop_ui" transform="translate(40,990)">
         <rect width="260" height="60" rx="8"/>
-        <text x="14" y="24" font-size="12">デスクトップ領域</text>
-        <text class="node__sub" x="14" y="41" font-size="10">DesktopArea.tsx / Dock.tsx</text>
-        <text class="node__sub" x="14" y="55" font-size="9.5">4つのOsWindow</text>
+        <text x="14" y="24" font-size="12">右ゾーン(タブ)</text>
+        <text class="node__sub" x="14" y="41" font-size="10">MainArea.tsx / HomeScreen.tsx</text>
+        <text class="node__sub" x="14" y="55" font-size="9.5">ホーム+5画面を切り替え</text>
       </g>
       <g class="node node--accent-task" tabindex="0" role="button" data-detail="ui_knowledge" transform="translate(340,990)">
         <rect width="180" height="60" rx="8"/>
@@ -711,15 +711,15 @@
       <path class="flow-line" marker-end="url(#arrow)" d="M740,1020 L780,1020"/>
       <path class="flow-line" marker-end="url(#arrow)" d="M960,1020 L1000,1020"/>
 
-      <!-- 会話フロー・セカンドブレインからデスクトップUIへの反映は、長距離を
-           引かず各ウィンドウ直上の短い受け口として示す。 -->
+      <!-- 会話フロー・セカンドブレインから右ゾーンへの反映は、長距離を
+           引かず各画面の直上の短い受け口として示す。 -->
       <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M430,960 L430,990"/>
       <text class="flow-label" x="345" y="950">← 出典(sources)</text>
       <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M650,960 L650,990"/>
       <text class="flow-label" x="600" y="950">← 検索結果</text>
 
-      <!-- Dockから独立して起動する2画面(要確認UI・デバッグ画面)。デスクトップ
-           領域ノードの下に2段目として配置する。 -->
+      <!-- タブ列の右端のボタンから開く2画面(要確認UI・デバッグ画面)。右ゾーン
+           ノードの下に2段目として配置する。 -->
       <g class="node node--accent-clay" tabindex="0" role="button" data-detail="pending_modal" transform="translate(40,1090)">
         <rect width="260" height="50" rx="8"/>
         <text x="14" y="23" font-size="12">要確認UI — PendingModal</text>
@@ -732,7 +732,7 @@
       </g>
 
       <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M170,1050 L170,1090"/>
-      <text class="flow-label" x="176" y="1075">Dockから起動</text>
+      <text class="flow-label" x="176" y="1075">ボタンから起動</text>
       <path class="flow-line flow-line--dashed" marker-end="url(#arrow)" d="M240,1050 L470,1050 L470,1090"/>
     </svg>
     </div>
@@ -744,8 +744,8 @@
       詳細は右のツール一覧とLLMの項を参照)・LLM・TTSに至る
       会話フロー(左)、library/を土台にRAGサーバー・ChromaDB・rerankerが
       支えるセカンドブレイン(右上)、外部AIが検索/保存に使うMCPサーバーと
-      shiori-save CLI(中央下)、それらを画面として束ねるデスクトップUI・
-      Dockから独立して開く要確認UI/デバッグ画面(下)の4系統。矢印に
+      shiori-save CLI(中央下)、それらを画面として束ねる右ゾーンのタブUI・
+      タブ列のボタンから開く要確認UI/デバッグ画面(下)の4系統。矢印に
       カーソルを合わせずとも、各箱をクリックすれば詳細が開く。ドラッグで
       パン、右上のボタンでズームできる。
     </figcaption>
@@ -768,7 +768,13 @@
         <span class="version-list__date">2026-10-07(途中)</span>
       </div>
       <p class="version-list__body">
-        Ver4.0の前に、「Ver4.0までにやること」の残りを片付ける版。1つ目として、Claudeの利用統計を、端末をまたいで
+        Ver4.0の前に、「Ver4.0までにやること」の残りを片付ける版。2つ目として、詩織のUIを組み直した。
+        右側の浮かぶウィンドウとDockをやめ、上のタブ(ホーム・ナレッジ・図書館・全件閲覧・Claude・設定)で
+        1画面ずつ切り替える形にした。文字サイズを8段階のトークンにまとめて全体を大きくし、ヘッダーの時刻に秒を出せるようにした。
+        図書館は、同期コマンドがUIのスレッドで動いて画面が固まっていたのを非同期に直し、結果を「属性・タイトル・冒頭の文」の
+        一覧にして、アーカイブと古い記録の除外・棚・project・種類で絞り込めるようにした(RAGの索引に<code>kind</code>を足し、
+        索引の版を4に上げた)。ホームは、挨拶と状態・検索欄・前回の申し送り・最近の記録・状態行をスクロールなしで並べる。
+        1つ目として、Claudeの利用統計を、端末をまたいで
         合算して表示できるようにした(Claudeモニターの「利用統計」タブ)。デスクトップアプリの新規チャット画面の統計は
         端末ごとに別々なので、各PCの履歴(<code>~/.claude/projects/**/*.jsonl</code>)を詩織が差分で読み、
         応答単位の台帳を<code>portable/data/claude-stats/&lt;ホスト名&gt;.json</code>に貯めて合算する。フックは使わない。
@@ -1118,44 +1124,44 @@
     },
     desktop_ui: {
       eyebrow: "画面構成",
-      title: "デスクトップ領域",
-      body: "<p>右ゾーンに配置される、macOSのDockを模したフリースペース型ウィンドウシステム。5つのウィンドウ(ナレッジ/図書館/全件閲覧/Claudeモニター/設定)は<code>OsWindow</code>としてドラッグ・リサイズ可能な形で共存する。Claudeモニター(Ver3.7)は、ウィンドウが見えている間だけ3秒ごとに<code>list_claude_sessions</code>で<code>data/claude-status/</code>を読み、セッションを一覧する読み取り専用の画面。死活はプロセスの生死で判定する(フックが起動元のClaude Codeのpidを記録し、同じPCのセッションは詩織がそのpidを見る)。生きていれば、長いビルドなどで無音が続いても状態を信じる。プロセスが消えて終了の報告が無いものは「終了」とし、5分で一覧から外す。別のPCのセッションやpidが取れないものは確かめようがないので、更新が1時間止まった作業中・入力待ちを「応答なし」とみなす。Ver3.9で「利用統計」のタブを足した。各PCのClaude Codeの履歴(<code>~/.claude/projects/**/*.jsonl</code>)を詩織が差分で読み、応答単位の台帳を<code>data/claude-stats/&lt;ホスト名&gt;.json</code>に貯め、全端末を合算してセッション数・メッセージ数・アクティブ日数・トークン数(合計・日付別・モデル別)を出す。取り込みは起動時と、タブを開いたとき(前回から5分以上たっていれば)。デバッグ画面のみ例外的に独立した全画面表示。</p><p>設定ウィンドウの「SSDの取り外し」ページから、実機SSDを使っているプロセスを確認し、止めて詩織を終了できる。詩織のウィンドウを閉じるときは、詩織を閉じても残る共有デーモンがあれば「関連するプロセスも停止しますか?」と聞く(<code>Cmd+Q</code>・Dockからの終了は通らない)。手順は<code>system/docs/setup-ssd-eject.md</code>。</p>",
-      paths: ["system/src/components/desktop/DesktopArea.tsx", "system/src/components/desktop/Dock.tsx", "system/src/components/panels/ClaudeMonitorPanel.tsx", "system/src-tauri/src/claude_status.rs", "portable/scripts/claude-report.js"]
+      title: "右ゾーン(タブ)",
+      body: "<p>左ゾーン(会話)の右に置く、上のタブで1画面ずつ切り替える領域(Ver3.9)。タブはホーム・ナレッジ・図書館・全件閲覧・Claude・設定で、右端に「要確認(未着手の件数バッジ)」と「デバッグ」のボタンを置く。全画面を常にマウントしたまま、選ばれていない画面は隠すので、切り替えても検索結果や開いたページが残る。2026-08-12からVer3.8までは、浮かぶウィンドウ(<code>OsWindow</code>)とDockの形だったが、あまり使わなかったためやめた。</p><p><strong>ホーム</strong>(起動直後の画面)は、詩織の玄関口として次をスクロールなしの1画面に収める: 時間帯の挨拶と会話・検索の状態、図書館へ渡す検索欄、前回の申し送り(最新のjournalの「申し送り」の節、<code>get_latest_handoff</code>)、最近更新された記録(画面の高さに入る分だけ最大5件)、状態行(要確認・稼働中のClaude・今日のトークン数・SSDの残り、<code>get_portable_storage</code>)。</p><p><strong>Claude</strong>のタブ(Ver3.7)は稼働状況と利用統計の2つ。稼働状況は、タブが選ばれている間だけ3秒ごとに<code>list_claude_sessions</code>で<code>data/claude-status/</code>を読み、セッションを一覧する読み取り専用の画面。死活はプロセスの生死で判定する(フックが起動元のClaude Codeのpidを記録し、同じPCのセッションは詩織がそのpidを見る)。生きていれば、長いビルドなどで無音が続いても状態を信じる。プロセスが消えて終了の報告が無いものは「終了」とし、5分で一覧から外す。別のPCのセッションやpidが取れないものは確かめようがないので、更新が1時間止まった作業中・入力待ちを「応答なし」とみなす。利用統計(Ver3.9)は、各PCのClaude Codeの履歴(<code>~/.claude/projects/**/*.jsonl</code>)を詩織が差分で読み、応答単位の台帳を<code>data/claude-stats/&lt;ホスト名&gt;.json</code>に貯め、全端末を合算してセッション数・メッセージ数・アクティブ日数・トークン数(合計・日付別・モデル別)を出す。取り込みは起動時と、タブを開いたとき(前回から5分以上たっていれば)。</p><p>文字サイズは<code>styles/tokens.css</code>の<code>--fs-xs</code>(12px)〜<code>--fs-3xl</code>(24px)の8段階で管理する(Ver3.9)。SSDやRAGに触るTauriコマンドは<code>run_blocking</code>で裏のスレッドで動かす(同期コマンドはUIのスレッドで動き、画面全体が固まるため)。</p><p>設定の「SSDの取り外し」ページから、実機SSDを使っているプロセスを確認し、止めて詩織を終了できる。詩織のウィンドウを閉じるときは、詩織を閉じても残る共有デーモンがあれば「関連するプロセスも停止しますか?」と聞く(<code>Cmd+Q</code>・macOSのDockからの終了は通らない)。手順は<code>system/docs/setup-ssd-eject.md</code>。</p>",
+      paths: ["system/src/components/main/MainArea.tsx", "system/src/components/main/HomeScreen.tsx", "system/src/store/useMainViewStore.ts", "system/src/components/panels/ClaudeMonitorPanel.tsx", "system/src-tauri/src/claude_status.rs", "system/src-tauri/src/claude_stats.rs", "portable/scripts/claude-report.js"]
     },
     ui_knowledge: {
-      eyebrow: "デスクトップUI",
-      title: "ナレッジウィンドウ",
-      body: "<p>会話中に自動で開き、直近の応答で参照された出典(sources)を表示する。会話の流れに追従する唯一のウィンドウ。</p>",
+      eyebrow: "右ゾーンのタブ",
+      title: "ナレッジ",
+      body: "<p>直近の応答で参照された出典(sources)を表示する。会話で検索が走ると、このタブへ自動で切り替わる。会話の流れに追従する唯一の画面。</p>",
       paths: ["system/src/components/panels/KnowledgePanel.tsx"]
     },
     ui_library: {
-      eyebrow: "デスクトップUI",
+      eyebrow: "右ゾーンのタブ",
       title: "詩織の図書館",
-      body: "<p>検索結果ベースの図書館UI。全件を並べるのではなく検索クエリに基づいた結果を表示する(全件を見たい場合は別ウィンドウの「全件閲覧」を使う)。</p>",
+      body: "<p>検索結果ベースの図書館UI。全件を並べるのではなく検索クエリに基づいた結果を表示する(全件を見たい場合は「全件閲覧」のタブを使う)。</p><p>Ver3.9で、結果を検索エンジンのような「属性(棚・project・種類・日付、古い記録の印)・タイトル・冒頭の文(summary、無ければ本文の冒頭)」の一覧にした。属性と冒頭の文は、詩織本体の<code>search_library</code>が各記事のfrontmatterを読んで足す。絞り込みは「アーカイブと古い記録を含める」(既定はオフ。<code>90-archive</code>とstatusが<code>outdated</code>・<code>deprecated</code>のものを除く)・棚(複数)・project・種類で、RAGの<code>/search_library</code>のfilter(<code>source_categories</code>・<code>kind</code>・<code>exclude_stale</code>)で絞るので、ページングも正しく動く。検索欄の×と<code>Esc</code>でリセットでき、未検索のときは詩織のロゴを薄く表示する。</p>",
       paths: ["system/src/components/library/LibraryScreen.tsx", "system/src/lib/library.ts — カテゴリ表示定義"]
     },
     ui_browse: {
-      eyebrow: "デスクトップUI",
+      eyebrow: "右ゾーンのタブ",
       title: "全件閲覧",
-      body: "<p>Finder風のエクスプローラー画面。検索結果ベースの図書館ウィンドウとは別に、library/の全件を一覧・閲覧する用途を担う。</p><p>Ver3.5で素材(<code>.meta</code>)に対応。実体の行は📦(実体の無い孤児の<code>.meta</code>は⚠️)で表示し、詳細画面の「開く」「フォルダで表示」で実体に辿れる。パスがlibrary配下かをRust側で検証し、実行形式(.exe・.sh・.app等)は直接開かずフォルダ表示のみ許可する。</p>",
+      body: "<p>Finder風のエクスプローラー画面。検索結果ベースの図書館とは別に、library/の全件を一覧・閲覧する用途を担う。長い名前は、カーソルを合わせると全文が出る(Ver3.9)。</p><p>Ver3.5で素材(<code>.meta</code>)に対応。実体の行は📦(実体の無い孤児の<code>.meta</code>は⚠️)で表示し、詳細画面の「開く」「フォルダで表示」で実体に辿れる。パスがlibrary配下かをRust側で検証し、実行形式(.exe・.sh・.app等)は直接開かずフォルダ表示のみ許可する。</p>",
       paths: ["system/src/components/library/LibraryBrowseScreen.tsx"]
     },
     ui_settings: {
-      eyebrow: "デスクトップUI",
-      title: "設定ウィンドウ",
-      body: "<p>システム状態(VRAM/CPU/温度等のリアルタイムモニター)・音声設定・詳細設定・モデル切替の4ページで構成される。以前は1ファイル933行に肥大化していたが、ページ単位で分割済み。</p>",
+      eyebrow: "右ゾーンのタブ",
+      title: "設定",
+      body: "<p>システム状態(VRAM/CPU/温度等のリアルタイムモニター)・音声設定・詳細設定・モデル切替・SSDの取り外しのページで構成される。以前は1ファイル933行に肥大化していたが、ページ単位で分割済み。詳細設定の「ヘッダーの日付表示」で、年・月・日・曜日と時刻の秒(Ver3.9)の表示を切り替えられ、保存するとすぐヘッダーに反映される。</p>",
       paths: ["system/src/components/controlpanel/ControlPanel.tsx", "system/src/components/controlpanel/{SystemStatusPage,VoiceSettingsPage,AdvancedSettingsPage,ModelSwitchPage}.tsx"]
     },
     pending_modal: {
-      eyebrow: "デスクトップUI(Phase 8)",
+      eyebrow: "タブ列のボタン(Phase 8)",
       title: "要確認UI — PendingModal",
       body: "<p>shiori-save CLIが自己登録した未知のタグ・プロジェクトを、人間が後から見返して確定させるための受け皿。<code>tags.yaml</code>/<code>projects.yaml</code>のpending/deferredなエントリ、および<code>00-inbox/</code>の未レビュー記録を一覧表示し、承認(confirm)/却下(reject)/保留(defer)を選べる。「未着手」「保留中」の2タブに分かれる。</p>",
-      paths: ["system/src/components/desktop/PendingModal.tsx"]
+      paths: ["system/src/components/main/PendingModal.tsx"]
     },
     debug_screen: {
-      eyebrow: "デスクトップUI",
+      eyebrow: "タブ列のボタン",
       title: "デバッグ画面",
-      body: "<p>TTS失敗履歴・passive recallの統計・RAGAS評価履歴を表示する読み取り専用画面。Dockから独立して呼び出せる。</p>",
+      body: "<p>TTS失敗履歴・passive recallの統計・RAGAS評価履歴を表示する読み取り専用画面。タブ列の右端の「デバッグ」ボタンから、独立した全画面表示で開く。</p>",
       paths: ["system/src/components/debug/DebugScreen.tsx"]
     }
   };
