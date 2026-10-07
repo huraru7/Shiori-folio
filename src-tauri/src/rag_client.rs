@@ -124,6 +124,16 @@ pub struct LibrarySearchFilter<'a> {
     pub kind: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<&'a str>,
+    // 以下は詩織Ver3.9(図書館の絞り込み)で追加。MCPは使わない。
+    // 記事の種類(frontmatterのkind。journal・resourceなど)。上のkindは`type`(棚)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "kind")]
+    pub entry_kind: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_categories: Option<&'a [String]>,
+    // アーカイブ(90-archive)と、statusがoutdated/deprecatedのものを除く。
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub exclude_stale: bool,
 }
 
 #[derive(Serialize)]

@@ -150,6 +150,7 @@ impl ShioriLibrary {
                 author: args.author.as_deref(),
                 kind: args.r#type.as_deref(),
                 project: args.project.as_deref(),
+                ..Default::default()
             })
         } else {
             None

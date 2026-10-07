@@ -62,7 +62,7 @@ class LexicalIndex:
 
 
 def matches_where(meta: dict, where: dict | None) -> bool:
-    """ChromaDBのwhere句のうち、この検索が使う形(完全一致・$ne・$and)だけを判定する。
+    """ChromaDBのwhere句のうち、この検索が使う形(完全一致・$ne・$in・$nin・$and)だけを判定する。
     未対応の演算子が来たときは、候補から落とさず通す(語彙検索は候補を足すだけで、
     絞り込みの最終判断は密ベクトル側のChromaDBが担うため、取りこぼしより混入を選ぶ)。
     """
@@ -75,6 +75,10 @@ def matches_where(meta: dict, where: dict | None) -> bool:
         elif isinstance(cond, dict):
             for op, val in cond.items():
                 if op == "$ne" and meta.get(key) == val:
+                    return False
+                if op == "$in" and meta.get(key) not in val:
+                    return False
+                if op == "$nin" and meta.get(key) in val:
                     return False
         elif meta.get(key) != cond:
             return False

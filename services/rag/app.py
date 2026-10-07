@@ -535,10 +535,21 @@ def search(req: SearchRequest):
     return items
 
 
+# アーカイブと同じく、人が読むときに邪魔になりやすい古い記録のstatus。
+STALE_STATUSES = ["outdated", "deprecated"]
+ARCHIVE_CATEGORY = "90-archive"
+
+
 class LibrarySearchFilter(BaseModel):
     author: str | None = None
     type: str | None = None
     project: str | None = None
+    # 以下は詩織Ver3.9(図書館の絞り込み)で追加。どれも省略でき、MCPは使わない。
+    kind: str | None = None
+    # 棚(source_category)のどれかに当てはまるもの。
+    source_categories: list[str] | None = None
+    # アーカイブ(90-archive)と、statusがoutdated/deprecatedのものを除く。
+    exclude_stale: bool = False
 
 
 class SearchLibraryRequest(BaseModel):
@@ -636,6 +647,13 @@ def search_library(req: SearchLibraryRequest):
             conditions.append({"type": req.filter.type})
         if req.filter.project:
             conditions.append({"project": req.filter.project})
+        if req.filter.kind:
+            conditions.append({"kind": req.filter.kind})
+        if req.filter.source_categories:
+            conditions.append({"source_category": {"$in": req.filter.source_categories}})
+        if req.filter.exclude_stale:
+            conditions.append({"source_category": {"$ne": ARCHIVE_CATEGORY}})
+            conditions.append({"status": {"$nin": STALE_STATUSES}})
         if len(conditions) == 1:
             where = conditions[0]
         elif len(conditions) > 1:

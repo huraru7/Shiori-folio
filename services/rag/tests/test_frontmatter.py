@@ -27,13 +27,13 @@ class FilterFieldsTest(unittest.TestCase):
     def test_projectとtypeを取り出す(self):
         self.assertEqual(
             _extract_filter_fields(ARTICLE),
-            {"project": "shiori", "type": "area", "author": ""},
+            {"project": "shiori", "type": "area", "author": "", "kind": "resource"},
         )
 
     def test_frontmatterが無ければ空文字列(self):
         self.assertEqual(
             _extract_filter_fields("## 見出し\nproject: shiori\n"),
-            {"project": "", "type": "", "author": ""},
+            {"project": "", "type": "", "author": "", "kind": ""},
         )
 
     def test_取り出した値で絞り込みが一致する(self):
@@ -42,6 +42,14 @@ class FilterFieldsTest(unittest.TestCase):
         self.assertTrue(matches_where(meta, {"project": "shiori"}))
         self.assertTrue(matches_where(meta, {"$and": [{"project": "shiori"}, {"type": "area"}]}))
         self.assertFalse(matches_where(meta, {"project": "tanker"}))
+
+    def test_図書館の絞り込みの演算子(self):
+        meta = {"source_category": "20-areas", "status": "new", "kind": "resource"}
+        self.assertTrue(matches_where(meta, {"source_category": {"$in": ["10-projects", "20-areas"]}}))
+        self.assertFalse(matches_where(meta, {"source_category": {"$in": ["90-archive"]}}))
+        self.assertTrue(matches_where(meta, {"status": {"$nin": ["outdated", "deprecated"]}}))
+        stale = {**meta, "status": "outdated"}
+        self.assertFalse(matches_where(stale, {"status": {"$nin": ["outdated", "deprecated"]}}))
 
 
 if __name__ == "__main__":

@@ -24,7 +24,8 @@ INDEX_STATE_FILENAME = ".index_state.json"
 # 起動時の同期(sync_index)が全ファイルを埋め込み直す。
 # 2: 記事のタイトル+要約を前置して埋め込み、メタデータにsummaryを持つ(詩織Ver3.8)。
 # 3: メタデータにproject/type/authorを持つ(/search_libraryのfilterが常に0件になる不具合の修正)。
-INDEX_SCHEMA_VERSION = 3
+# 4: メタデータにkindを持つ(図書館の種類での絞り込み、詩織Ver3.9)。
+INDEX_SCHEMA_VERSION = 4
 INDEX_SCHEMA_FILENAME = ".index_schema"
 # 素材の抽出結果のキャッシュ置き場(vectordbと同じく、libraryから作り直せる派生データ)と、
 # 抽出できなかった・飛ばした素材の記録。
@@ -77,6 +78,7 @@ _DATE_RE = re.compile(r"^date:\s*(.+?)\s*$", re.MULTILINE)
 _PROJECT_RE = re.compile(r"^project:\s*(.+?)\s*$", re.MULTILINE)
 _TYPE_RE = re.compile(r"^type:\s*(.+?)\s*$", re.MULTILINE)
 _AUTHOR_RE = re.compile(r"^author:\s*(.+?)\s*$", re.MULTILINE)
+_KIND_RE = re.compile(r"^kind:\s*(.+?)\s*$", re.MULTILINE)
 
 
 def _is_indexable(text: str) -> bool:
@@ -147,7 +149,7 @@ def _extract_date(text: str) -> str:
 
 
 def _extract_filter_fields(text: str) -> dict[str, str]:
-    """/search_libraryのfilterで絞り込むfrontmatterのproject/type/authorを取り出す。
+    """/search_libraryのfilterで絞り込むfrontmatterのproject/type/author/kindを取り出す。
     ChromaDBのwhereは完全一致のため、メタデータに無いと絞り込みが常に0件になる。
     無い項目は空文字列(status/dateと同じ扱い)。
     """
@@ -155,6 +157,7 @@ def _extract_filter_fields(text: str) -> dict[str, str]:
         "project": _extract_frontmatter_field(_PROJECT_RE, text),
         "type": _extract_frontmatter_field(_TYPE_RE, text),
         "author": _extract_frontmatter_field(_AUTHOR_RE, text),
+        "kind": _extract_frontmatter_field(_KIND_RE, text),
     }
 
 
