@@ -56,7 +56,9 @@ function CloseGuard() {
         <p className="eject-guard__lead">
           詩織を閉じても、次のプロセスはSSD上で動き続けます。SSDを取り外すなら、止めておくと安全です。
         </p>
-        <EjectSummary preview={{ ...preview, plan: { ...preview.plan, toStop: preview.leftoverAfterExit } }} />
+        <div className="eject-guard__body">
+          <EjectSummary preview={{ ...preview, plan: { ...preview.plan, toStop: preview.leftoverAfterExit } }} />
+        </div>
         <div className="eject__actions">
           <button className="control-panel__btn control-panel__btn--primary" onClick={stopAndClose} disabled={busy}>
             {busy ? "停止しています…" : "止めて閉じる"}

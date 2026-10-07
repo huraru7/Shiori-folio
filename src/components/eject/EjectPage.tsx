@@ -43,7 +43,7 @@ export function EjectPage() {
       {error && <div className="control-panel__error">失敗しました: {error}</div>}
 
       <div className="control-panel__panel">
-        {preview ? <EjectSummary preview={preview} /> : !error && <p>確認しています…</p>}
+        {preview ? <EjectSummary preview={preview} /> : !error && <p>確認しています…(数秒かかります)</p>}
 
         {outcome ? (
           <div className={`eject__result${outcome.failed.length ? " eject__result--error" : ""}`}>
