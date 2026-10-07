@@ -100,6 +100,16 @@
   opacity: 1;
 }
 
+/* 外部AIモード(詩織Ver4.0)で、意図して起動しなかったもの。 */
+.startup-screen__service-row[data-state="skipped"] .startup-screen__service-dot {
+  background: var(--paper-dim);
+  opacity: 0.4;
+}
+
+.startup-screen__service-row[data-state="skipped"] .startup-screen__service-name {
+  color: var(--paper-dim);
+}
+
 .startup-screen__service-row[data-state="failed"] .startup-screen__service-dot {
   background: var(--danger);
   opacity: 1;

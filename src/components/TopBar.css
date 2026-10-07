@@ -54,3 +54,34 @@
   font-weight: 500;
   letter-spacing: 0.02em;
 }
+
+/* 会話モード/外部AIモードの切り替え(詩織Ver4.0)。 */
+.top-bar__mode {
+  margin-left: auto;
+  margin-right: 20px;
+  display: flex;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--glass);
+  border: 0.5px solid var(--glass-border);
+}
+
+.top-bar__mode-btn {
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: 3px 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--paper-dim);
+  cursor: pointer;
+}
+
+.top-bar__mode-btn--active {
+  background: rgba(237, 230, 214, 0.12);
+  color: var(--paper);
+}
+
+.top-bar__mode-btn:disabled {
+  cursor: default;
+}

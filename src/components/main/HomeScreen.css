@@ -65,6 +65,10 @@
   background: var(--caution);
 }
 
+.home-screen__service--off .home-screen__service-dot {
+  opacity: 0.4;
+}
+
 .home-screen__service--failed .home-screen__service-dot {
   background: var(--danger);
 }

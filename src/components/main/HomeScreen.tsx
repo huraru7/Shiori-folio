@@ -145,7 +145,10 @@ function HomeScreen({ pending, onOpenPending }: Props) {
       <header className="home-screen__hello">
         <h2 className="home-screen__greeting">{greeting(now.getHours())}、ふらるさん</h2>
         <div className="home-screen__services">
-          <ServiceBadge label="会話" state={!llm ? "starting" : llm.healthy ? "ready" : "failed"} />
+          <ServiceBadge
+            label="会話"
+            state={!llm ? "starting" : llm.skipped ? "off" : llm.healthy ? "ready" : "failed"}
+          />
           <ServiceBadge label="検索" state={!searchStarted ? "starting" : searchReady ? "ready" : "failed"} />
         </div>
       </header>
@@ -222,12 +225,12 @@ function HomeScreen({ pending, onOpenPending }: Props) {
   );
 }
 
-function ServiceBadge({ label, state }: { label: string; state: "ready" | "starting" | "failed" }) {
-  const text = { ready: "使えます", starting: "準備中", failed: "起動できていません" }[state];
+function ServiceBadge({ label, state }: { label: string; state: "ready" | "starting" | "failed" | "off" }) {
+  const text = { ready: "使えます", starting: "準備中", failed: "起動できていません", off: "オフ(外部AIモード)" }[state];
   return (
     <span className={`home-screen__service home-screen__service--${state}`} title={`${label}: ${text}`}>
       <span className="home-screen__service-dot" aria-hidden="true" />
-      {label}
+      {state === "off" ? `${label}(オフ)` : label}
     </span>
   );
 }

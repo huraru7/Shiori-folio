@@ -9,6 +9,8 @@ import MainArea from "./components/main/MainArea";
 import DebugScreen from "./components/debug/DebugScreen";
 import StartupScreen from "./components/startup/StartupScreen";
 import CloseGuard from "./components/eject/CloseGuard";
+import ExternalModeNotice from "./components/ExternalModeNotice";
+import { useAppModeStore } from "./store/useAppModeStore";
 import { useShioriStore } from "./store/useShioriStore";
 import "./App.css";
 
@@ -23,6 +25,14 @@ function App() {
   const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [showStartup, setShowStartup] = useState(true);
   const [leftCollapsed, setLeftCollapsedState] = useState(getLeftCollapsed);
+  const mode = useAppModeStore((s) => s.mode);
+  const switchingMode = useAppModeStore((s) => s.switching);
+  // 外部AIモードのときと、会話モードへ戻して会話用AIを起動している最中は、会話の代わりに案内を出す。
+  const showExternalNotice = mode === "external" || (mode === "conversation" && switchingMode);
+
+  useEffect(() => {
+    useAppModeStore.getState().load();
+  }, []);
 
   const toggleLeftCollapsed = () => {
     setLeftCollapsedState((prev) => {
@@ -74,12 +84,18 @@ function App() {
         <TopBar leftCollapsed={leftCollapsed} onToggleLeftCollapsed={toggleLeftCollapsed} />
         <div className="app__body">
           <section className={`app__left${leftCollapsed ? " app__left--collapsed" : ""}`}>
-            <ConversationLog />
-            <div className="app__left-bottom">
-              <ActivityIndicator />
-              <CharacterStage />
-              <VoiceBar />
-            </div>
+            {showExternalNotice ? (
+              <ExternalModeNotice />
+            ) : (
+              <>
+                <ConversationLog />
+                <div className="app__left-bottom">
+                  <ActivityIndicator />
+                  <CharacterStage />
+                  <VoiceBar />
+                </div>
+              </>
+            )}
           </section>
           <section className="app__right">
             <MainArea onOpenDebug={() => setIsDebugOpen(true)} />

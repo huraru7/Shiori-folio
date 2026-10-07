@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import shioriMark from "../../assets/logo/shiori-mark-startup.png";
-import { api, type ServiceStatus } from "../../api/tauri";
+import { api, isServiceFailed, type ServiceStatus } from "../../api/tauri";
 import { BackendStartupError, useShioriStore } from "../../store/useShioriStore";
 import "./StartupScreen.css";
 
@@ -78,7 +78,7 @@ function StartupScreen({ onFinished }: Props) {
       .catch((err) => {
         if (cancelled) return;
         if (err instanceof BackendStartupError) {
-          setFailedServices(err.services.filter((s) => !s.healthy));
+          setFailedServices(err.services.filter(isServiceFailed));
         } else {
           setReady(true);
         }
@@ -99,7 +99,7 @@ function StartupScreen({ onFinished }: Props) {
       } else {
         // llm/embeddingはセットで再起動される(restart_llm_services)。
         const results = await api.restartLlmServices();
-        const stillUnhealthy = new Map(results.filter((r) => !r.healthy).map((r) => [r.name, r]));
+        const stillUnhealthy = new Map(results.filter(isServiceFailed).map((r) => [r.name, r]));
         setFailedServices((prev) => {
           const others = prev?.filter((s) => s.name !== "llm" && s.name !== "embedding") ?? [];
           return [...others, ...stillUnhealthy.values()];
@@ -169,11 +169,14 @@ function StartupScreen({ onFinished }: Props) {
       <div className="startup-screen__service-list">
         {SERVICE_ORDER.map((name) => {
           const status = serviceStatuses[name];
-          const state = !status ? "pending" : status.healthy ? "done" : "failed";
+          const state = !status ? "pending" : status.skipped ? "skipped" : status.healthy ? "done" : "failed";
           return (
             <div className="startup-screen__service-row" key={name} data-state={state}>
               <span className="startup-screen__service-dot" aria-hidden="true" />
-              <span className="startup-screen__service-name">{serviceLabel(name)}</span>
+              <span className="startup-screen__service-name">
+                {serviceLabel(name)}
+                {state === "skipped" && "(外部AIモードでは使いません)"}
+              </span>
             </div>
           );
         })}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDateDisplayStore, type DateDisplayConfig } from "../store/useDateDisplayStore";
+import { useAppModeStore } from "../store/useAppModeStore";
 import shioriMark from "../assets/logo/shiori-mark-header.png";
 import "./TopBar.css";
 
@@ -30,6 +31,9 @@ interface Props {
 function TopBar({ leftCollapsed, onToggleLeftCollapsed }: Props) {
   const [now, setNow] = useState(new Date());
   const dateConfig = useDateDisplayStore((s) => s.config);
+  const mode = useAppModeStore((s) => s.mode);
+  const switchingMode = useAppModeStore((s) => s.switching);
+  const changeMode = useAppModeStore((s) => s.change);
 
   useEffect(() => {
     // 秒を出さないときも、分の切り替わりが遅れないよう1秒ごとに更新する。
@@ -60,6 +64,30 @@ function TopBar({ leftCollapsed, onToggleLeftCollapsed }: Props) {
           {leftCollapsed ? "▶" : "◀"}
         </button>
       </div>
+      {mode && (
+        <div className="top-bar__mode" role="group" aria-label="モード">
+          <button
+            type="button"
+            aria-pressed={mode === "conversation"}
+            className={`top-bar__mode-btn${mode === "conversation" ? " top-bar__mode-btn--active" : ""}`}
+            disabled={switchingMode}
+            onClick={() => changeMode("conversation")}
+            title="詩織と会話するモード(会話用のAIを使う)"
+          >
+            会話
+          </button>
+          <button
+            type="button"
+            aria-pressed={mode === "external"}
+            className={`top-bar__mode-btn${mode === "external" ? " top-bar__mode-btn--active" : ""}`}
+            disabled={switchingMode}
+            onClick={() => changeMode("external")}
+            title="Claudeなど外部のAIと使うモード(会話用のAIを止めてVRAMを空ける)"
+          >
+            外部AI
+          </button>
+        </div>
+      )}
       <div className="top-bar__datetime">
         <div className="top-bar__date">{formatDate(now, dateConfig)}</div>
         <div className="top-bar__time">{timeText}</div>

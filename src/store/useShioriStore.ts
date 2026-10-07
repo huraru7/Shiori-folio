@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { listen } from "@tauri-apps/api/event";
-import { api, type ServiceStatus } from "../api/tauri";
+import { api, isServiceFailed, type ServiceStatus } from "../api/tauri";
 import type {
   ActiveTool,
   KnowledgeResult,
@@ -246,7 +246,7 @@ export const useShioriStore = create<ShioriState>((set, get) => ({
         // start_backend_services自体はhealthy:falseでもOk(...)を返す設計のため、
         // ここで明示的にチェックする(このチェックを飛ばすと、RAGサーバーが
         // 起動できていないままホーム画面へ進んでしまう)。
-        const unhealthy = results.filter((r) => !r.healthy);
+        const unhealthy = results.filter(isServiceFailed);
         if (unhealthy.length > 0) {
           // 失敗した状態のPromiseをキャッシュしたままにすると、再試行後に
           // このメソッドを呼び直しても同じ失敗結果が返り続けてしまうため、
