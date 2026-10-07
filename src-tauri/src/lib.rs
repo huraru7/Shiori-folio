@@ -1,6 +1,7 @@
 mod audio;
 mod claude_status;
 mod db;
+pub mod eject;
 #[cfg(windows)]
 mod disk_io;
 mod llm_client;
@@ -1195,6 +1196,55 @@ struct ConfigDto {
     show_month: bool,
     show_day: bool,
     show_weekday: bool,
+}
+
+// 実機SSDを取り外せる状態にする(取り外し機能)。止める対象の選び方は`eject.rs`を参照。
+// 外付けSSD上のプロセス一覧・lsofを使うため、tauriの同期コマンドがUIを固める問題
+// (2026-10-02)を踏まえ、asyncにしてspawn_blockingで実行する。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EjectPreview {
+    plan: eject::Plan,
+    /// 止める予定のうち、詩織を閉じても残るもの(詩織の子プロセスではないもの)。詩織は終了時に
+    /// 自分の子だけを止めるため、MCPや別のセッションが起動した共有デーモンがここに入る。
+    /// 閉じるときの確認を出すかどうかの判定に使う。
+    leftover_after_exit: Vec<eject::Entry>,
+    /// `lsof`で見つかった、ほかにSSDを開いているプロセス(pid, 名前)。止めはしない。
+    other_holders: Vec<(u32, String)>,
+}
+
+#[tauri::command]
+async fn eject_preview() -> Result<EjectPreview, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let root = project_root();
+        let (plan, _sys) = eject::current_plan(&root);
+        let skip: Vec<u32> = plan.to_stop.iter().chain(plan.in_use.iter()).map(|e| e.pid).collect();
+        let other_holders = eject::other_holders(&root, &skip);
+        let me = std::process::id();
+        let leftover_after_exit = plan.to_stop.iter().filter(|e| e.parent_pid != Some(me)).cloned().collect();
+        EjectPreview { plan, leftover_after_exit, other_holders }
+    })
+    .await
+    .map_err(|e| format!("取り外しの確認に失敗: {e}"))
+}
+
+/// SSD上のほかのプロセスを止めてから、詩織自身も終了する。結果を返した少し後に終了するので、
+/// フロントは結果を表示できる。止められなかったものがあっても、詩織は終了する(再度の確認は
+/// `shiori-eject`か、再起動後にこの画面で行う)。
+#[tauri::command]
+async fn eject_execute(app: tauri::AppHandle) -> Result<eject::StopOutcome, String> {
+    let outcome = tauri::async_runtime::spawn_blocking(|| {
+        let (plan, _sys) = eject::current_plan(&project_root());
+        let pids: Vec<u32> = plan.to_stop.iter().map(|e| e.pid).collect();
+        eject::stop_processes(&pids)
+    })
+    .await
+    .map_err(|e| format!("プロセスの停止に失敗: {e}"))?;
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(800));
+        app.exit(0);
+    });
+    Ok(outcome)
 }
 
 // Claudeモニター(詩織Ver3.7)。Claude Code側のフックが書いた`data/claude-status/`を
@@ -4627,6 +4677,8 @@ pub fn run() {
             get_system_info,
             get_config,
             list_claude_sessions,
+            eject_preview,
+            eject_execute,
             set_config,
             restart_llm_services,
             retry_rag_service,
