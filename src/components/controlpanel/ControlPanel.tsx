@@ -6,15 +6,17 @@ import { AdvancedSettingsPage } from "./AdvancedSettingsPage";
 import { ModelSwitchPage } from "./ModelSwitchPage";
 import { SystemStatusPage } from "./SystemStatusPage";
 import { VoiceSettingsPage } from "./VoiceSettingsPage";
+import { EjectPage } from "../eject/EjectPage";
 import { HISTORY_LENGTH } from "./shared";
 
-type NavKey = "system" | "voice" | "advanced" | "model";
+type NavKey = "system" | "voice" | "advanced" | "model" | "eject";
 
 const NAV_ITEMS: { key: NavKey; label: string; level: "safe" | "caution" | "danger" }[] = [
   { key: "system", label: "システム状態", level: "safe" },
   { key: "voice", label: "音声設定", level: "safe" },
   { key: "advanced", label: "詳細設定", level: "caution" },
   { key: "model", label: "モデル切替", level: "danger" },
+  { key: "eject", label: "SSDの取り外し", level: "caution" },
 ];
 
 // 設定ウィンドウ(2026-08-12、デスクトップ型ウィンドウシステムの本実装3-3)。
@@ -109,6 +111,7 @@ function ControlPanel() {
         )}
         {activeNav === "voice" && <VoiceSettingsPage />}
         {activeNav === "advanced" && <AdvancedSettingsPage />}
+        {activeNav === "eject" && <EjectPage />}
         {activeNav === "model" && (
           <ModelSwitchPage onSwitchingChange={setIsSwitchingModel} platform={info?.platform ?? null} />
         )}

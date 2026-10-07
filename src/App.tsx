@@ -9,6 +9,7 @@ import DesktopArea from "./components/desktop/DesktopArea";
 import Dock from "./components/desktop/Dock";
 import DebugScreen from "./components/debug/DebugScreen";
 import StartupScreen from "./components/startup/StartupScreen";
+import CloseGuard from "./components/eject/CloseGuard";
 import { useShioriStore } from "./store/useShioriStore";
 import "./App.css";
 
@@ -58,11 +59,17 @@ function App() {
   }, []);
 
   if (isDebugOpen) {
-    return <DebugScreen onClose={() => setIsDebugOpen(false)} />;
+    return (
+      <>
+        <CloseGuard />
+        <DebugScreen onClose={() => setIsDebugOpen(false)} />
+      </>
+    );
   }
 
   return (
     <>
+      <CloseGuard />
       {showStartup && <StartupScreen onFinished={() => setShowStartup(false)} />}
       <div className="app">
         <TopBar leftCollapsed={leftCollapsed} onToggleLeftCollapsed={toggleLeftCollapsed} />

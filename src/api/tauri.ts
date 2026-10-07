@@ -3,6 +3,8 @@ import type {
   AppConfigDto,
   AppConfigUpdate,
   ClaudeSession,
+  EjectOutcome,
+  EjectPreview,
   KnowledgeResult,
   LibraryFile,
   ModelInfo,
@@ -65,6 +67,9 @@ export const api = {
   getConfig: () => invoke<AppConfigDto>("get_config"),
 
   listClaudeSessions: () => invoke<ClaudeSession[]>("list_claude_sessions"),
+
+  ejectPreview: () => invoke<EjectPreview>("eject_preview"),
+  ejectExecute: () => invoke<EjectOutcome>("eject_execute"),
 
   setConfig: (update: AppConfigUpdate) => invoke<void>("set_config", { update }),
 

@@ -229,3 +229,32 @@ export interface ClaudeSession {
   startedAt: number;
   updatedAt: number;
 }
+
+// 取り外し機能。止める予定のもの(toStop)と、止めないが使っているもの(inUse)。
+export interface EjectEntry {
+  pid: number;
+  parentPid: number | null;
+  name: string;
+  exe: string;
+  // 使用中のものに付く、何が使っているか・どう対処するかの説明。
+  note: string;
+}
+
+export interface EjectPlan {
+  toStop: EjectEntry[];
+  inUse: EjectEntry[];
+}
+
+export interface EjectPreview {
+  plan: EjectPlan;
+  // 止める予定のうち、詩織を閉じても残るもの(MCPなどが起動した共有デーモン)。
+  leftoverAfterExit: EjectEntry[];
+  // lsofで見つかった、ほかにSSDを開いているプロセス [pid, 名前]。
+  otherHolders: [number, string][];
+}
+
+export interface EjectOutcome {
+  stopped: number[];
+  forced: number[];
+  failed: number[];
+}
