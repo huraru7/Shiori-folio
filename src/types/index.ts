@@ -215,3 +215,17 @@ export interface RagasHistory {
   headers: string[];
   rows: string[][];
 }
+
+// Claudeモニター(Ver3.7)。state: working=作業中 / waiting=入力待ち / idle=待機 /
+// ended=終了 / stale=更新が止まったまま(応答なし)。時刻はエポックミリ秒。
+export type ClaudeSessionState = "working" | "waiting" | "idle" | "ended" | "stale";
+
+export interface ClaudeSession {
+  sessionId: string;
+  project: string;
+  title: string;
+  host: string;
+  state: ClaudeSessionState;
+  startedAt: number;
+  updatedAt: number;
+}

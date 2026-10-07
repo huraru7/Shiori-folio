@@ -1,0 +1,97 @@
+.claude-monitor {
+  font-family: var(--font-body);
+  color: var(--paper);
+}
+
+.claude-monitor__empty {
+  color: var(--paper-dim);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.claude-monitor__error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  margin: 0 0 8px;
+}
+
+.claude-monitor__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.claude-monitor__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--glass);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 8px;
+}
+
+.claude-monitor__badge {
+  flex: 0 0 auto;
+  min-width: 56px;
+  text-align: center;
+  font-size: 10.5px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--paper-dim);
+  border: 0.5px solid var(--glass-border);
+}
+
+.claude-monitor__badge--working {
+  color: var(--safe);
+  background: var(--safe-bg);
+  border-color: var(--safe);
+}
+
+.claude-monitor__badge--waiting {
+  color: var(--caution);
+  background: var(--caution-bg);
+  border-color: var(--caution);
+}
+
+.claude-monitor__badge--stale {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-color: var(--danger);
+}
+
+.claude-monitor__badge--ended {
+  opacity: 0.6;
+}
+
+.claude-monitor__body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.claude-monitor__project {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.claude-monitor__title {
+  font-size: 0.72rem;
+  color: var(--paper-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.claude-monitor__meta {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-size: 10px;
+  color: var(--paper-dim);
+}

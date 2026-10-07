@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppConfigDto,
   AppConfigUpdate,
+  ClaudeSession,
   KnowledgeResult,
   LibraryFile,
   ModelInfo,
@@ -62,6 +63,8 @@ export const api = {
     }),
 
   getConfig: () => invoke<AppConfigDto>("get_config"),
+
+  listClaudeSessions: () => invoke<ClaudeSession[]>("list_claude_sessions"),
 
   setConfig: (update: AppConfigUpdate) => invoke<void>("set_config", { update }),
 

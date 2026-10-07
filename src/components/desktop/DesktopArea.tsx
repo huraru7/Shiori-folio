@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import OsWindow from "./OsWindow";
 import KnowledgePanel from "../panels/KnowledgePanel";
+import ClaudeMonitorPanel from "../panels/ClaudeMonitorPanel";
 import LibraryScreen from "../library/LibraryScreen";
 import LibraryBrowseScreen from "../library/LibraryBrowseScreen";
 import ControlPanel from "../controlpanel/ControlPanel";
@@ -58,6 +59,20 @@ function DesktopArea() {
         fillBody
       >
         <LibraryBrowseScreen />
+      </OsWindow>
+
+      <OsWindow
+        id="claude-monitor"
+        title="Claudeモニター"
+        defaultX={180}
+        defaultY={100}
+        defaultWidth={420}
+        defaultHeight={320}
+        minWidth={300}
+        minHeight={200}
+        containerRef={containerRef}
+      >
+        <ClaudeMonitorPanel />
       </OsWindow>
 
       <OsWindow

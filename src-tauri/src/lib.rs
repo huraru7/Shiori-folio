@@ -1,4 +1,5 @@
 mod audio;
+mod claude_status;
 mod db;
 #[cfg(windows)]
 mod disk_io;
@@ -1194,6 +1195,25 @@ struct ConfigDto {
     show_month: bool,
     show_day: bool,
     show_weekday: bool,
+}
+
+// Claudeモニター(詩織Ver3.7)。Claude Code側のフックが書いた`data/claude-status/`を
+// 読んで返す。外付けSSD(exFAT)上のディレクトリを数秒ごとに読むため、tauriの
+// 同期コマンドがUIを固める問題(2026-10-02)を踏まえ、asyncにしてspawn_blockingで
+// 読む。
+#[tauri::command]
+async fn list_claude_sessions() -> Result<Vec<claude_status::ClaudeSession>, String> {
+    let dir = project_root().join("data").join("claude-status");
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("現在時刻の取得に失敗: {e}"))?
+        .as_millis() as u64;
+    let local_host = if cfg!(windows) { "win" } else { "mac" };
+    tauri::async_runtime::spawn_blocking(move || {
+        claude_status::read_sessions(&dir, now_ms, local_host, &claude_status::is_claude_alive)
+    })
+        .await
+        .map_err(|e| format!("Claudeの状況の読み取りに失敗: {e}"))
 }
 
 #[tauri::command]
@@ -4606,6 +4626,7 @@ pub fn run() {
             preview_voice,
             get_system_info,
             get_config,
+            list_claude_sessions,
             set_config,
             restart_llm_services,
             retry_rag_service,
