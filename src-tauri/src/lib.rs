@@ -825,6 +825,17 @@ fn macos_local_vectordb_dir() -> Option<PathBuf> {
     )
 }
 
+// RAGサーバーが索引(ChromaDBと進捗ファイル)を置くディレクトリ。Python側の
+// resolve_vectordb_dir(library_path.py)と同じ場所を指す必要がある
+// (macOSはSHIORI_VECTORDB_DIRで上のローカルディスクへ逃がし、それ以外はdata/vectordb)。
+pub fn rag_vectordb_dir(root: &Path) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    if let Some(dir) = macos_local_vectordb_dir() {
+        return dir;
+    }
+    root.join("data").join("vectordb")
+}
+
 pub fn build_rag_command(root: &Path, port: u16, quiet_stdio: bool) -> std::io::Result<Child> {
     let rag_dir = root.join("services/rag");
     // 【2026-08-13修正】ポータブル版(bin/<os>/rag-venv)はuv python installで
@@ -937,9 +948,21 @@ fn start_rag_service_core(
     // 同じくshared_daemon経由で起動する。リランカーのwarmup(services/rag/app.py)
     // 込みで起動に時間がかかりうるため、ヘルスチェックの試行回数はembeddingより
     // 多めに取る。
-    match shared_daemon::ensure_daemon_running(root, config.rag.port, ".shiori-rag.lock", 60, || {
-        build_rag_command(root, config.rag.port, false)
-    }) {
+    // 索引の版が上がった初回など、起動時の同期が長引くときは、進捗ファイルを見て
+    // killせずに待ち、起動画面に進み具合を出す(shared_daemon::DaemonProgress参照)。
+    let on_label = |label: &str| emit_startup_stage(app, label);
+    let progress = shared_daemon::DaemonProgress {
+        file: rag_vectordb_dir(root).join(".index_progress.json"),
+        on_label: &on_label,
+    };
+    match shared_daemon::ensure_daemon_running_with_progress(
+        root,
+        config.rag.port,
+        ".shiori-rag.lock",
+        60,
+        || build_rag_command(root, config.rag.port, false),
+        Some(&progress),
+    ) {
         Ok(child) => (
             ServiceStatus { skipped: false, name: "rag".into(), port: config.rag.port, started: true, healthy: true, error: None },
             child,

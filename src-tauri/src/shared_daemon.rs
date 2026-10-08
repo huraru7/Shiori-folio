@@ -91,6 +91,80 @@ pub fn ensure_daemon_running(
     startup_attempts: u32,
     spawn: impl FnOnce() -> std::io::Result<Child>,
 ) -> Result<Option<Child>, String> {
+    ensure_daemon_running_with_progress(root, port, lock_file_name, startup_attempts, spawn, None)
+}
+
+/// 起動処理の途中経過を書くファイル(RAGの`.index_progress.json`)の見方。
+pub struct DaemonProgress<'a> {
+    pub file: PathBuf,
+    /// 進み具合のラベルが変わるたびに呼ばれる(起動画面への表示用)。
+    pub on_label: &'a dyn Fn(&str),
+}
+
+/// 進捗ファイルが、この秒数より長く更新されていなければ「止まった」と見なす。
+/// 1ファイルの埋め込み(大きな素材など)に数十秒かかっても止まったと誤認しない長さにしている。
+const PROGRESS_STALE_SECS: u64 = 180;
+
+/// 進捗ファイルが更新され続けていれば、その内容を表示用のラベルにして返す。
+/// ファイルが無い・古い場合はNone(=作業中ではない)。
+fn read_progress_label(file: &Path) -> Option<String> {
+    let age = std::fs::metadata(file).ok()?.modified().ok()?.elapsed().ok()?;
+    if age.as_secs() > PROGRESS_STALE_SECS {
+        return None;
+    }
+    // 書き込み途中で読んだ場合などは中身が読めないが、更新はされているので作業中として扱う。
+    let value: serde_json::Value = std::fs::read_to_string(file)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(serde_json::Value::Null);
+    let (Some(done), Some(total)) = (value["done"].as_u64(), value["total"].as_u64()) else {
+        return Some("検索の索引を準備しています".to_string());
+    };
+    let n = (done + 1).min(total);
+    Some(match value["phase"].as_str() {
+        Some("rebuilding") => {
+            format!("検索の索引を作り直しています({n}/{total})。数分かかることがあります")
+        }
+        _ => format!("検索の索引を更新しています({n}/{total})"),
+    })
+}
+
+/// `wait_for_health`の進捗つき版。ヘルスチェックが通らなくても、進捗ファイルが
+/// 更新され続けている間は「起動に失敗した」と数えず待ち続ける(RAGは起動時の同期が
+/// 終わるまでポートを開かないため、全件の再登録が長引くと、進捗が無ければ失敗と
+/// 誤判定されて子プロセスをkillしてしまう)。進捗が無い状態が`attempts`回続けば
+/// 従来どおり失敗とする。
+fn wait_for_health_with_progress(port: u16, attempts: u32, progress: Option<&DaemonProgress>) -> bool {
+    let mut idle = 0;
+    let mut last_label = String::new();
+    while idle < attempts {
+        if wait_for_health(port, 1) {
+            return true;
+        }
+        match progress.and_then(|p| read_progress_label(&p.file).map(|label| (p, label))) {
+            Some((p, label)) => {
+                if label != last_label {
+                    (p.on_label)(&label);
+                    last_label = label;
+                }
+                idle = 0;
+            }
+            None => idle += 1,
+        }
+    }
+    false
+}
+
+/// `ensure_daemon_running`の進捗つき版。`progress`を渡すと、起動待ちの間に
+/// 進捗ファイルを見て、作業中ならkillせずに待ち、ラベルを通知する。
+pub fn ensure_daemon_running_with_progress(
+    root: &Path,
+    port: u16,
+    lock_file_name: &str,
+    startup_attempts: u32,
+    spawn: impl FnOnce() -> std::io::Result<Child>,
+    progress: Option<&DaemonProgress>,
+) -> Result<Option<Child>, String> {
     if wait_for_health(port, 1) {
         return Ok(None);
     }
@@ -116,7 +190,7 @@ pub fn ensure_daemon_running(
                 }
                 let outcome = match spawn() {
                     Ok(mut child) => {
-                        if wait_for_health(port, startup_attempts) {
+                        if wait_for_health_with_progress(port, startup_attempts, progress) {
                             write_pid(&mut lock_file, child.id());
                             Ok(Some(child))
                         } else {
@@ -140,5 +214,48 @@ pub fn ensure_daemon_running(
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_file(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("shiori-progress-{}-{name}", std::process::id()))
+    }
+
+    #[test]
+    fn progress_label_is_none_when_file_is_missing() {
+        assert_eq!(read_progress_label(&temp_file("missing.json")), None);
+    }
+
+    #[test]
+    fn progress_label_shows_rebuilding_and_syncing() {
+        let file = temp_file("labels.json");
+        std::fs::write(&file, r#"{"phase":"rebuilding","done":11,"total":87}"#).unwrap();
+        let label = read_progress_label(&file).unwrap();
+        assert!(label.contains("作り直して") && label.contains("12/87"), "{label}");
+
+        std::fs::write(&file, r#"{"phase":"syncing","done":0,"total":2}"#).unwrap();
+        let label = read_progress_label(&file).unwrap();
+        assert!(label.contains("更新して") && label.contains("1/2"), "{label}");
+        let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
+    fn progress_label_treats_unreadable_but_fresh_file_as_working() {
+        let file = temp_file("partial.json");
+        std::fs::write(&file, "{\"phase\":").unwrap();
+        assert_eq!(read_progress_label(&file).as_deref(), Some("検索の索引を準備しています"));
+        let _ = std::fs::remove_file(&file);
+    }
+
+    #[test]
+    fn wait_gives_up_after_attempts_when_there_is_no_progress() {
+        // 何も待ち受けていないポートで、進捗ファイルも無ければ、従来どおり失敗する。
+        let on_label = |_: &str| {};
+        let progress = DaemonProgress { file: temp_file("none.json"), on_label: &on_label };
+        assert!(!wait_for_health_with_progress(1, 2, Some(&progress)));
     }
 }

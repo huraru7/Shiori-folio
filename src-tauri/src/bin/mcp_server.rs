@@ -140,9 +140,19 @@ impl ShioriLibrary {
         )
         .map_err(|e| McpError::internal_error(e, None))?;
 
-        shared_daemon::ensure_daemon_running(&root, backend.rag_port, ".shiori-rag.lock", 60, || {
-            build_rag_command(&root, backend.rag_port, true)
-        })
+        // 索引の再登録が長引いても、進捗が更新されている間はkillせずに待つ(表示先は無い)。
+        let progress = shared_daemon::DaemonProgress {
+            file: shiori_folio_lib::rag_vectordb_dir(&root).join(".index_progress.json"),
+            on_label: &|_| {},
+        };
+        shared_daemon::ensure_daemon_running_with_progress(
+            &root,
+            backend.rag_port,
+            ".shiori-rag.lock",
+            60,
+            || build_rag_command(&root, backend.rag_port, true),
+            Some(&progress),
+        )
         .map_err(|e| McpError::internal_error(e, None))?;
 
         let filter = if args.author.is_some() || args.r#type.is_some() || args.project.is_some() {
