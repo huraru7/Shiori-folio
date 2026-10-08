@@ -31,6 +31,10 @@ INDEX_SCHEMA_FILENAME = ".index_schema"
 # 抽出できなかった・飛ばした素材の記録。
 EXTRACT_CACHE_DIRNAME = "extract-cache"
 EXTRACT_WARNINGS_FILENAME = ".extract_warnings.json"
+# 起動時の同期の進み具合。uvicornは起動処理(sync_index)が終わるまでポートを開かず、/healthにも
+# 応答できない。そこで、待つ側(Rustの起動待ち)がこのファイルの更新を見て「止まったのではなく
+# 作業中」と判断し、起動画面に進み具合を出す。同期が終われば消す。
+INDEX_PROGRESS_FILENAME = ".index_progress.json"
 
 # 素材ファイル(zip・png・pdf等)の説明を書いたサイドカー。「X.zip」に対して
 # 「X.zip.meta」を置く(詩織Ver3.5)。中身はmdと同じfrontmatter+本文のため、
@@ -230,6 +234,25 @@ def save_index_schema(vectordb_dir: Path) -> None:
 def save_index_state(vectordb_dir: Path, state: dict[str, float]) -> None:
     path = vectordb_dir / INDEX_STATE_FILENAME
     path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def write_index_progress(vectordb_dir: Path, phase: str, done: int, total: int) -> None:
+    """同期の進み具合を書く。phaseは"rebuilding"(版が上がった全件の再登録)か"syncing"(変更分の反映)。
+    進捗は表示用の補助なので、書けなくても同期そのものは止めない。
+    """
+    try:
+        (vectordb_dir / INDEX_PROGRESS_FILENAME).write_text(
+            json.dumps({"phase": phase, "done": done, "total": total}), encoding="utf-8"
+        )
+    except OSError:
+        pass
+
+
+def clear_index_progress(vectordb_dir: Path) -> None:
+    try:
+        (vectordb_dir / INDEX_PROGRESS_FILENAME).unlink()
+    except OSError:
+        pass
 
 
 def load_extract_warnings(vectordb_dir: Path) -> dict[str, dict]:
@@ -491,6 +514,12 @@ def sync_index(
         ]
         if stale_ids:
             collection.delete(ids=stale_ids)
+        # 版の印を、再登録を始める前に保存する(空の状態を先に保存してから)。印が最後にしか
+        # 保存されないと、途中で止まった次の起動がまた最初から全件をやり直してしまう。
+        # 先に保存しておけば、次の起動は途中までの状態(下のループが1件ごとに保存する)を
+        # 引き継ぎ、まだ登録していないファイルだけを続きから登録する。
+        save_index_state(vectordb_dir, state)
+        save_index_schema(vectordb_dir)
     for rel in list(state.keys()):
         if rel not in current_paths:
             if Path(rel).name not in current_names:
@@ -499,26 +528,34 @@ def sync_index(
             del state[rel]
             removed.append(rel)
 
+    todo = []
     for rel, md_path in current_paths.items():
         mtime = _state_mtime(md_path)
-        prior = state.get(rel)
-        if prior == mtime:
-            continue
-        category = source_category_for(md_path, knowledge_dir)
-        try:
-            _embed_file(collection, http_client, md_path, category, rel, vectordb_dir)
-        except (UnicodeDecodeError, OSError) as e:
-            # 1ファイルの読み込み失敗で全体(起動シーケンスを含む)を巻き込まない。
-            # 「なんでも保存」方針上、壊れたファイルが1つあってもアプリは
-            # 動き続けるべき(そのファイルが検索に出てこないだけに留める)。
-            print(f"警告: {rel} の読み込みに失敗したためスキップします({e})", file=sys.stderr)
-            continue
-        (added if prior is None else updated).append(rel)
-        state[rel] = mtime
+        if state.get(rel) != mtime:
+            todo.append((rel, md_path, mtime))
+
+    phase = "rebuilding" if schema_changed else "syncing"
+    try:
+        for done, (rel, md_path, mtime) in enumerate(todo):
+            write_index_progress(vectordb_dir, phase, done, len(todo))
+            prior = state.get(rel)
+            category = source_category_for(md_path, knowledge_dir)
+            try:
+                _embed_file(collection, http_client, md_path, category, rel, vectordb_dir)
+            except (UnicodeDecodeError, OSError) as e:
+                # 1ファイルの読み込み失敗で全体(起動シーケンスを含む)を巻き込まない。
+                # 「なんでも保存」方針上、壊れたファイルが1つあってもアプリは
+                # 動き続けるべき(そのファイルが検索に出てこないだけに留める)。
+                print(f"警告: {rel} の読み込みに失敗したためスキップします({e})", file=sys.stderr)
+                continue
+            (added if prior is None else updated).append(rel)
+            state[rel] = mtime
+            # 1件ごとに状態を保存し、途中で止まっても登録済みの分は次回に引き継ぐ。
+            save_index_state(vectordb_dir, state)
+    finally:
+        clear_index_progress(vectordb_dir)
 
     if added or updated or removed or schema_changed:
         save_index_state(vectordb_dir, state)
-    if schema_changed:
-        save_index_schema(vectordb_dir)
 
     return collection, {"added": added, "updated": updated, "removed": removed}
