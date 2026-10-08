@@ -975,8 +975,9 @@ fn start_rag_service_core(
 }
 
 // start_rag_service_coreを呼び、結果のChildをBackendProcessesへ格納するところまで
-// 行う薄いラッパー。retry_rag_service(同期的な呼び出しで十分な再試行ボタン用途)と
-// 既存テストはこちらを使う。
+// 行う薄いラッパー。本体の起動経路は非同期化でstart_rag_service_coreを直接呼ぶ形に
+// なったため、今は既存テストだけが使う(製品ビルドでは未使用警告になるのでテスト限定)。
+#[cfg(test)]
 fn start_rag_service(
     procs: &mut BackendProcesses,
     app: Option<&tauri::AppHandle>,
