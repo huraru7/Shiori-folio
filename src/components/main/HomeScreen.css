@@ -140,6 +140,14 @@
   overflow: hidden;
 }
 
+/* memory由来の申し送りの、行頭のラベル(やること/申し送り)。 */
+.home-screen__handoff-label {
+  margin-right: 8px;
+  color: var(--moss);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+}
+
 .home-screen__recent-section {
   flex: 1 1 auto;
   min-height: 0;

@@ -87,7 +87,9 @@ export interface LibraryFilter {
   kind: string | null;
 }
 
-// ホームの「前回の申し送り」(詩織Ver3.9)。
+// ホームの申し送り(詩織Ver3.9。Ver4.1でmemoryを優先)。fromMemoryのときはmemoryの
+// 「やること」(todos)と「申し送り・待ち」(notes)、そうでなければjournalの申し送り(items)。
+// dateはmemoryなら最終更新日(updated)。
 export interface Handoff {
   title: string;
   project: string;
@@ -95,6 +97,9 @@ export interface Handoff {
   source: string;
   sourceCategory: string;
   items: string[];
+  fromMemory: boolean;
+  todos: string[];
+  notes: string[];
 }
 
 // 記事詳細画面(Ver3.0、UI改善4-2節)向け。frontmatterの構造化フィールド。

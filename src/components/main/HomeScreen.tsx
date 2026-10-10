@@ -11,6 +11,9 @@ import "./HomeScreen.css";
 const RECENT_MAX = 5;
 // 記録1行ぶんの高さ(px)。HomeScreen.cssの.home-screen__recent-itemと合わせる。
 const RECENT_ROW_HEIGHT = 36;
+// ホームの申し送り(memory由来)に出す項目数。全文は、見出しを押してmemoryを開いて読む。
+const HANDOFF_TODOS_MAX = 3;
+const HANDOFF_NOTES_MAX = 2;
 
 interface Props {
   pending: PendingItems | null;
@@ -177,12 +180,31 @@ function HomeScreen({ pending, onOpenPending }: Props) {
             onClick={() => setOpened({ source: handoff.source, sourceCategory: handoff.sourceCategory, assetPath: "" })}
             title={handoff.title}
           >
-            前回の申し送り
+            {handoff.fromMemory ? "いまの申し送り" : "前回の申し送り"}
             <span className="home-screen__dim">
-              {[handoff.project, handoff.date].filter(Boolean).join(" · ")}
+              {[handoff.project, handoff.fromMemory ? `更新 ${handoff.date}` : handoff.date]
+                .filter(Boolean)
+                .join(" · ")}
             </span>
           </button>
-          <p className="home-screen__handoff-body">{handoff.items.join(" / ")}</p>
+          {handoff.fromMemory ? (
+            <>
+              {handoff.todos.length > 0 && (
+                <p className="home-screen__handoff-body">
+                  <span className="home-screen__handoff-label">やること</span>
+                  {handoff.todos.slice(0, HANDOFF_TODOS_MAX).join(" / ")}
+                </p>
+              )}
+              {handoff.notes.length > 0 && (
+                <p className="home-screen__handoff-body">
+                  <span className="home-screen__handoff-label">申し送り</span>
+                  {handoff.notes.slice(0, HANDOFF_NOTES_MAX).join(" / ")}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="home-screen__handoff-body">{handoff.items.join(" / ")}</p>
+          )}
         </section>
       )}
 

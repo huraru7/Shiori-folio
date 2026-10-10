@@ -13,6 +13,8 @@ mod piper_client;
 mod prompts;
 pub mod rag_client;
 pub mod shared_daemon;
+mod handoff_memory;
+mod source_path;
 mod system_docs;
 mod system_info;
 mod text_transform;
@@ -1924,26 +1926,6 @@ pub struct LibraryFileDto {
     mtime: f64,
 }
 
-// source_category配下を再帰的に探索し、ファイル名が一致する最初のファイルを
-// 返す(詩織Ver3.1、journal廃止・project/area配下への階層深化に伴い追加。
-// services/rag/app.pyの_resolve_source_pathと同じ考え方)。project/areaの
-// 記事はsource_category直下からさらにproject名/kindの2階層深くなるため、
-// 直接のjoinでは見つけられない。
-fn find_file_by_name(dir: &Path, file_name: &str) -> Option<PathBuf> {
-    let entries = std::fs::read_dir(dir).ok()?;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            if let Some(found) = find_file_by_name(&path, file_name) {
-                return Some(found);
-            }
-        } else if path.file_name().and_then(|n| n.to_str()) == Some(file_name) {
-            return Some(path);
-        }
-    }
-    None
-}
-
 // KnowledgePanelの参照情報をクリックした際、元のMarkdownファイル全文を返す
 // (v1.0スコープ機能1: 参照資料の表示モーダル)。source_category/sourceから
 // library/配下のパスを組み立てるが、ユーザー入力(というよりLLM経由の
@@ -1964,7 +1946,8 @@ fn get_source_document_blocking(source_category: String, source: String) -> Resu
     } else {
         knowledge_root.join(&source_category)
     };
-    let candidate = find_file_by_name(&search_root, &source)
+    // sourceは通常ファイル名。memoryだけ「project/memory.md」(source_path.rs参照)。
+    let candidate = source_path::resolve_source_file(&search_root, &source)
         .ok_or_else(|| "指定された参照資料が見つかりませんでした。".to_string())?;
 
     let canonical_root = knowledge_root
@@ -2217,13 +2200,18 @@ fn read_article_preview(path: &str) -> ArticlePreview {
     }
 }
 
-/// frontmatterの`date`(日付だけ、日時、引用符の有無がまちまち)を`YYYY-MM-DD`にする。
-fn display_date(value: &serde_yaml::Value) -> String {
+/// frontmatterの日付の値(日付だけ、日時、引用符の有無がまちまち)を、前後の空白を除いた文字列にする。
+fn yaml_value_text(value: &serde_yaml::Value) -> String {
     let text = match value {
         serde_yaml::Value::String(s) => s.clone(),
         other => serde_yaml::to_string(other).unwrap_or_default(),
     };
-    text.trim().chars().take(10).collect()
+    text.trim().to_string()
+}
+
+/// frontmatterの`date`(日付だけ、日時、引用符の有無がまちまち)を`YYYY-MM-DD`にする。
+fn display_date(value: &serde_yaml::Value) -> String {
+    yaml_value_text(value).chars().take(10).collect()
 }
 
 /// frontmatterより後の本文から、見出し・表・コードなどを除いた最初の文を取り出す。
@@ -2276,6 +2264,9 @@ struct DisplayFrontmatter {
     entry_kind: Option<String>,
     #[serde(default)]
     date: Option<serde_yaml::Value>,
+    // 共通記憶MD(kind: memory)の最終更新日時(詩織Ver4.1)。他の記事には無い。
+    #[serde(default)]
+    updated: Option<serde_yaml::Value>,
     #[serde(default = "default_display_index")]
     index: bool,
     #[serde(default = "default_display_status")]
@@ -2355,7 +2346,8 @@ fn get_source_frontmatter_blocking(source_category: String, source: String) -> R
 // 書き換える(削除の場合はブロックごと除去する)方式にしている
 // (shiori_save.rsの追記専用方針と同じ思想)。
 
-/// ホームの「前回の申し送り」(詩織Ver3.9)。
+/// ホームの申し送り(詩織Ver3.9。Ver4.1でmemoryの「やること」「申し送り・待ち」を優先)。
+/// memoryから作ったとき(`from_memory`)は`todos`・`notes`を、journalから作ったときは`items`を使う。
 #[derive(Serialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct HandoffDto {
@@ -2365,19 +2357,59 @@ pub struct HandoffDto {
     source: String,
     source_category: String,
     items: Vec<String>,
+    from_memory: bool,
+    todos: Vec<String>,
+    notes: Vec<String>,
 }
 
 /// 申し送りを探すとき、更新日時の新しい順に読むjournalの数。整理などで古い記事の
 /// 更新日時が変わることがあるため、少し多めに読んでからfrontmatterのdateで選ぶ。
 const HANDOFF_CANDIDATES: usize = 40;
 
-/// 最も新しいjournal(frontmatterのdate)のうち、「申し送り」を含む見出しの節を持つ
-/// ものから、その箇条書きを返す。見つからなければNone。
+/// ホームの申し送りを返す。プロジェクトのmemory(`updated`が最も新しいもの)の「やること」
+/// 「申し送り・待ち」を優先する。memoryが1つも無い(または両方の節が空)ときは、従来どおり、
+/// 最も新しいjournal(frontmatterのdate)のうち、「申し送り」を含む見出しの節を持つものから、
+/// その箇条書きを返す。どちらも無ければNone。
 #[tauri::command]
 async fn get_latest_handoff() -> Result<Option<HandoffDto>, String> {
     run_blocking(|| {
         let config = app_config()?;
         let mut files = rag_client::list_all_library(config.rag.port)?;
+
+        // 新しさは、shiori-saveが保存の都度書く`updated`で比べる(無ければdate)。どれも同じ形の
+        // ISO8601(同じタイムゾーン)なので、文字列の比較で足りる。
+        let memory = files
+            .iter()
+            .filter(|f| handoff_memory::is_project_memory_path(&f.relative_path))
+            .filter_map(|f| {
+                let content = std::fs::read_to_string(&f.path).ok()?;
+                let frontmatter = parse_display_frontmatter(&content).ok()?;
+                let sections = handoff_memory::memory_sections(&content);
+                if sections.todos.is_empty() && sections.notes.is_empty() {
+                    return None;
+                }
+                let stamp_value = frontmatter.updated.as_ref().or(frontmatter.date.as_ref());
+                Some((
+                    stamp_value.map(yaml_value_text).unwrap_or_default(),
+                    HandoffDto {
+                        title: frontmatter.title.unwrap_or_default(),
+                        project: frontmatter.project.unwrap_or_default(),
+                        date: stamp_value.map(display_date).unwrap_or_default(),
+                        source: f.source.clone(),
+                        source_category: f.source_category.clone(),
+                        from_memory: true,
+                        todos: sections.todos,
+                        notes: sections.notes,
+                        ..Default::default()
+                    },
+                ))
+            })
+            .max_by(|a, b| a.0.cmp(&b.0))
+            .map(|(_, dto)| dto);
+        if memory.is_some() {
+            return Ok(memory);
+        }
+
         files.retain(|f| f.source.ends_with(".md"));
         files.sort_by(|a, b| b.mtime.total_cmp(&a.mtime));
         let latest = files
@@ -2400,6 +2432,7 @@ async fn get_latest_handoff() -> Result<Option<HandoffDto>, String> {
                     source: f.source.clone(),
                     source_category: f.source_category.clone(),
                     items,
+                    ..Default::default()
                 })
             })
             .max_by(|a, b| a.date.cmp(&b.date));
