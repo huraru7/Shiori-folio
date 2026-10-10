@@ -21,6 +21,7 @@ import type {
   RagasHistory,
   SearchLibraryResult,
   SourceFrontmatter,
+  SystemDoc,
   SystemInfo,
   TtsFailure,
 } from "../types";
@@ -116,6 +117,11 @@ export const api = {
   // パスがlibrary/配下かの検証はRust側で行う。
   openLibraryAsset: (path: string) => invoke<void>("open_library_asset", { path }),
   revealLibraryAsset: (path: string) => invoke<void>("reveal_library_asset", { path }),
+
+  // 規約画面(詩織Ver4.1)。詩織のシステムを決めている書類を読み取り専用で取得する。
+  // 読めるのはRust側の許可リストにある書類だけ。
+  listSystemDocs: () => invoke<SystemDoc[]>("list_system_docs"),
+  readSystemDoc: (id: string) => invoke<string>("read_system_doc", { id }),
 
   // スタンドアロン図書館UI向け、検索を経由しない蔵書全件の一覧取得。
   // Phase 7(1冊=1ファイル表示単位への変更)により、ファイル単位に集約された

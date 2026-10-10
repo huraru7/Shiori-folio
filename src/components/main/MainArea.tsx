@@ -7,6 +7,7 @@ import ClaudeMonitorPanel from "../panels/ClaudeMonitorPanel";
 import LibraryScreen from "../library/LibraryScreen";
 import LibraryBrowseScreen from "../library/LibraryBrowseScreen";
 import ControlPanel from "../controlpanel/ControlPanel";
+import RulesScreen from "../rules/RulesScreen";
 import HomeScreen from "./HomeScreen";
 import PendingModal from "./PendingModal";
 import ErrorBoundary from "../shared/ErrorBoundary";
@@ -31,6 +32,7 @@ const VIEWS: ViewDef[] = [
   { id: "knowledge", label: "ナレッジ", content: <KnowledgePanel />, selfScroll: false },
   { id: "library", label: "図書館", content: <LibraryScreen />, selfScroll: true },
   { id: "library-browse", label: "全件閲覧", content: <LibraryBrowseScreen />, selfScroll: true },
+  { id: "rules", label: "規約", content: <RulesScreen />, selfScroll: true },
   { id: "claude", label: "Claude", content: <ClaudeMonitorPanel />, selfScroll: false },
   { id: "settings", label: "設定", content: <ControlPanel />, selfScroll: true },
 ];

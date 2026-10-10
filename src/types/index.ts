@@ -20,6 +20,19 @@ export interface KnowledgeResult {
   sourceCategory: string;
 }
 
+// 規約画面(詩織Ver4.1)の書類1件。idから本文を取得する(許可リストの書類のみ)。
+export interface SystemDoc {
+  id: string;
+  group: string;
+  label: string;
+  fileName: string;
+  // 表示方法。"markdown" | "yaml" | "json" | "text"。
+  format: string;
+  exists: boolean;
+  size: number;
+  mtime: number;
+}
+
 // スタンドアロン図書館UI(Phase 7、1冊=1ファイルの表示単位)向け。チャンクの
 // 本文は含まず、ファイル内の見出し一覧だけを持つ。
 export interface LibraryFile {

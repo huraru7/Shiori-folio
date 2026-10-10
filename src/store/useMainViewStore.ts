@@ -2,7 +2,14 @@ import { create } from "zustand";
 
 // 右ゾーンで表示している画面(詩織Ver3.9、ウィンドウとDockをやめてタブ切り替えにした)。
 // 永続化はせず、起動のたびにホームから始める。
-export type MainView = "home" | "knowledge" | "library" | "library-browse" | "claude" | "settings";
+export type MainView =
+  | "home"
+  | "knowledge"
+  | "library"
+  | "library-browse"
+  | "rules"
+  | "claude"
+  | "settings";
 
 interface MainViewStore {
   active: MainView;

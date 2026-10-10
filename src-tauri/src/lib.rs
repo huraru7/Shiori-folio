@@ -13,6 +13,7 @@ mod piper_client;
 mod prompts;
 pub mod rag_client;
 pub mod shared_daemon;
+mod system_docs;
 mod system_info;
 mod text_transform;
 mod whisper_client;
@@ -2043,6 +2044,19 @@ fn reveal_library_asset_blocking(app: tauri::AppHandle, path: String) -> Result<
     app.opener()
         .reveal_item_in_dir(&target)
         .map_err(|e| format!("フォルダを表示できませんでした: {e}"))
+}
+
+// 規約画面(詩織Ver4.1)向け。libraryの保存規約・台帳・プロンプト・設定など、詩織の
+// システムを決めている書類を読み取り専用で返す。読める書類は許可リストだけ
+// (system_docs.rs参照)。
+#[tauri::command]
+async fn list_system_docs() -> Result<Vec<system_docs::SystemDocDto>, String> {
+    run_blocking(move || Ok(system_docs::list(&library_root(), &project_root()))).await
+}
+
+#[tauri::command]
+async fn read_system_doc(id: String) -> Result<String, String> {
+    run_blocking(move || system_docs::read(&library_root(), &project_root(), &id)).await
 }
 
 // スタンドアロン図書館UI(Phase 7、詩織Ver2.0設計指示書v3、10章)向け。検索を
@@ -5228,6 +5242,8 @@ pub fn run() {
             get_source_document,
             open_library_asset,
             reveal_library_asset,
+            list_system_docs,
+            read_system_doc,
             list_all_knowledge,
             search_library,
             list_library_projects,
