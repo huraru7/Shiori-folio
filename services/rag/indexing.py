@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import chromadb
 import httpx
@@ -25,7 +25,8 @@ INDEX_STATE_FILENAME = ".index_state.json"
 # 2: 記事のタイトル+要約を前置して埋め込み、メタデータにsummaryを持つ(詩織Ver3.8)。
 # 3: メタデータにproject/type/authorを持つ(/search_libraryのfilterが常に0件になる不具合の修正)。
 # 4: メタデータにkindを持つ(図書館の種類での絞り込み、詩織Ver3.9)。
-INDEX_SCHEMA_VERSION = 4
+# 5: memory(kind: memory)のsourceを「project/memory.md」にし、dateにupdatedを使う(詩織Ver4.1)。
+INDEX_SCHEMA_VERSION = 5
 INDEX_SCHEMA_FILENAME = ".index_schema"
 # 素材の抽出結果のキャッシュ置き場(vectordbと同じく、libraryから作り直せる派生データ)と、
 # 抽出できなかった・飛ばした素材の記録。
@@ -50,6 +51,25 @@ def is_indexable_path(path: Path, knowledge_dir: Path) -> bool:
     if path.suffix not in INDEXED_SUFFIXES:
         return False
     return "_system" not in path.relative_to(knowledge_dir).parts and not path.name.startswith("._")
+
+
+# 共通記憶MD(kind: memory、詩織Ver4.1)。プロジェクトごとに同じファイル名の
+# memory.mdが並ぶため、sourceをファイル名だけにすると、チャンクの削除・検索結果の
+# 集約・パス解決が別プロジェクトのmemoryと混ざる。memoryだけ「project/memory.md」にする。
+# 全体用のmemory-global.mdはファイル名が一意なので、通常記事と同じ扱いでよい。
+MEMORY_FILE_NAME = "memory.md"
+_MEMORY_PARENT_CATEGORIES = ("10-projects", "20-areas")
+
+
+def source_name_for(relative_path: str) -> str:
+    """library/からの相対パスから、ChromaDBのメタデータ"source"に入れる名前を決める。
+    通常はファイル名。memoryだけは"project/memory.md"。ファイルが無くなった後でも
+    (削除の同期)パス文字列だけから決まるよう、フロントマターは見ない。
+    """
+    parts = PurePosixPath(relative_path.replace("\\", "/")).parts
+    if len(parts) == 3 and parts[0] in _MEMORY_PARENT_CATEGORIES and parts[2] == MEMORY_FILE_NAME:
+        return f"{parts[1]}/{MEMORY_FILE_NAME}"
+    return parts[-1]
 
 
 def list_indexable_files(knowledge_dir: Path) -> list[Path]:
@@ -83,6 +103,8 @@ _PROJECT_RE = re.compile(r"^project:\s*(.+?)\s*$", re.MULTILINE)
 _TYPE_RE = re.compile(r"^type:\s*(.+?)\s*$", re.MULTILINE)
 _AUTHOR_RE = re.compile(r"^author:\s*(.+?)\s*$", re.MULTILINE)
 _KIND_RE = re.compile(r"^kind:\s*(.+?)\s*$", re.MULTILINE)
+# memoryの最終更新日時(詩織Ver4.1)。dateは作成日時のままなので、新しさの判定にはこちらを使う。
+_UPDATED_RE = re.compile(r"^updated:\s*(.+?)\s*$", re.MULTILINE)
 
 
 def _is_indexable(text: str) -> bool:
@@ -150,6 +172,17 @@ def _extract_date(text: str) -> str:
     フォールバックで、呼び出し側は空文字列を「不明」として扱う)。
     """
     return _extract_frontmatter_field(_DATE_RE, text)
+
+
+def _extract_recency_date(text: str, kind: str) -> str:
+    """検索の時間減衰・経緯順に使う日付。通常はdate(作成日時)。memoryは丸ごと上書きされ
+    続けるため、作成日時のままだと1年後に古い扱いで順位が下がる。updatedがあればそちらを使う。
+    """
+    if kind == "memory":
+        updated = _extract_frontmatter_field(_UPDATED_RE, text)
+        if updated:
+            return updated
+    return _extract_date(text)
 
 
 def _extract_filter_fields(text: str) -> dict[str, str]:
@@ -350,10 +383,20 @@ def _embed_file(
     """
     # 「X.zip.meta」のstemは「X.zip」でX.zip.mdと衝突しうるため、.metaは
     # 拡張子込みのファイル名をid接頭辞にする。
-    stem = md_path.name if md_path.suffix == META_SUFFIX else md_path.stem
-    existing = collection.get(where={"source": md_path.name})
-    if existing["ids"]:
-        collection.delete(ids=existing["ids"])
+    source = source_name_for(relative_path)
+    is_memory = source != md_path.name
+    if is_memory:
+        # チャンクIDがプロジェクトごとに別になるよう、project名を含める。
+        stem = f"memory@{source.split('/')[0]}"
+    else:
+        stem = md_path.name if md_path.suffix == META_SUFFIX else md_path.stem
+    stale_ids = set(collection.get(where={"source": source})["ids"])
+    if is_memory:
+        # source名を変える前(Ver4.0まで)に、"memory.md"の名前で登録された同じファイルの
+        # チャンクが残っていることがある。パスで特定して一緒に消す。
+        stale_ids |= set(collection.get(where={"relative_path": relative_path.replace("\\", "/")})["ids"])
+    if stale_ids:
+        collection.delete(ids=list(stale_ids))
 
     text = md_path.read_text(encoding="utf-8")
     if not _is_indexable(text):
@@ -365,9 +408,9 @@ def _embed_file(
     title = _extract_title(text)
     summary = _extract_summary(text)
     status = _extract_status(text)
-    date = _extract_date(text)
     related = _extract_related(text)
     filter_fields = _extract_filter_fields(text)
+    date = _extract_recency_date(text, filter_fields["kind"])
 
     ids: list[str] = []
     documents: list[str] = []
@@ -383,7 +426,7 @@ def _embed_file(
         embeddings.append(embedding)
         metadatas.append(
             {
-                "source": md_path.name,
+                "source": source,
                 "heading": chunk.heading,
                 "source_category": category,
                 "title": title,
@@ -503,7 +546,7 @@ def sync_index(
     # 移動(アーカイブ等)した場合、旧パスの削除でsource名が同じ移動先のチャンクまで
     # 消えてしまう(移動先がreindex_file済みでmtime一致のとき、再投入もされない)。
     # 同名のファイルが現存するときは、チャンクの削除はせず状態だけ更新する。
-    current_names = {Path(rel).name for rel in current_paths}
+    current_names = {source_name_for(rel) for rel in current_paths}
     if schema_changed:
         # 状態を捨てたので、前回までに消えたファイルのチャンクを「削除」として拾えない。
         # 現存するファイル名に無いsourceのチャンクを、ここでまとめて消す。
@@ -522,8 +565,8 @@ def sync_index(
         save_index_schema(vectordb_dir)
     for rel in list(state.keys()):
         if rel not in current_paths:
-            if Path(rel).name not in current_names:
-                _remove_file(collection, Path(rel).name)
+            if source_name_for(rel) not in current_names:
+                _remove_file(collection, source_name_for(rel))
             _record_extract_status(vectordb_dir, rel, None, False)
             del state[rel]
             removed.append(rel)

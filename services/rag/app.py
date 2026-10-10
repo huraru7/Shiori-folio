@@ -19,6 +19,7 @@ from embedding_client import get_embedding
 from indexing import asset_path_for, load_extract_warnings, reindex_single_file, sync_index
 from lexical import LexicalDoc, LexicalIndex, matches_where
 from library_path import resolve_knowledge_dir, resolve_vectordb_dir
+from memory_rank import promote_project_memory
 from passage import passage_text
 from reranker import rerank, warmup as warmup_reranker
 
@@ -613,6 +614,10 @@ def _resolve_source_path(source_category: str, source: str) -> str:
     search_root = KNOWLEDGE_DIR / source_category
     if not search_root.is_dir():
         return ""
+    if "/" in source:
+        # memoryのsource("project/memory.md")は、カテゴリ直下からの相対パスそのもの。
+        direct = search_root / source
+        return str(direct) if direct.is_file() else ""
     match = next(search_root.rglob(source), None)
     return str(match) if match else ""
 
@@ -676,9 +681,15 @@ def search_library(req: SearchLibraryRequest):
                 "best_score": score,
                 "title": meta.get("title", ""),
                 "related": related_raw.split("|") if related_raw else [],
+                "kind": meta.get("kind", ""),
+                "project": meta.get("project", ""),
             }
             order.append(source)
         files[source]["headings"].append(FileHeading(heading=meta.get("heading", ""), rerank_score=score))
+
+    # 経緯モードは新しい順に並べる方針なので、プロジェクト名による引き上げは現在モードだけに行う。
+    if req.mode == "current":
+        order = promote_project_memory(order, files, req.query)
 
     # パス解決はファイルごとにrglobするため、返す範囲(offset/limit)の分だけ行う。
     items = []
