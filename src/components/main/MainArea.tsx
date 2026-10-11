@@ -32,7 +32,7 @@ const VIEWS: ViewDef[] = [
   { id: "knowledge", label: "ナレッジ", content: <KnowledgePanel />, selfScroll: false },
   { id: "library", label: "図書館", content: <LibraryScreen />, selfScroll: true },
   { id: "library-browse", label: "全件閲覧", content: <LibraryBrowseScreen />, selfScroll: true },
-  { id: "rules", label: "規約", content: <RulesScreen />, selfScroll: true },
+  { id: "rules", label: "規約・記憶", content: <RulesScreen />, selfScroll: true },
   { id: "claude", label: "Claude", content: <ClaudeMonitorPanel />, selfScroll: false },
   { id: "settings", label: "設定", content: <ControlPanel />, selfScroll: true },
 ];

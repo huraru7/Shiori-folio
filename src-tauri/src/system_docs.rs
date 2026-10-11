@@ -1,6 +1,6 @@
-//! 規約画面(詩織Ver4.1)向け。詩織のシステムを決めている書類(libraryの保存規約、
-//! タグ/プロジェクトの台帳、起動時のプロフィール、プロンプト、設定)を、読み取り専用で
-//! 一覧・取得する。
+//! 規約・記憶画面(詩織Ver4.1、memoryの閲覧はVer4.2)向け。詩織のシステムを決めている書類
+//! (libraryの保存規約、タグ/プロジェクトの台帳、起動時のプロフィール、プロンプト、設定)と、
+//! 共通記憶MD(全体用・各プロジェクトのmemory)を、読み取り専用で一覧・取得する。
 //!
 //! これらは索引の対象外(`library/_system/`はRAGが除外している)で、図書館の画面には
 //! 出ない。画面から任意のパスを読めてしまわないよう、**読める書類はここで組み立てる
@@ -16,6 +16,7 @@ use serde::Serialize;
 const MAX_BYTES: u64 = 1024 * 1024;
 
 // 画面での並び順(グループの出現順がそのまま画面の順になる)。
+const GROUP_MEMORY: &str = "共通記憶(memory)";
 const GROUP_LIBRARY: &str = "libraryの規約";
 const GROUP_LEDGER: &str = "台帳";
 const GROUP_PROFILE: &str = "起動時のプロフィール";
@@ -73,6 +74,58 @@ fn file_name_of(path: &Path) -> String {
     path.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
 }
 
+// memoryのfrontmatterにある`updated`(最終更新日時のISO8601文字列)。無い・読めないときは空文字。
+// 同じ書式(+09:00)で書かれるので、文字列のまま新しい順に並べられる。
+fn memory_updated(path: &Path) -> String {
+    let Ok(meta) = std::fs::metadata(path) else {
+        return String::new();
+    };
+    if meta.len() > MAX_BYTES {
+        return String::new();
+    }
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    let mut lines = text.lines();
+    if lines.next().map(str::trim) != Some("---") {
+        return String::new();
+    }
+    for line in lines {
+        if line.trim() == "---" {
+            break;
+        }
+        if let Some(value) = line.strip_prefix("updated:") {
+            return value.trim().trim_matches('"').to_string();
+        }
+    }
+    String::new()
+}
+
+// `10-projects/{project}/memory.md`・`20-areas/{project}/memory.md`をフォルダから探し、
+// updatedの新しい順で(project id, パス)を返す。新しいプロジェクトのmemoryは、コードを直さず
+// 一覧に出る。idに使うproject idは、フォルダ名がそのまま入るので、`/`や`.`始まりは除く。
+fn project_memories(library_root: &Path) -> Vec<(String, PathBuf)> {
+    let mut found: Vec<(String, String, PathBuf)> = Vec::new();
+    for top in ["10-projects", "20-areas"] {
+        let Ok(read) = std::fs::read_dir(library_root.join(top)) else {
+            continue;
+        };
+        for dir in read.filter_map(|e| e.ok()).map(|e| e.path()).filter(|p| p.is_dir()) {
+            let name = file_name_of(&dir);
+            if name.starts_with('.') || name.starts_with('_') {
+                continue;
+            }
+            let memory = dir.join("memory.md");
+            if memory.is_file() && !found.iter().any(|(n, _, _)| *n == name) {
+                found.push((name, memory_updated(&memory), memory));
+            }
+        }
+    }
+    // updatedの新しい順。同じ・無い場合はproject idの名前順で安定させる。
+    found.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    found.into_iter().map(|(name, _, path)| (name, path)).collect()
+}
+
 fn entries(library_root: &Path, project_root: &Path) -> Vec<Entry> {
     let system = library_root.join("_system");
     let organizing = system.join("library-organizing");
@@ -81,6 +134,16 @@ fn entries(library_root: &Path, project_root: &Path) -> Vec<Entry> {
     let mut add = |id: String, group: &'static str, label: String, path: PathBuf| {
         list.push(Entry { id, group, label, path });
     };
+
+    add(
+        "memory/global".into(),
+        GROUP_MEMORY,
+        "全体のmemory(memory-global.md)".into(),
+        library_root.join("40-profile").join("memory-global.md"),
+    );
+    for (project, path) in project_memories(library_root) {
+        add(format!("memory/project/{project}"), GROUP_MEMORY, format!("{project}のmemory"), path);
+    }
 
     add("library/CLAUDE.md".into(), GROUP_LIBRARY, "保存の規約(CLAUDE.md)".into(), system.join("CLAUDE.md"));
     for (file, label) in [
@@ -196,7 +259,7 @@ mod tests {
         let groups: Vec<&str> = docs.iter().map(|d| d.group.as_str()).collect();
         let mut dedup = groups.clone();
         dedup.dedup();
-        assert_eq!(dedup, [GROUP_LIBRARY, GROUP_LEDGER, GROUP_PROFILE, GROUP_BEHAVIOR]);
+        assert_eq!(dedup, [GROUP_MEMORY, GROUP_LIBRARY, GROUP_LEDGER, GROUP_PROFILE, GROUP_BEHAVIOR]);
 
         let claude = docs.iter().find(|d| d.id == "library/CLAUDE.md").unwrap();
         assert!(claude.exists && claude.size > 0 && claude.format == "markdown");
@@ -245,6 +308,68 @@ mod tests {
         let (base, library, root) = fixture("big");
         std::fs::write(root.join("config.json"), vec![b' '; MAX_BYTES as usize + 1]).unwrap();
         assert!(read(&library, &root, "config/config.json").unwrap_err().contains("大きすぎ"));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    // memoryを置いたlibraryの一時フォルダ。updatedを指定して作る。
+    fn write_memory(library: &Path, dir: &str, project: &str, updated: Option<&str>) {
+        let folder = library.join(dir).join(project);
+        std::fs::create_dir_all(&folder).unwrap();
+        let fm = match updated {
+            Some(u) => format!("---
+title: {project}
+updated: {u}
+---
+本文"),
+            None => format!("---
+title: {project}
+---
+本文"),
+        };
+        std::fs::write(folder.join("memory.md"), fm).unwrap();
+    }
+
+    #[test]
+    fn memoryは全体用が先頭でプロジェクトはupdatedの新しい順に並ぶ() {
+        let (base, library, root) = fixture("memory-order");
+        std::fs::create_dir_all(library.join("40-profile")).unwrap();
+        std::fs::write(library.join("40-profile").join("memory-global.md"), "---
+updated: 2026-10-01T00:00:00+09:00
+---
+全体").unwrap();
+        write_memory(&library, "20-areas", "old", Some("2026-10-02T00:00:00+09:00"));
+        write_memory(&library, "10-projects", "new", Some("\"2026-10-10T00:00:00+09:00\""));
+        write_memory(&library, "20-areas", "no-updated", None);
+        // 隠し・_system風のフォルダ、memory.mdが無いフォルダは出さない。
+        write_memory(&library, "20-areas", ".hidden", Some("2026-10-11T00:00:00+09:00"));
+        std::fs::create_dir_all(library.join("20-areas").join("empty")).unwrap();
+
+        let ids: Vec<String> = list(&library, &root)
+            .into_iter()
+            .filter(|d| d.group == GROUP_MEMORY)
+            .map(|d| d.id)
+            .collect();
+        assert_eq!(
+            ids,
+            ["memory/global", "memory/project/new", "memory/project/old", "memory/project/no-updated"]
+        );
+        assert_eq!(read(&library, &root, "memory/project/new").unwrap(), "---
+title: new
+updated: \"2026-10-10T00:00:00+09:00\"
+---
+本文");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn memoryのidにパスを渡しても読めない() {
+        let (base, library, root) = fixture("memory-path");
+        write_memory(&library, "20-areas", "shiori", Some("2026-10-10T00:00:00+09:00"));
+        std::fs::write(base.join("secret.txt"), "秘密").unwrap();
+        for bad in ["memory/project/../../secret.txt", "memory/project/shiori/../x", "memory/project/", "memory/../secret.txt", "memory/project/missing"] {
+            assert!(read(&library, &root, bad).is_err(), "{bad}は読めてはいけない");
+        }
+        assert!(read(&library, &root, "memory/project/shiori").is_ok());
         std::fs::remove_dir_all(&base).unwrap();
     }
 }
