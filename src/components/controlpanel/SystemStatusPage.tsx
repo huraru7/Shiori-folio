@@ -44,7 +44,7 @@ export function SystemStatusPage({
       <div className="control-panel__page-head">
         <h1>システム状態</h1>
         <p>読み取り専用です。ここでは何も変更されません。</p>
-        {appVersion && <p className="control-panel__version">詩織 Ver4.0({appVersion})</p>}
+        {appVersion && <p className="control-panel__version">詩織 Ver{appVersion}</p>}
       </div>
 
       {error && <div className="control-panel__error">取得に失敗しました: {error}</div>}
