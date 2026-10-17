@@ -23,6 +23,16 @@ def resolve_knowledge_dir(project_root: Path) -> Path:
     return project_root.parent / "library"
 
 
+def resolve_shelf_dir(project_root: Path) -> Path:
+    """知識の棚(knowledge/)の解決。library/と同じ判定で、ポータブル版は
+    PROJECT_ROOT直下、開発ツリーは親ディレクトリのknowledge/を使う。
+    """
+    portable_shelf = project_root / "knowledge"
+    if portable_shelf.is_dir():
+        return portable_shelf
+    return project_root.parent / "knowledge"
+
+
 # ChromaDBのRust版SQLiteバインディング(chromadb_rust_bindings)が、外部SSD
 # (ExFAT、macOSの新しいfskit経由マウント)上で新規DB作成の最初の接続から
 # 「attempt to write a readonly database」で失敗する不具合が実機で見つかった

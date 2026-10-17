@@ -203,6 +203,66 @@ pub fn search_library(
         .map_err(|e| format!("図書館検索応答の解析に失敗: {e}"))
 }
 
+#[derive(Serialize)]
+struct SearchShelfRequest<'a> {
+    query: &'a str,
+    limit: u32,
+    offset: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    verified: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    topic: Option<&'a str>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct SearchShelfResultItem {
+    pub source: String,
+    pub title: String,
+    pub topic: String,
+    // 出典と照らして確かめたか(yes / unverified / disputed)。
+    pub verified: String,
+    pub learned: String,
+    // 何を材料に学んだか(記事のfrontmatterのsource)。
+    pub cited_from: String,
+    pub headings: Vec<FileHeading>,
+    pub best_score: f64,
+    pub path: String,
+}
+
+// MCPサーバーのsearch_shelfツール向け。知識の棚(knowledge/)だけを検索する
+// (services/rag/app.pyの/search_shelf)。libraryの記録とはコレクションが別。
+pub fn search_shelf(
+    port: u16,
+    query: &str,
+    limit: u32,
+    offset: u32,
+    verified: Option<&str>,
+    topic: Option<&str>,
+) -> Result<Vec<SearchShelfResultItem>, String> {
+    let url = format!("http://127.0.0.1:{port}/search_shelf");
+    let body = SearchShelfRequest { query, limit, offset, verified, topic };
+
+    ureq::post(&url)
+        .timeout(Duration::from_secs(30))
+        .send_json(&body)
+        .map_err(|e| format!("知識の棚の検索に失敗: {e}"))?
+        .into_json()
+        .map_err(|e| format!("知識の棚の検索応答の解析に失敗: {e}"))
+}
+
+// 知識の棚への保存直後に、対象1件だけを即座に埋め込む(/reindex_shelf_file)。
+// pathはknowledge/からの相対パス。
+pub fn reindex_shelf_file(port: u16, relative_path: &str) -> Result<(), String> {
+    let url = format!("http://127.0.0.1:{port}/reindex_shelf_file");
+    let body = ReindexFileRequest { path: relative_path };
+
+    ureq::post(&url)
+        .timeout(Duration::from_secs(60))
+        .send_json(&body)
+        .map_err(|e| format!("棚の即時re-indexに失敗: {e}"))?;
+    Ok(())
+}
+
 #[derive(Deserialize)]
 pub struct ChunkItem {
     pub id: String,

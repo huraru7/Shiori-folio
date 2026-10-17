@@ -105,6 +105,14 @@ _AUTHOR_RE = re.compile(r"^author:\s*(.+?)\s*$", re.MULTILINE)
 _KIND_RE = re.compile(r"^kind:\s*(.+?)\s*$", re.MULTILINE)
 # memoryの最終更新日時(詩織Ver4.1)。dateは作成日時のままなので、新しさの判定にはこちらを使う。
 _UPDATED_RE = re.compile(r"^updated:\s*(.+?)\s*$", re.MULTILINE)
+# 知識の棚(knowledge/)の項目。frontmatterのsourceは、チャンクのメタデータ"source"
+# (ファイル名)と名前が衝突するため、メタデータでは"cited_from"に入れる。
+_SHELF_FIELDS = {
+    "cited_from": re.compile(r"^source:\s*(.+?)\s*$", re.MULTILINE),
+    "verified": re.compile(r"^verified:\s*(.+?)\s*$", re.MULTILINE),
+    "learned": re.compile(r"^learned:\s*(.+?)\s*$", re.MULTILINE),
+    "topic": re.compile(r"^topic:\s*(.+?)\s*$", re.MULTILINE),
+}
 
 
 def _is_indexable(text: str) -> bool:
@@ -196,6 +204,15 @@ def _extract_filter_fields(text: str) -> dict[str, str]:
         "author": _extract_frontmatter_field(_AUTHOR_RE, text),
         "kind": _extract_frontmatter_field(_KIND_RE, text),
     }
+
+
+def _extract_shelf_fields(text: str) -> dict[str, str]:
+    """知識の棚の項目(出典・確認状態・学んだ日・分野)を取り出す。verifiedが無い記事
+    (libraryの通常の記事)は棚の記事ではないので、何も返さない(メタデータを増やさない)。
+    """
+    if not _extract_frontmatter_field(_SHELF_FIELDS["verified"], text):
+        return {}
+    return {key: _extract_frontmatter_field(pattern, text) for key, pattern in _SHELF_FIELDS.items()}
 
 
 def _extract_related(text: str) -> list[str]:
@@ -409,7 +426,7 @@ def _embed_file(
     summary = _extract_summary(text)
     status = _extract_status(text)
     related = _extract_related(text)
-    filter_fields = _extract_filter_fields(text)
+    filter_fields = {**_extract_filter_fields(text), **_extract_shelf_fields(text)}
     date = _extract_recency_date(text, filter_fields["kind"])
 
     ids: list[str] = []

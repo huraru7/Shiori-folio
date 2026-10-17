@@ -26,7 +26,7 @@ use rmcp::{
 
 use shiori_folio_lib::{
     build_embedding_command, build_rag_command, library_root, load_search_backend_config, project_root,
-    rag_client, shared_daemon,
+    rag_client, shared_daemon, shelf_root,
 };
 
 #[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
@@ -62,6 +62,28 @@ struct SearchLibraryArgs {
 
 fn default_limit() -> u32 {
     20
+}
+
+#[derive(Debug, serde::Deserialize, schemars::JsonSchema)]
+struct SearchShelfArgs {
+    /// 検索クエリ(日本語可)
+    query: String,
+    /// 返すファイル数の上限。省略すると5件
+    #[serde(default = "default_shelf_limit")]
+    limit: u32,
+    /// ページングの開始位置。続きが欲しければ前回のoffset+limitを指定する
+    #[serde(default)]
+    offset: u32,
+    /// 確認の状態(yes / unverified / disputed)で絞り込む。省略可
+    #[serde(default)]
+    verified: Option<String>,
+    /// 分野(例: 数学)で絞り込む。省略可
+    #[serde(default)]
+    topic: Option<String>,
+}
+
+fn default_shelf_limit() -> u32 {
+    5
 }
 
 #[derive(Clone)]
@@ -180,6 +202,70 @@ impl ShioriLibrary {
             .map_err(|e| McpError::internal_error(format!("結果のJSON化に失敗: {e}"), None))?;
         Ok(CallToolResult::success(vec![ContentBlock::text(json)]))
     }
+
+    #[tool(
+        description = "知識の棚(knowledge/)を検索する。棚には、ふらるが学んで理解し、自分の言葉で説明できるようになった知識だけが入っている(libraryの記録とは別。search_libraryには出ない)。ふらるの知識とAIの知識を一致させるための代理の知識として使う。各結果には確認の状態(verified)・出典(cited_from)・学んだ日(learned)・実ファイルへの絶対パス(path)が付く。本文はReadツール等でpathを開いて読む。回答に使うときは、verifiedがunverifiedなら「未確認」と添え、disputedなら出典間で食い違いがあることを添える。棚に該当が無ければ、自分の知識で補ってよいが、棚の知識とは区別して伝える"
+    )]
+    async fn search_shelf(
+        &self,
+        Parameters(args): Parameters<SearchShelfArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        if !shelf_root().is_dir() {
+            return Err(McpError::internal_error(
+                "知識の棚(knowledge/)が見つかりません。SSDが未接続か、棚がまだ作られていません",
+                None,
+            ));
+        }
+
+        let root = project_root();
+        let backend =
+            load_search_backend_config(&root).map_err(|e| McpError::internal_error(e, None))?;
+
+        shared_daemon::ensure_daemon_running(
+            &root,
+            backend.embedding_port,
+            ".shiori-embed.lock",
+            30,
+            || {
+                build_embedding_command(
+                    &root,
+                    &backend.embedding_model_path,
+                    backend.embedding_port,
+                    backend.embedding_context_size,
+                    true,
+                )
+            },
+        )
+        .map_err(|e| McpError::internal_error(e, None))?;
+
+        let progress = shared_daemon::DaemonProgress {
+            file: shiori_folio_lib::rag_vectordb_dir(&root).join(".index_progress.json"),
+            on_label: &|_| {},
+        };
+        shared_daemon::ensure_daemon_running_with_progress(
+            &root,
+            backend.rag_port,
+            ".shiori-rag.lock",
+            60,
+            || build_rag_command(&root, backend.rag_port, true),
+            Some(&progress),
+        )
+        .map_err(|e| McpError::internal_error(e, None))?;
+
+        let results = rag_client::search_shelf(
+            backend.rag_port,
+            &args.query,
+            args.limit,
+            args.offset,
+            args.verified.as_deref(),
+            args.topic.as_deref(),
+        )
+        .map_err(|e| McpError::internal_error(e, None))?;
+
+        let json = serde_json::to_string_pretty(&results)
+            .map_err(|e| McpError::internal_error(format!("結果のJSON化に失敗: {e}"), None))?;
+        Ok(CallToolResult::success(vec![ContentBlock::text(json)]))
+    }
 }
 
 #[tool_handler]
@@ -191,7 +277,8 @@ impl ServerHandler for ShioriLibrary {
             .with_instructions(
                 "詩織のライブラリ(セカンドブレイン)を検索するためのMCPサーバーです。\
                  セッション開始時にまずget_context_profileを呼び、その後は必要に応じて\
-                 search_libraryで検索してください。書き込みはこのMCPサーバー経由ではなく\
+                 search_libraryで検索してください。ふらるが学んで自分の知識にしたこと(知識の棚)は\
+                 search_shelfで検索します。書き込みはこのMCPサーバー経由ではなく\
                  library/への直接ファイル操作(frontmatter付きmd。素材は同名の.metaを添えて\
                  shiori-saveで取り込む)で行います。保存時の\
                  配置ルールはlibrary/_system/CLAUDE.mdを参照してください。"

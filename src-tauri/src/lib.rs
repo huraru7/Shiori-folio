@@ -395,6 +395,19 @@ pub fn library_root() -> PathBuf {
         .join("library")
 }
 
+/// 知識の棚(knowledge/、Ver5.0候補)の場所。library_root()と同じ判定で、ポータブル版は
+/// project_root()直下、開発ツリーは親ディレクトリのknowledge/。
+pub fn shelf_root() -> PathBuf {
+    let root = project_root();
+    let portable_shelf = root.join("knowledge");
+    if portable_shelf.is_dir() {
+        return portable_shelf;
+    }
+    root.parent()
+        .expect("system/ should have a parent directory")
+        .join("knowledge")
+}
+
 pub(crate) fn load_config(root: &Path) -> Result<AppConfig, String> {
     let text = std::fs::read_to_string(root.join("config.json"))
         .map_err(|e| format!("config.jsonの読み込みに失敗: {e}"))?;

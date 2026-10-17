@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from embedding_client import get_embedding
 from indexing import asset_path_for, load_extract_warnings, reindex_single_file, sync_index
 from lexical import LexicalDoc, LexicalIndex, matches_where
-from library_path import resolve_knowledge_dir, resolve_vectordb_dir
+from library_path import resolve_knowledge_dir, resolve_shelf_dir, resolve_vectordb_dir
 from memory_rank import promote_project_memory
 from passage import passage_text
 from reranker import rerank, warmup as warmup_reranker
@@ -32,6 +32,12 @@ KNOWLEDGE_DIR = resolve_knowledge_dir(PROJECT_ROOT)
 VECTORDB_DIR = resolve_vectordb_dir(PROJECT_ROOT)
 VECTORDB_DIR.mkdir(parents=True, exist_ok=True)
 COLLECTION_NAME = "shiori_knowledge"
+# 知識の棚(knowledge/、Ver5.0候補)。libraryの記録と混ざらないよう、コレクションを分ける。
+# 同期の状態ファイル(.index_state.json等)もlibraryと別にするため、vectordb内のshelf/に置く。
+SHELF_DIR = resolve_shelf_dir(PROJECT_ROOT)
+SHELF_COLLECTION_NAME = "shiori_shelf"
+SHELF_STATE_DIR = VECTORDB_DIR / "shelf"
+SHELF_STATE_DIR.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI()
 _chroma_client = chromadb.PersistentClient(path=str(VECTORDB_DIR))
@@ -57,24 +63,27 @@ def _warmup_reranker() -> None:
 def _initial_index_sync() -> None:
     sync_index(_chroma_client, _http_client, KNOWLEDGE_DIR, VECTORDB_DIR, COLLECTION_NAME)
     _mark_lexical_dirty()
+    # 棚はlibraryより後に同期する。棚のフォルダが無い環境(まだ作っていない)では何もしない。
+    if SHELF_DIR.is_dir():
+        sync_index(_chroma_client, _http_client, SHELF_DIR, SHELF_STATE_DIR, SHELF_COLLECTION_NAME)
+        _mark_lexical_dirty(SHELF_COLLECTION_NAME)
 
 
 # 語彙検索(lexical.py、詩織Ver3.8)の索引。コレクションの全チャンクからメモリ上に作る
 # (数千チャンクでも数十ミリ秒)。コレクションを書き換えた箇所(起動時の同期・
 # /add_document・/reindex_file)で作り直しの印を付け、次の検索で作り直す。
-_lexical_index: LexicalIndex | None = None
-_lexical_dirty = True
+# コレクションごとの索引と「作り直しが要る」印。
+_lexical_indexes: dict[str, LexicalIndex] = {}
+_lexical_dirty: set[str] = {COLLECTION_NAME, SHELF_COLLECTION_NAME}
 
 
-def _mark_lexical_dirty() -> None:
-    global _lexical_dirty
-    _lexical_dirty = True
+def _mark_lexical_dirty(collection_name: str = COLLECTION_NAME) -> None:
+    _lexical_dirty.add(collection_name)
 
 
-def _get_lexical_index() -> LexicalIndex:
-    global _lexical_index, _lexical_dirty
-    if _lexical_index is None or _lexical_dirty:
-        collection = _chroma_client.get_or_create_collection(COLLECTION_NAME)
+def _get_lexical_index(collection_name: str = COLLECTION_NAME) -> LexicalIndex:
+    if collection_name not in _lexical_indexes or collection_name in _lexical_dirty:
+        collection = _chroma_client.get_or_create_collection(collection_name)
         got = collection.get(include=["documents", "metadatas"])
         docs = [
             LexicalDoc(id=i, document=d, metadata=m)
@@ -85,9 +94,9 @@ def _get_lexical_index() -> LexicalIndex:
             passage_text(d.metadata.get("title", ""), d.metadata.get("summary", ""), d.metadata.get("heading", ""), d.document)
             for d in docs
         ]
-        _lexical_index = LexicalIndex(docs, texts)
-        _lexical_dirty = False
-    return _lexical_index
+        _lexical_indexes[collection_name] = LexicalIndex(docs, texts)
+        _lexical_dirty.discard(collection_name)
+    return _lexical_indexes[collection_name]
 
 
 class SearchRequest(BaseModel):
@@ -202,6 +211,8 @@ def _retrieve_and_rerank(
     where: dict | None = None,
     apply_threshold: bool = True,
     mode: Literal["current", "history"] = "current",
+    collection_name: str = COLLECTION_NAME,
+    time_decay: bool = True,
 ) -> list[tuple[str, str, dict, float, float]]:
     """クエリに対する候補チャンクを取得しリランクする。/search・/search_libraryの
     共通処理。返り値はrerank_score降順(chunk_id, document, metadata, distance,
@@ -234,7 +245,7 @@ def _retrieve_and_rerank(
     # 書き込み時フック(/reindex_file)+起動時1回だけの全件スキャンに切り替えた
     # ため、ここでは単にコレクションを取得するだけでよい(データ管理法見直し
     # 2-5節)。
-    collection = _chroma_client.get_or_create_collection(COLLECTION_NAME)
+    collection = _chroma_client.get_or_create_collection(collection_name)
     # クエリのフィラー語除去(正規化)はRust側(text_transformエンジン、
     # prompts/transforms/query-normalization.json)で一元化しているため、
     # ここでは受け取ったクエリをそのまま使う。
@@ -277,7 +288,7 @@ def _retrieve_and_rerank(
     # 語彙の一致が強いチャンクを候補に足す(詩織Ver3.8)。埋め込み検索だけだと、質問の
     # 言い回しが記事の言葉と離れているとき、正解が候補プールにすら入らない。
     seen = set(ids)
-    for lex in _get_lexical_index().top(
+    for lex in _get_lexical_index(collection_name).top(
         query, LEXICAL_CANDIDATES, accept=lambda meta: matches_where(meta, combined_where)
     ):
         if lex.id in seen:
@@ -307,10 +318,12 @@ def _retrieve_and_rerank(
         return candidates
 
     # 現在モードは時間減衰をrerank_scoreに掛け合わせてから並べ替える。
-    candidates = [
-        (i, d, m, dist, score * _time_decay_factor(m.get("date", "")))
-        for i, d, m, dist, score in candidates
-    ]
+    # 知識の棚は、古いから価値が下がる記録ではないので、時間減衰を掛けない(time_decay=False)。
+    if time_decay:
+        candidates = [
+            (i, d, m, dist, score * _time_decay_factor(m.get("date", "")))
+            for i, d, m, dist, score in candidates
+        ]
     candidates.sort(key=lambda c: c[4], reverse=True)
     if apply_threshold:
         candidates = [c for c in candidates if c[4] >= RERANK_SCORE_THRESHOLD]
@@ -389,6 +402,19 @@ def reindex_file(req: ReindexFileRequest):
     except FileNotFoundError:
         return {"status": "not_found", "chunks": 0}
     _mark_lexical_dirty()
+    return {"status": "ok", "chunks": count}
+
+
+@app.post("/reindex_shelf_file")
+def reindex_shelf_file(req: ReindexFileRequest):
+    """知識の棚(knowledge/)へ保存した直後の、1件だけの再登録。pathはSHELF_DIRからの相対パス。"""
+    try:
+        count = reindex_single_file(
+            _chroma_client, _http_client, SHELF_DIR, SHELF_STATE_DIR, SHELF_COLLECTION_NAME, req.path
+        )
+    except FileNotFoundError:
+        return {"status": "not_found", "chunks": 0}
+    _mark_lexical_dirty(SHELF_COLLECTION_NAME)
     return {"status": "ok", "chunks": count}
 
 
@@ -705,6 +731,83 @@ def search_library(req: SearchLibraryRequest):
                 asset_path=asset_path,
                 title=files[source]["title"],
                 related=files[source]["related"],
+            )
+        )
+    return items
+
+
+class SearchShelfRequest(BaseModel):
+    query: str
+    limit: int = 5
+    offset: int = 0
+    # 確認の状態(yes / unverified / disputed)で絞る。省略可。
+    verified: str | None = None
+    topic: str | None = None
+
+
+class SearchShelfResultItem(BaseModel):
+    source: str
+    title: str
+    topic: str
+    # 出典と照らして確かめたか(yes / unverified / disputed)。AIは回答で引用するとき、
+    # unverifiedなら「未確認」、disputedなら両論あることを添える。
+    verified: str
+    learned: str
+    # 何を材料に学んだか(frontmatterのsource)。
+    cited_from: str
+    headings: list[FileHeading]
+    best_score: float
+    path: str
+
+
+def _resolve_shelf_path(source: str) -> str:
+    direct = SHELF_DIR / source
+    if direct.is_file():
+        return str(direct)
+    match = next(SHELF_DIR.rglob(source), None) if SHELF_DIR.is_dir() else None
+    return str(match) if match else ""
+
+
+@app.post("/search_shelf", response_model=list[SearchShelfResultItem])
+def search_shelf(req: SearchShelfRequest):
+    """MCPのsearch_shelfツール向け。知識の棚(knowledge/)だけを検索する。libraryの記録とは
+    別のコレクションで、混ざらない。結果はファイル単位で、確認の状態・出典・学んだ日を添える。
+    スコアの足切りはせず、offset+limitで続きを取る(/search_libraryと同じ考え方)。
+    """
+    conditions = []
+    if req.verified:
+        conditions.append({"verified": req.verified})
+    if req.topic:
+        conditions.append({"topic": req.topic})
+    where = None if not conditions else (conditions[0] if len(conditions) == 1 else {"$and": conditions})
+
+    candidates = _retrieve_and_rerank(
+        req.query, where, apply_threshold=False, collection_name=SHELF_COLLECTION_NAME, time_decay=False
+    )
+
+    files: dict[str, dict] = {}
+    order: list[str] = []
+    for _chunk_id, _doc, meta, _dist, score in candidates:
+        source = meta.get("source", "")
+        if source not in files:
+            files[source] = {"meta": meta, "headings": [], "best_score": score}
+            order.append(source)
+        files[source]["headings"].append(FileHeading(heading=meta.get("heading", ""), rerank_score=score))
+
+    items = []
+    for source in order[req.offset : req.offset + req.limit]:
+        meta = files[source]["meta"]
+        items.append(
+            SearchShelfResultItem(
+                source=source,
+                title=meta.get("title", ""),
+                topic=meta.get("topic", ""),
+                verified=meta.get("verified", ""),
+                learned=meta.get("learned", ""),
+                cited_from=meta.get("cited_from", ""),
+                headings=files[source]["headings"],
+                best_score=files[source]["best_score"],
+                path=_resolve_shelf_path(source),
             )
         )
     return items
