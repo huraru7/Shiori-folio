@@ -15,6 +15,7 @@ pub mod rag_client;
 pub mod shared_daemon;
 mod handoff_memory;
 mod source_path;
+mod shelf;
 mod system_docs;
 mod system_info;
 mod text_transform;
@@ -2053,6 +2054,29 @@ async fn list_system_docs() -> Result<Vec<system_docs::SystemDocDto>, String> {
 #[tauri::command]
 async fn read_system_doc(id: String) -> Result<String, String> {
     run_blocking(move || system_docs::read(&library_root(), &project_root(), &id)).await
+}
+
+// 知識の棚タブ(Ver5.0候補)向け。一覧と本文は`knowledge/`を直接読み(shelf.rs参照)、
+// 検索だけRAGの`/search_shelf`を使う。
+#[tauri::command]
+async fn list_shelf_docs() -> Result<Vec<shelf::ShelfDocDto>, String> {
+    run_blocking(move || Ok(shelf::list(&shelf_root()))).await
+}
+
+#[tauri::command]
+async fn read_shelf_doc(name: String) -> Result<String, String> {
+    run_blocking(move || shelf::read(&shelf_root(), &name)).await
+}
+
+// 棚の検索。関連のあるファイル名を、関連度の高い順で返す(リランカーの閾値は/searchと同じ0.3)。
+#[tauri::command]
+async fn search_shelf(query: String) -> Result<Vec<String>, String> {
+    run_blocking(move || {
+        let config = app_config()?;
+        let hits = rag_client::search_shelf(config.rag.port, &query, 50, 0, None, None)?;
+        Ok(hits.into_iter().filter(|h| h.best_score >= 0.3).map(|h| h.source).collect())
+    })
+    .await
 }
 
 // スタンドアロン図書館UI(Phase 7、詩織Ver2.0設計指示書v3、10章)向け。検索を
@@ -5290,6 +5314,9 @@ pub fn run() {
             reveal_library_asset,
             list_system_docs,
             read_system_doc,
+            list_shelf_docs,
+            read_shelf_doc,
+            search_shelf,
             list_all_knowledge,
             search_library,
             list_library_projects,

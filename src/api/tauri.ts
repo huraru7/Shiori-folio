@@ -20,6 +20,7 @@ import type {
   PendingItems,
   RagasHistory,
   SearchLibraryResult,
+  ShelfDoc,
   SourceFrontmatter,
   SystemDoc,
   SystemInfo,
@@ -122,6 +123,10 @@ export const api = {
   // 読めるのはRust側の許可リストにある書類だけ。
   listSystemDocs: () => invoke<SystemDoc[]>("list_system_docs"),
   readSystemDoc: (id: string) => invoke<string>("read_system_doc", { id }),
+  // 知識の棚タブ。一覧と本文はファイルを直接読み、検索だけRAGを使う(関連のあるファイル名を返す)。
+  listShelfDocs: () => invoke<ShelfDoc[]>("list_shelf_docs"),
+  readShelfDoc: (name: string) => invoke<string>("read_shelf_doc", { name }),
+  searchShelf: (query: string) => invoke<string[]>("search_shelf", { query }),
 
   // スタンドアロン図書館UI向け、検索を経由しない蔵書全件の一覧取得。
   // Phase 7(1冊=1ファイル表示単位への変更)により、ファイル単位に集約された

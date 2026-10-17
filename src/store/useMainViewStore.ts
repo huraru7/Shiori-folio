@@ -7,6 +7,7 @@ export type MainView =
   | "knowledge"
   | "library"
   | "library-browse"
+  | "shelf"
   | "rules"
   | "claude"
   | "settings";

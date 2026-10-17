@@ -33,6 +33,19 @@ export interface SystemDoc {
   mtime: number;
 }
 
+// 知識の棚タブ(Ver5.0候補)の記事1件。frontmatterの項目だけで、本文は別に取得する。
+export interface ShelfDoc {
+  name: string;
+  title: string;
+  topic: string;
+  // 出典と照らして確かめたか。"yes" | "unverified" | "disputed"(frontmatterに無ければ空)。
+  verified: string;
+  learned: string;
+  summary: string;
+  source: string;
+  mtime: number;
+}
+
 // スタンドアロン図書館UI(Phase 7、1冊=1ファイルの表示単位)向け。チャンクの
 // 本文は含まず、ファイル内の見出し一覧だけを持つ。
 export interface LibraryFile {
