@@ -12,17 +12,6 @@ function stripFrontmatter(content: string): string {
   return match ? content.slice(match[0].length) : content;
 }
 
-// 確認の状態の表示。unverified/disputedは、読む人が「そのまま信じてよいか」を見分けられるよう目立たせる。
-const VERIFIED_LABEL: Record<string, string> = {
-  yes: "確認済み",
-  unverified: "未確認",
-  disputed: "食い違いあり",
-};
-
-function verifiedLabel(value: string): string {
-  return VERIFIED_LABEL[value] ?? (value || "状態なし");
-}
-
 // 知識の棚画面(Ver5.0候補)。ふらるが学んで自分の言葉で説明できるようになった知識を読む。
 // 左に記事の一覧と検索、右に本文。読み取り専用で、編集はしない(棚への保存は`knowledge-learning`の手順)。
 // 一覧と本文はファイルを直接読む。検索だけRAG(search_shelf)を使い、RAGが止まっていても閲覧はできる。
@@ -159,9 +148,6 @@ function ShelfScreen() {
             <span className="shelf-screen__item-title">{d.title}</span>
             <span className="shelf-screen__item-meta">
               {d.topic && <span>{d.topic}</span>}
-              <span className={`shelf-screen__badge shelf-screen__badge--${d.verified || "none"}`}>
-                {verifiedLabel(d.verified)}
-              </span>
             </span>
           </button>
         ))}
@@ -172,12 +158,14 @@ function ShelfScreen() {
           <header className="shelf-screen__header">
             <h2 className="shelf-screen__title">{selected.title}</h2>
             <p className="shelf-screen__meta">
-              {selected.topic && `${selected.topic} ・ `}
-              <span className={`shelf-screen__badge shelf-screen__badge--${selected.verified || "none"}`}>
-                {verifiedLabel(selected.verified)}
-              </span>
-              {selected.learned && ` ・ 学んだ日 ${selected.learned}`}
-              {selected.source && ` ・ 出典: ${selected.source}`} ・ 読み取り専用
+              {[
+                selected.topic,
+                selected.learned && `学んだ日 ${selected.learned}`,
+                selected.source && `出典: ${selected.source}`,
+                "読み取り専用",
+              ]
+                .filter(Boolean)
+                .join(" ・ ")}
             </p>
           </header>
         )}

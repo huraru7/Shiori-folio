@@ -38,8 +38,6 @@ export interface ShelfDoc {
   name: string;
   title: string;
   topic: string;
-  // 出典と照らして確かめたか。"yes" | "unverified" | "disputed"(frontmatterに無ければ空)。
-  verified: string;
   learned: string;
   summary: string;
   source: string;

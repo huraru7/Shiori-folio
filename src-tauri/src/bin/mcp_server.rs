@@ -74,9 +74,6 @@ struct SearchShelfArgs {
     /// ページングの開始位置。続きが欲しければ前回のoffset+limitを指定する
     #[serde(default)]
     offset: u32,
-    /// 確認の状態(yes / unverified / disputed)で絞り込む。省略可
-    #[serde(default)]
-    verified: Option<String>,
     /// 分野(例: 数学)で絞り込む。省略可
     #[serde(default)]
     topic: Option<String>,
@@ -204,7 +201,7 @@ impl ShioriLibrary {
     }
 
     #[tool(
-        description = "知識の棚(knowledge/)を検索する。棚には、ふらるが学んで理解し、自分の言葉で説明できるようになった知識だけが入っている(libraryの記録とは別。search_libraryには出ない)。ふらるの知識とAIの知識を一致させるための代理の知識として使う。各結果には確認の状態(verified)・出典(cited_from)・学んだ日(learned)・実ファイルへの絶対パス(path)が付く。本文はReadツール等でpathを開いて読む。回答に使うときは、verifiedがunverifiedなら「未確認」と添え、disputedなら出典間で食い違いがあることを添える。棚に該当が無ければ、自分の知識で補ってよいが、棚の知識とは区別して伝える"
+        description = "知識の棚(knowledge/)を検索する。棚には、出典で確かめた十分に信頼できる知識だけが入っている(libraryの記録とは別。search_libraryには出ない)。ふらるとAIが共有する知識の正本として使う。各結果には出典(cited_from)・学んだ日(learned)・実ファイルへの絶対パス(path)が付く。本文はReadツール等でpathを開いて読む。出典間で食い違う点は、記事の本文に両論が書かれている。棚に該当が無ければ、自分の知識で補ってよいが、棚の知識とは区別して伝える"
     )]
     async fn search_shelf(
         &self,
@@ -257,7 +254,6 @@ impl ShioriLibrary {
             &args.query,
             args.limit,
             args.offset,
-            args.verified.as_deref(),
             args.topic.as_deref(),
         )
         .map_err(|e| McpError::internal_error(e, None))?;

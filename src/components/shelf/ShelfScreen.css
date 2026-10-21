@@ -90,31 +90,6 @@
   color: var(--paper-dim);
 }
 
-/* 確認の状態。yes以外は目立たせ、「そのまま信じてよいか」を一目で分けられるようにする。 */
-.shelf-screen__badge {
-  display: inline-block;
-  padding: 0 6px;
-  border: 0.5px solid var(--glass-border);
-  border-radius: 999px;
-  font-size: var(--fs-xs);
-  color: var(--paper-dim);
-}
-
-.shelf-screen__badge--yes {
-  color: var(--paper);
-  background: rgba(143, 160, 107, 0.2);
-}
-
-.shelf-screen__badge--unverified {
-  color: var(--paper);
-  border-color: rgba(214, 170, 90, 0.7);
-}
-
-.shelf-screen__badge--disputed {
-  color: var(--danger);
-  border-color: var(--danger);
-}
-
 .shelf-screen__main {
   display: flex;
   flex-direction: column;

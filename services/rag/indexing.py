@@ -109,7 +109,6 @@ _UPDATED_RE = re.compile(r"^updated:\s*(.+?)\s*$", re.MULTILINE)
 # (ファイル名)と名前が衝突するため、メタデータでは"cited_from"に入れる。
 _SHELF_FIELDS = {
     "cited_from": re.compile(r"^source:\s*(.+?)\s*$", re.MULTILINE),
-    "verified": re.compile(r"^verified:\s*(.+?)\s*$", re.MULTILINE),
     "learned": re.compile(r"^learned:\s*(.+?)\s*$", re.MULTILINE),
     "topic": re.compile(r"^topic:\s*(.+?)\s*$", re.MULTILINE),
 }
@@ -207,10 +206,12 @@ def _extract_filter_fields(text: str) -> dict[str, str]:
 
 
 def _extract_shelf_fields(text: str) -> dict[str, str]:
-    """知識の棚の項目(出典・確認状態・学んだ日・分野)を取り出す。verifiedが無い記事
+    """知識の棚の項目(出典・学んだ日・分野)を取り出す。学んだ日(learned)も分野(topic)も無い記事
     (libraryの通常の記事)は棚の記事ではないので、何も返さない(メタデータを増やさない)。
     """
-    if not _extract_frontmatter_field(_SHELF_FIELDS["verified"], text):
+    if not _extract_frontmatter_field(_SHELF_FIELDS["learned"], text) and not _extract_frontmatter_field(
+        _SHELF_FIELDS["topic"], text
+    ):
         return {}
     return {key: _extract_frontmatter_field(pattern, text) for key, pattern in _SHELF_FIELDS.items()}
 

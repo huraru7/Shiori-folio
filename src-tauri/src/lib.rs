@@ -2073,7 +2073,7 @@ async fn read_shelf_doc(name: String) -> Result<String, String> {
 async fn search_shelf(query: String) -> Result<Vec<String>, String> {
     run_blocking(move || {
         let config = app_config()?;
-        let hits = rag_client::search_shelf(config.rag.port, &query, 50, 0, None, None)?;
+        let hits = rag_client::search_shelf(config.rag.port, &query, 50, 0, None)?;
         Ok(hits.into_iter().filter(|h| h.best_score >= 0.3).map(|h| h.source).collect())
     })
     .await

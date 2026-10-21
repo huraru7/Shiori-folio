@@ -209,8 +209,6 @@ struct SearchShelfRequest<'a> {
     limit: u32,
     offset: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
-    verified: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     topic: Option<&'a str>,
 }
 
@@ -219,8 +217,6 @@ pub struct SearchShelfResultItem {
     pub source: String,
     pub title: String,
     pub topic: String,
-    // 出典と照らして確かめたか(yes / unverified / disputed)。
-    pub verified: String,
     pub learned: String,
     // 何を材料に学んだか(記事のfrontmatterのsource)。
     pub cited_from: String,
@@ -236,11 +232,10 @@ pub fn search_shelf(
     query: &str,
     limit: u32,
     offset: u32,
-    verified: Option<&str>,
     topic: Option<&str>,
 ) -> Result<Vec<SearchShelfResultItem>, String> {
     let url = format!("http://127.0.0.1:{port}/search_shelf");
-    let body = SearchShelfRequest { query, limit, offset, verified, topic };
+    let body = SearchShelfRequest { query, limit, offset, topic };
 
     ureq::post(&url)
         .timeout(Duration::from_secs(30))

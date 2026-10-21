@@ -28,7 +28,6 @@ summary: 無限小は0ではなく、どの正の実数よりも小さい別の�
 index: true
 status: new
 source: AIとの対話
-verified: unverified
 learned: '2026-10-17'
 topic: 数学
 date: '2026-10-17T16:00:00+09:00'
@@ -77,7 +76,6 @@ class ShelfIndexTest(unittest.TestCase):
         collection, result = indexing.sync_index(self.client, mock.Mock(), self.shelf, self.state, "test_shelf")
         self.assertEqual(result["added"], ["math-infinitesimal.md"])
         meta = collection.get(include=["metadatas"])["metadatas"][0]
-        self.assertEqual(meta["verified"], "unverified")
         self.assertEqual(meta["topic"], "数学")
         self.assertEqual(meta["learned"], "2026-10-17")
         self.assertEqual(meta["cited_from"], "AIとの対話")
@@ -91,7 +89,7 @@ class ShelfIndexTest(unittest.TestCase):
         vec = self.base / "vectordb"
         collection, _ = indexing.sync_index(self.client, mock.Mock(), lib, vec, "test_lib")
         meta = collection.get(include=["metadatas"])["metadatas"][0]
-        for key in ("verified", "topic", "learned", "cited_from"):
+        for key in ("topic", "learned", "cited_from"):
             self.assertNotIn(key, meta)
         self.assertEqual(meta["source"], "a.md")
 

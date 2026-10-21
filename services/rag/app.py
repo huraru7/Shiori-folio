@@ -740,8 +740,6 @@ class SearchShelfRequest(BaseModel):
     query: str
     limit: int = 5
     offset: int = 0
-    # 確認の状態(yes / unverified / disputed)で絞る。省略可。
-    verified: str | None = None
     topic: str | None = None
 
 
@@ -749,9 +747,6 @@ class SearchShelfResultItem(BaseModel):
     source: str
     title: str
     topic: str
-    # 出典と照らして確かめたか(yes / unverified / disputed)。AIは回答で引用するとき、
-    # unverifiedなら「未確認」、disputedなら両論あることを添える。
-    verified: str
     learned: str
     # 何を材料に学んだか(frontmatterのsource)。
     cited_from: str
@@ -771,12 +766,10 @@ def _resolve_shelf_path(source: str) -> str:
 @app.post("/search_shelf", response_model=list[SearchShelfResultItem])
 def search_shelf(req: SearchShelfRequest):
     """MCPのsearch_shelfツール向け。知識の棚(knowledge/)だけを検索する。libraryの記録とは
-    別のコレクションで、混ざらない。結果はファイル単位で、確認の状態・出典・学んだ日を添える。
+    別のコレクションで、混ざらない。結果はファイル単位で、出典・学んだ日を添える。
     スコアの足切りはせず、offset+limitで続きを取る(/search_libraryと同じ考え方)。
     """
     conditions = []
-    if req.verified:
-        conditions.append({"verified": req.verified})
     if req.topic:
         conditions.append({"topic": req.topic})
     where = None if not conditions else (conditions[0] if len(conditions) == 1 else {"$and": conditions})
@@ -802,7 +795,6 @@ def search_shelf(req: SearchShelfRequest):
                 source=source,
                 title=meta.get("title", ""),
                 topic=meta.get("topic", ""),
-                verified=meta.get("verified", ""),
                 learned=meta.get("learned", ""),
                 cited_from=meta.get("cited_from", ""),
                 headings=files[source]["headings"],

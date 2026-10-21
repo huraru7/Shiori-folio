@@ -19,8 +19,6 @@ pub struct ShelfDocDto {
     pub name: String,
     pub title: String,
     pub topic: String,
-    // yes / unverified / disputed。frontmatterに無ければ空文字。
-    pub verified: String,
     pub learned: String,
     pub summary: String,
     pub source: String,
@@ -83,7 +81,6 @@ pub fn list(shelf: &Path) -> Vec<ShelfDocDto> {
                 title: if title.is_empty() { name.clone() } else { title },
                 name,
                 topic: frontmatter_value(&text, "topic"),
-                verified: frontmatter_value(&text, "verified"),
                 learned: frontmatter_value(&text, "learned"),
                 summary: frontmatter_value(&text, "summary"),
                 source: frontmatter_value(&text, "source"),
@@ -109,7 +106,7 @@ pub fn read(shelf: &Path, name: &str) -> Result<String, String> {
 mod tests {
     use super::*;
 
-    const NOTE: &str = "---\ntitle: '超実数: 無限小'\ntopic: 数学\nverified: unverified\nlearned: '2026-10-17'\nsource: \"AIとの対話\"\n---\n\n本文\n";
+    const NOTE: &str = "---\ntitle: '超実数: 無限小'\ntopic: 数学\nlearned: '2026-10-17'\nsource: \"AIとの対話\"\n---\n\n本文\n";
 
     fn temp_shelf(tag: &str) -> std::path::PathBuf {
         let dir = std::env::temp_dir().join(format!("shiori-shelf-test-{tag}-{}", std::process::id()));
