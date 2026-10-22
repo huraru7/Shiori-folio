@@ -7,6 +7,7 @@
 //! 使用法: `shiori-save <mdファイルのパス>`
 //!         `shiori-save [--copy] <素材>.meta`(素材ファイルの取り込み、詩織Ver3.5)
 //!         `shiori-save [--expect-updated <updated>] <memory.md>`(共通記憶MD、詩織Ver4.1)
+//!         `shiori-save <type: knowledgeの記事>`(知識の棚、詩織Ver5.0候補。保存先はlibrary/ではなくknowledge/)
 //! 対象ファイルにはfrontmatter(title/type/tags/project/author)が付与済みで
 //! あることを前提とする。実行後、対象ファイルはlibrary/配下の決定先へ
 //! 移動される(コピーではなく移動、元の場所には残らない)。frontmatterが
@@ -24,7 +25,7 @@ use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
-use shiori_folio_lib::{library_root, load_search_backend_config, project_root, rag_client};
+use shiori_folio_lib::{library_root, load_search_backend_config, project_root, rag_client, shelf_root};
 
 // 詩織Ver3.1(journal廃止・project/area配下へのkind統合、2026-09-16)。
 // journalをtypeから廃止し、project/areaそれぞれの配下にjournal/resourceの
@@ -209,6 +210,11 @@ fn main() -> Result<()> {
     }
     if expect_updated.is_some() {
         bail!("--expect-updatedはkind: memoryの更新専用です");
+    }
+
+    // 知識の棚の記事は、libraryの配置ルール・タグの台帳を使わず、棚へ置く専用の経路で処理する。
+    if fm.kind.as_deref() == Some(KNOWLEDGE_TYPE) {
+        return save_shelf(&source, fm, &body);
     }
 
     // タグは常に正規化する(inbox行きになる場合でも、表記ゆれの統一自体は
@@ -672,6 +678,206 @@ fn save_memory(
     Ok(())
 }
 
+// ---- 知識の棚(詩織Ver5.0候補) ----
+
+// 棚の記事のtype。library/の4種(VALID_TYPES)とは別物で、library/には置かない。
+const KNOWLEDGE_TYPE: &str = "knowledge";
+// 棚の下の管理用フォルダ(索引の対象外)。下書きと、上書き前の旧版を置く。
+const SHELF_SYSTEM_DIR: &str = "_system";
+const SHELF_DRAFTS_DIR: &str = "drafts";
+const SHELF_HISTORY_DIR: &str = "history";
+const DRAFT_STATUS: &str = "draft";
+// 棚の記事に必須の項目。sourceは読む側(indexing.py・shelf.rs)が1行しか読まないため、
+// 保存時にSOURCE_SEPARATORで1行へそろえる。
+const SHELF_REQUIRED_FIELDS: &[&str] = &["topic", "learned", "source"];
+const SOURCE_SEPARATOR: &str = " / ";
+
+// YAMLのスカラー値を文字列として取り出す(learnedが日付・数値として読まれた場合も文字列にする)。
+fn yaml_text(value: &serde_yaml::Value) -> Option<String> {
+    match value {
+        serde_yaml::Value::String(s) => Some(s.clone()),
+        serde_yaml::Value::Number(n) => Some(n.to_string()),
+        serde_yaml::Value::Bool(b) => Some(b.to_string()),
+        _ => None,
+    }
+}
+
+fn shelf_field(fm: &Frontmatter, key: &str) -> String {
+    fm.extra
+        .get(key)
+        .and_then(yaml_text)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default()
+}
+
+// sourceのリスト・複数行の文字列を、空の要素を除いて「 / 」区切りの1行にする。
+fn single_line_source(value: &serde_yaml::Value) -> String {
+    let parts: Vec<String> = match value {
+        serde_yaml::Value::Sequence(items) => items.iter().filter_map(yaml_text).collect(),
+        other => yaml_text(other)
+            .map(|s| s.lines().map(str::to_string).collect())
+            .unwrap_or_default(),
+    };
+    parts
+        .iter()
+        .map(|p| p.trim())
+        .filter(|p| !p.is_empty())
+        .collect::<Vec<_>>()
+        .join(SOURCE_SEPARATOR)
+}
+
+// 棚に置けるか検証する。memoryと同じく、不備はinboxへ逃がさずエラーにする
+// (棚は、ふらるが承認した記事だけを置く場所のため)。
+fn validate_shelf(fm: &Frontmatter) -> Result<()> {
+    if fm.title.as_deref().map(str::trim).unwrap_or("").is_empty() {
+        bail!("titleが空です");
+    }
+    if fm.tags.is_empty() {
+        bail!("tagsが空です");
+    }
+    for key in SHELF_REQUIRED_FIELDS {
+        if shelf_field(fm, key).is_empty() {
+            bail!("{key}が空です(知識の棚の記事には{SHELF_REQUIRED_FIELDS:?}が必要です)");
+        }
+    }
+    Ok(())
+}
+
+// 棚に置くファイル名。棚の一覧(shelf.rs)は隠しファイルを読まないため、`.`始まりは拒否する。
+fn shelf_file_name(source: &Path) -> Result<String> {
+    let name = source
+        .file_name()
+        .ok_or_else(|| anyhow!("ファイル名の取得に失敗"))?
+        .to_string_lossy()
+        .to_string();
+    if !name.ends_with(".md") {
+        bail!("知識の棚の記事は.mdにしてください: {name}");
+    }
+    if name.starts_with('.') {
+        bail!(".で始まる名前は棚の一覧に出ないため使えません: {name}");
+    }
+    Ok(name)
+}
+
+// 退避名に付ける旧版の日付。learnedが無ければdateの日付部分、それも無ければunknown。
+fn shelf_history_label(old_fm: &Frontmatter) -> String {
+    let learned = shelf_field(old_fm, "learned");
+    let label = if !learned.is_empty() {
+        learned
+    } else {
+        old_fm
+            .date
+            .as_deref()
+            .map(|d| d.chars().take(10).collect::<String>())
+            .filter(|d| !d.trim().is_empty())
+            .unwrap_or_else(|| "unknown".to_string())
+    };
+    label.replace([':', '/', '\\'], "-")
+}
+
+// 退避先で既存のファイルと衝突しない名前を返す({名前}-{日付}.md、{名前}-{日付}-2.md…)。
+// 2026-10-21に、退避先の同名を確かめずに上書きして仮データを消したことの再発防止。
+fn shelf_history_destination(history_dir: &Path, stem: &str, label: &str) -> PathBuf {
+    let mut candidate = history_dir.join(format!("{stem}-{label}.md"));
+    let mut n = 2;
+    while candidate.exists() {
+        candidate = history_dir.join(format!("{stem}-{label}-{n}.md"));
+        n += 1;
+    }
+    candidate
+}
+
+// 同じファイルを指しているか(棚の記事そのものを渡された場合の検出用)。
+fn is_same_file(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
+}
+
+// RAGが起動中なら、棚の記事1件だけを即時に索引へ入れる(reindex_saved_fileの棚版)。
+fn reindex_shelf_saved_file(file_name: &str) {
+    match load_search_backend_config(&project_root()) {
+        Ok(backend) if rag_client::is_running(backend.rag_port) => {
+            if let Err(e) = rag_client::reindex_shelf_file(backend.rag_port, file_name) {
+                eprintln!(
+                    "警告: 棚の即時re-indexに失敗しました({e})。次回のRAGサーバー起動時に反映されます。"
+                );
+            }
+        }
+        Ok(_) => {}
+        Err(e) => eprintln!("警告: 検索バックエンド設定の読み込みに失敗しました({e})。"),
+    }
+}
+
+// 知識の棚へ保存する。status: draftは_system/drafts/へ(索引に入れない、同名は上書き)、
+// それ以外は棚の直下へ置いて即時に索引へ入れる。正式な記事の上書きでは、旧版を
+// _system/history/へ連番付きで退避してから置き換え、作成日時(date)は旧版から引き継ぐ。
+fn save_shelf(source: &Path, mut fm: Frontmatter, body: &str) -> Result<()> {
+    let shelf = shelf_root();
+    if !shelf.is_dir() {
+        bail!("知識の棚(knowledge/)が見つかりません: {}", shelf.display());
+    }
+    if let Some(value) = fm.extra.get("source") {
+        let line = single_line_source(value);
+        fm.extra.insert("source".to_string(), serde_yaml::Value::String(line));
+    }
+    validate_shelf(&fm)?;
+    let file_name = shelf_file_name(source)?;
+    let is_draft = fm.status.trim() == DRAFT_STATUS;
+
+    let dest_dir = if is_draft {
+        shelf.join(SHELF_SYSTEM_DIR).join(SHELF_DRAFTS_DIR)
+    } else {
+        shelf.clone()
+    };
+    std::fs::create_dir_all(&dest_dir)
+        .with_context(|| format!("{}の作成に失敗", dest_dir.display()))?;
+    let dest = dest_dir.join(&file_name);
+    // 保存先そのものを渡されると、旧版を退避できず、最後の元ファイルの削除で記事が消える。
+    if is_same_file(source, &dest) {
+        bail!(
+            "保存先の記事そのものは渡せません。別の場所(下書きなら_system/drafts/)に書いてから渡してください: {}",
+            dest.display()
+        );
+    }
+
+    let mut history_file = None;
+    if !is_draft && dest.is_file() {
+        let old_text = std::fs::read_to_string(&dest)
+            .with_context(|| format!("{}の読み込みに失敗", dest.display()))?;
+        let (old_fm, _) = split_frontmatter(&old_text)
+            .with_context(|| format!("既存の記事のfrontmatterを読めません: {}", dest.display()))?;
+        fm.date = old_fm.date.clone().or(fm.date);
+        let history_dir = shelf.join(SHELF_SYSTEM_DIR).join(SHELF_HISTORY_DIR);
+        std::fs::create_dir_all(&history_dir)
+            .with_context(|| format!("{}の作成に失敗", history_dir.display()))?;
+        let stem = file_name.strip_suffix(".md").unwrap_or(&file_name);
+        let path = shelf_history_destination(&history_dir, stem, &shelf_history_label(&old_fm));
+        // 退避に失敗したら上書きしない。
+        std::fs::write(&path, &old_text)
+            .with_context(|| format!("旧版の退避に失敗: {}", path.display()))?;
+        history_file = Some(path);
+    }
+
+    let frontmatter_yaml = serde_yaml::to_string(&fm).context("frontmatterのYAML化に失敗")?;
+    write_atomically(&dest, &format!("---\n{frontmatter_yaml}---\n{body}"))?;
+    std::fs::remove_file(source)
+        .with_context(|| format!("移動元{}の削除に失敗", source.display()))?;
+
+    if !is_draft {
+        reindex_shelf_saved_file(&file_name);
+    }
+
+    let result = serde_json::json!({
+        "destination": dest.display().to_string(),
+        "draft": is_draft,
+        "history_file": history_file.map(|p| p.display().to_string()),
+    });
+    println!("{}", serde_json::to_string_pretty(&result)?);
+    Ok(())
+}
+
 // ---- 素材の取り込み(詩織Ver3.5) ----
 
 // 素材のサイドカーの拡張子。「X.zip」に対し「X.zip.meta」を置く。
@@ -927,6 +1133,85 @@ mod tests {
         assert!(left[0].contains("2026-10-03"), "古い2世代が消え、03〜05が残る: {left:?}");
         assert!(other.exists() && tanker.exists());
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    fn shelf_fm(yaml: &str) -> Frontmatter {
+        split_frontmatter(&format!("---\n{yaml}\n---\n本文\n")).unwrap().0
+    }
+
+    #[test]
+    fn 棚のsourceはリストも複数行も1行にそろえる() {
+        let fm = shelf_fm("source:\n- https://a.example/x\n- ''\n- 'Keisler, Foundations'");
+        assert_eq!(
+            single_line_source(&fm.extra["source"]),
+            "https://a.example/x / Keisler, Foundations"
+        );
+        let fm = shelf_fm("source: |\n  教科書A\n\n  https://b.example\n");
+        assert_eq!(single_line_source(&fm.extra["source"]), "教科書A / https://b.example");
+        let fm = shelf_fm("source: 'そのまま 1行'");
+        assert_eq!(single_line_source(&fm.extra["source"]), "そのまま 1行");
+    }
+
+    #[test]
+    fn 長いsourceも書き出しで折り返さない() {
+        let long = vec!["https://example.com/a very long title with spaces"; 6].join(SOURCE_SEPARATOR);
+        let mut fm = shelf_fm("title: t");
+        fm.extra.insert("source".to_string(), serde_yaml::Value::String(long.clone()));
+        let yaml = serde_yaml::to_string(&fm).unwrap();
+        let line = yaml.lines().find(|l| l.starts_with("source:")).unwrap();
+        assert!(line.contains("example.com/a very long title with spaces / https"));
+        assert!(!yaml.lines().any(|l| l.starts_with("  ")), "折り返しの継続行がある: {yaml}");
+    }
+
+    #[test]
+    fn 棚の必須項目が欠けたら拒否する() {
+        let ok = "title: t\ntype: knowledge\ntags:\n- 数学\ntopic: 数学\nlearned: 2026-10-23\nsource: 教科書";
+        assert!(validate_shelf(&shelf_fm(ok)).is_ok());
+        for missing in ["topic", "learned", "source"] {
+            let yaml: String = ok
+                .lines()
+                .filter(|l| !l.starts_with(&format!("{missing}:")))
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(validate_shelf(&shelf_fm(&yaml)).is_err(), "{missing}が無いのに通った");
+        }
+        assert!(validate_shelf(&shelf_fm(&ok.replace("title: t", "title: ''"))).is_err());
+        assert!(validate_shelf(&shelf_fm(&ok.replace("tags:\n- 数学", "tags: []"))).is_err());
+    }
+
+    #[test]
+    fn 棚の退避名はlearnedかdateの日付を使う() {
+        assert_eq!(shelf_history_label(&shelf_fm("learned: '2026-10-21'")), "2026-10-21");
+        assert_eq!(
+            shelf_history_label(&shelf_fm("date: 2026-10-17T15:00:55+09:00")),
+            "2026-10-17"
+        );
+        assert_eq!(shelf_history_label(&shelf_fm("title: t")), "unknown");
+    }
+
+    #[test]
+    fn 棚の退避先に同名があれば連番を付ける() {
+        let dir = std::env::temp_dir().join(format!("shiori-save-shelf-history-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let first = shelf_history_destination(&dir, "math-hyperreal", "2026-10-17");
+        assert_eq!(first.file_name().unwrap(), "math-hyperreal-2026-10-17.md");
+        std::fs::write(&first, "既存").unwrap();
+        let second = shelf_history_destination(&dir, "math-hyperreal", "2026-10-17");
+        assert_eq!(second.file_name().unwrap(), "math-hyperreal-2026-10-17-2.md");
+        std::fs::write(&second, "既存").unwrap();
+        let third = shelf_history_destination(&dir, "math-hyperreal", "2026-10-17");
+        assert_eq!(third.file_name().unwrap(), "math-hyperreal-2026-10-17-3.md");
+        // 既存の退避は書き換えない。
+        assert_eq!(std::fs::read_to_string(&first).unwrap(), "既存");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn 棚のファイル名はmdで隠しファイルでないこと() {
+        assert_eq!(shelf_file_name(Path::new("x/math-a.md")).unwrap(), "math-a.md");
+        assert!(shelf_file_name(Path::new("x/math-a.txt")).is_err());
+        assert!(shelf_file_name(Path::new("x/.math-a.md")).is_err());
     }
 
     #[test]
