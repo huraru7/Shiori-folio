@@ -1,0 +1,77 @@
+/* 計算機の見た目。値は src/styles/tokens.css から写した(拡張機能は本体のCSSを読めないため)。
+   囲いの中では本体の @font-face が効かないので、Shippori Mincho はPCに入っているときだけ使い、無ければほかの明朝体に落ちる。
+   字形を同梱するなら、woff2 をこのフォルダに置いて @font-face を足す(font-src 'self' で読める) */
+:root {
+  --bg: #17150f;
+  --bg-deep: #100f0a;
+  --paper: #ede6d6;
+  --paper-dim: #a79e8c;
+  --glass: rgba(237, 230, 214, 0.04);
+  --glass-border: rgba(237, 230, 214, 0.09);
+  --moss: #8fa06b;
+  --moss-deep: #6e7f4f;
+  --danger: #c97a6e;
+  --font-display: "Shippori Mincho", "Yu Mincho", "Hiragino Mincho ProN", serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-deep);
+  color: var(--paper);
+  font: 14px/1.5 var(--font-display);
+}
+header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+h1 { font-size: 17px; font-weight: 500; margin: 0; letter-spacing: 0.08em; }
+h2 { font-size: 13px; font-weight: 500; color: var(--paper-dim); margin: 12px 0 4px; }
+button { font: inherit; color: inherit; cursor: pointer; }
+.chip {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 13px;
+}
+.chip:hover { border-color: var(--moss); }
+#expr {
+  width: 100%;
+  background: var(--bg);
+  color: var(--paper);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: 17px/1.4 var(--font-display);
+}
+#expr:focus { outline: none; border-color: var(--moss); }
+.answer { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin: 8px 0 2px; }
+#result { font-size: 24px; word-break: break-all; text-align: right; }
+#result.dim { color: var(--paper-dim); }
+.message { min-height: 1.5em; margin: 0 0 6px; font-size: 12px; color: var(--paper-dim); text-align: right; }
+.keys { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-bottom: 6px; }
+.keys button {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 7px 0;
+  font-size: 15px;
+}
+.keys button:hover { border-color: var(--moss); }
+.keys.fn button { font-size: 13px; color: var(--paper-dim); }
+.keys .soft { color: var(--danger); }
+.keys .equal { background: var(--moss-deep); border-color: var(--moss-deep); }
+.history { list-style: none; margin: 0; padding: 0; }
+.history button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--glass-border);
+  padding: 4px 2px;
+  font-size: 13px;
+  color: var(--paper-dim);
+  word-break: break-all;
+}
+.history button:hover { color: var(--paper); }
+@media (prefers-reduced-motion: no-preference) {
+  .keys button, .chip { transition: border-color 0.15s; }
+}

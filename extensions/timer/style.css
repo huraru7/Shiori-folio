@@ -1,0 +1,82 @@
+/* タイマーの見た目。値は src/styles/tokens.css から写した(拡張機能は本体のCSSを読めないため)。
+   囲いの中では本体の @font-face が効かないので、Shippori Mincho はPCに入っているときだけ使う */
+:root {
+  --bg: #17150f;
+  --bg-deep: #100f0a;
+  --paper: #ede6d6;
+  --paper-dim: #a79e8c;
+  --glass: rgba(237, 230, 214, 0.04);
+  --glass-border: rgba(237, 230, 214, 0.09);
+  --moss: #8fa06b;
+  --moss-deep: #6e7f4f;
+  --danger: #c97a6e;
+  --font-display: "Shippori Mincho", "Yu Mincho", "Hiragino Mincho ProN", serif;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--bg-deep);
+  color: var(--paper);
+  font: 14px/1.5 var(--font-display);
+}
+button { font: inherit; color: inherit; cursor: pointer; }
+button:disabled { opacity: 0.4; cursor: default; }
+.tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+.tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--glass-border);
+  padding: 4px 0;
+  color: var(--paper-dim);
+}
+.tab.active { color: var(--paper); border-bottom-color: var(--moss); }
+input[type="text"] {
+  width: 100%;
+  margin-bottom: 6px;
+  background: var(--bg);
+  color: var(--paper);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font: 15px/1.4 var(--font-display);
+}
+input[type="text"]:focus { outline: none; border-color: var(--moss); }
+.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; margin-bottom: 6px; }
+.quick button, .watch-keys button, .timers .cancel {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 6px 0;
+}
+.quick button:hover, .watch-keys button:hover:not(:disabled), .timers .cancel:hover { border-color: var(--moss); }
+.primary { width: 100%; background: var(--moss-deep) !important; border: 1px solid var(--moss-deep); border-radius: 6px; padding: 7px 0; }
+.message { min-height: 1.5em; margin: 4px 0; font-size: 12px; color: var(--paper-dim); }
+.timers, .laps { list-style: none; margin: 0; padding: 0; }
+.timers li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 2px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.timers .left { font-size: 20px; font-variant-numeric: tabular-nums; min-width: 5.5em; }
+.timers .what { flex: 1; font-size: 12px; color: var(--paper-dim); word-break: break-all; }
+.timers .cancel { padding: 2px 10px; font-size: 12px; color: var(--danger); }
+.empty { font-size: 12px; color: var(--paper-dim); text-align: center; }
+.elapsed { display: block; text-align: center; font-size: 34px; font-variant-numeric: tabular-nums; margin: 10px 0 12px; }
+.watch-keys { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 5px; margin-bottom: 8px; }
+.watch-keys .primary { width: auto; }
+.laps li {
+  display: flex;
+  justify-content: space-between;
+  padding: 3px 2px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 13px;
+  color: var(--paper-dim);
+  font-variant-numeric: tabular-nums;
+}
+@media (prefers-reduced-motion: no-preference) {
+  button { transition: border-color 0.15s; }
+}

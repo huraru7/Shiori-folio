@@ -1,0 +1,15 @@
+{
+  "name": "calculator",
+  "version": "0.1.0",
+  "title": "計算機",
+  "description": "四則・括弧・%・累乗・√・三角関数・log・ln・階乗の関数電卓。答えのコピーと履歴10件",
+  "kind": "ui",
+  "entry": "index.html",
+  "places": ["window", "pet"],
+  "slot": "tool",
+  "uses": ["clipboard.write", "storage"],
+  "errors": [
+    { "code": "calculator-001", "message": "式が読めない" },
+    { "code": "calculator-002", "message": "計算できない(0で割る、定義の外)" }
+  ]
+}

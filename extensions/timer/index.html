@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>タイマー</title>
+<link rel="stylesheet" href="style.css">
+<script src="/_shiori/shiori.js"></script>
+<script src="timeparse.js"></script>
+<script src="selftest-cases.js"></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<nav class="tabs" role="tablist">
+  <button id="tab-timer" type="button" role="tab" class="tab active" aria-selected="true">タイマー</button>
+  <button id="tab-watch" type="button" role="tab" class="tab" aria-selected="false">ストップウォッチ</button>
+</nav>
+
+<section id="pane-timer">
+  <div id="timer-form">
+    <input id="when" type="text" autocomplete="off" spellcheck="false" placeholder="30分・1時間半・13時半・13:30">
+    <input id="label" type="text" autocomplete="off" spellcheck="false" maxlength="40" placeholder="名前(なくてもよい。例: 洗濯)">
+    <div class="quick">
+      <button type="button" data-quick="3分">3分</button><button type="button" data-quick="5分">5分</button><button type="button" data-quick="10分">10分</button><button type="button" data-quick="30分">30分</button>
+    </div>
+    <button id="start" type="button" class="primary">始める</button>
+  </div>
+  <p id="message" class="message" aria-live="polite"></p>
+  <ol id="timers" class="timers"></ol>
+  <p id="empty" class="empty">動いているタイマーはありません</p>
+</section>
+
+<section id="pane-watch" hidden>
+  <output id="elapsed" class="elapsed">0:00.0</output>
+  <div class="watch-keys">
+    <button id="watch-start" type="button" class="primary">始める</button>
+    <button id="watch-lap" type="button" disabled>ラップ</button>
+    <button id="watch-reset" type="button" disabled>戻す</button>
+  </div>
+  <ol id="laps" class="laps"></ol>
+</section>
+</body>
+</html>

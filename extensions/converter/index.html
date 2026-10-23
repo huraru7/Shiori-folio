@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>変換</title>
+<link rel="stylesheet" href="style.css">
+<script src="/_shiori/shiori.js"></script>
+<script src="convert.js" defer></script>
+<script src="selftest.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<header class="head">
+  <h1>変換</h1>
+  <nav class="tabs" role="tablist">
+    <button type="button" role="tab" id="tab-unit" aria-controls="pane-unit" aria-selected="true">単位</button>
+    <button type="button" role="tab" id="tab-radix" aria-controls="pane-radix" aria-selected="false">基数</button>
+  </nav>
+</header>
+
+<section id="pane-unit" role="tabpanel" aria-labelledby="tab-unit">
+  <div id="categories" class="chips" role="group" aria-label="種類"></div>
+  <div class="source">
+    <input id="unit-value" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="値" aria-label="値" value="1">
+    <select id="unit-from" aria-label="元の単位"></select>
+  </div>
+  <p id="unit-error" class="error" role="alert" hidden></p>
+  <ul id="unit-results" class="results" aria-label="換算の結果"></ul>
+</section>
+
+<section id="pane-radix" role="tabpanel" aria-labelledby="tab-radix" hidden>
+  <p class="lead">0以上の整数。どれに打っても、残りが変わる。</p>
+  <ul id="radix-rows" class="results radix"></ul>
+  <p id="radix-error" class="error" role="alert" hidden></p>
+</section>
+
+<p id="status" class="status" aria-live="polite"></p>
+</body>
+</html>

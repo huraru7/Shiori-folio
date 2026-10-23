@@ -1,0 +1,15 @@
+{
+  "name": "converter",
+  "version": "0.1.0",
+  "title": "変換",
+  "description": "単位(長さ・重さ・温度・データ量・時間・速度・面積・体積)と、2・8・10・16進の基数を変換する小道具",
+  "kind": "ui",
+  "entry": "index.html",
+  "places": ["window"],
+  "slot": "tool",
+  "uses": ["clipboard.write", "storage"],
+  "errors": [
+    { "code": "converter-001", "message": "数として読めない" },
+    { "code": "converter-002", "message": "その基数で使えない文字" }
+  ]
+}

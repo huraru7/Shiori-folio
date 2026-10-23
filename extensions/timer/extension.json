@@ -1,0 +1,15 @@
+{
+  "name": "timer",
+  "version": "0.1.0",
+  "title": "タイマー",
+  "description": "「30分」のような長さと「13時半」のような時刻で予約するタイマーと、ストップウォッチ。時間が来たら詩織が知らせる",
+  "kind": "ui",
+  "entry": "index.html",
+  "places": ["window", "pet"],
+  "slot": "tool",
+  "uses": ["schedule", "storage"],
+  "errors": [
+    { "code": "timer-001", "message": "長さか時刻として読めない" },
+    { "code": "timer-002", "message": "予約の数が多すぎる" }
+  ]
+}

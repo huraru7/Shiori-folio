@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>計算機</title>
+<link rel="stylesheet" href="style.css">
+<script src="/_shiori/shiori.js"></script>
+<script src="calc.js"></script>
+<script src="selftest-cases.js"></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<header>
+  <h1>計算機</h1>
+  <button id="angle" type="button" class="chip" title="度とラジアンを切り替える">度</button>
+</header>
+<input id="expr" type="text" autocomplete="off" spellcheck="false" placeholder="式を打つ(例: 2sin(30)+√16)">
+<div class="answer">
+  <output id="result">0</output>
+  <button id="copy" type="button" class="chip">コピー</button>
+</div>
+<p id="message" class="message" aria-live="polite"></p>
+<div class="keys fn">
+  <button data-ins="sin(">sin</button><button data-ins="cos(">cos</button><button data-ins="tan(">tan</button><button data-ins="log(">log</button><button data-ins="ln(">ln</button>
+  <button data-ins="asin(">sin⁻¹</button><button data-ins="acos(">cos⁻¹</button><button data-ins="atan(">tan⁻¹</button><button data-ins="√(">√</button><button data-ins="^">xʸ</button>
+  <button data-ins="π">π</button><button data-ins="e">e</button><button data-ins="!">n!</button><button data-ins="%">%</button><button data-ins="ans">ans</button>
+</div>
+<div class="keys main">
+  <button data-ins="7">7</button><button data-ins="8">8</button><button data-ins="9">9</button><button data-ins="÷">÷</button><button data-act="clear" class="soft">C</button>
+  <button data-ins="4">4</button><button data-ins="5">5</button><button data-ins="6">6</button><button data-ins="×">×</button><button data-act="back" class="soft">⌫</button>
+  <button data-ins="1">1</button><button data-ins="2">2</button><button data-ins="3">3</button><button data-ins="−">−</button><button data-ins="(">(</button>
+  <button data-ins="0">0</button><button data-ins=".">.</button><button data-ins=")">)</button><button data-ins="+">+</button><button data-act="equal" class="equal">=</button>
+</div>
+<h2>履歴</h2>
+<ol id="history" class="history"></ol>
+</body>
+</html>
