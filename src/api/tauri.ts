@@ -91,6 +91,9 @@ export const api = {
   // 拡張機能(詩織Ver6.0の段階1)。一覧は起動時に読み込んだもの。承認すると、新しい一覧が返る。
   listExtensions: () => invoke<ExtensionInfo[]>("list_extensions"),
   approveExtension: (name: string) => invoke<ExtensionInfo[]>("approve_extension", { name }),
+  // 画面の部品の拡張機能からの頼みごと。断られたときは{ code, message }でrejectする。
+  extCall: (name: string, method: string, params: unknown) =>
+    invoke<unknown>("ext_call", { name, method, params }),
   // forceがfalseなら、前回の取り込みから間もないときは省く。
   refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
   // hostがnullなら全端末の合算。

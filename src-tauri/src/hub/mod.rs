@@ -5,7 +5,9 @@
 //! 読み込まない。拡張機能どうしは直接やり取りせず、必ずハブを通す(構想メモ idea-shiori-ver6-20261022)。
 
 pub mod approvals;
+pub mod bridge;
 pub mod manifest;
+pub mod protocol;
 
 use crate::error_codes::{self, ErrorCode};
 use crate::shiori_log;
@@ -224,6 +226,8 @@ pub struct ExtensionDto {
     pub version: Option<String>,
     pub description: Option<String>,
     pub kind: Option<&'static str>,
+    /// 画面の部品の入口(拡張機能のフォルダからの相対パス)。別のプログラムは`None`
+    pub entry: Option<String>,
     pub places: Vec<&'static str>,
     pub uses: Vec<UseDto>,
     /// "ready" | "needs-approval" | "invalid"
@@ -251,6 +255,7 @@ impl From<&Extension> for ExtensionDto {
             version: m.map(|m| m.version.clone()),
             description: m.map(|m| m.description.clone()),
             kind: m.map(|m| kind_label(m.kind)),
+            entry: m.filter(|m| m.kind == Kind::Ui).and_then(|m| m.entry.for_this_os()).map(str::to_string),
             places: m
                 .map(|m| m.places.iter().map(|p| if *p == Place::Window { "window" } else { "pet" }).collect())
                 .unwrap_or_default(),

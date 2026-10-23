@@ -5348,6 +5348,8 @@ pub fn run() {
         .manage(BackendState(Mutex::new(BackendProcesses::default())))
         // 拡張機能(詩織Ver6.0の段階1)。起動時に1回だけ読み込む
         .manage(hub::HubState(Mutex::new(hub::Hub::load(&root))))
+        // 画面の部品の拡張機能を配る専用のURLの仕組み(shiori-ext://)
+        .register_uri_scheme_protocol(hub::protocol::SCHEME, hub::protocol::handle)
         .manage(audio::RecordingState::new())
         .manage(SttManager::new())
         .manage(Mutex::new(sysinfo::System::new_all()))
@@ -5419,7 +5421,8 @@ pub fn run() {
             get_ragas_history,
             log_ui_event,
             hub::list_extensions,
-            hub::approve_extension
+            hub::approve_extension,
+            hub::bridge::ext_call
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

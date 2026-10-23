@@ -1,0 +1,23 @@
+/* 試しの画面の見た目。拡張機能の中のCSSが読めること(style-src 'self')も確かめる */
+body {
+  margin: 0;
+  padding: 14px 18px;
+  background: #100f0a;
+  color: #ede6d6;
+  font: 14px/1.6 sans-serif;
+}
+h1 { font-size: 17px; margin: 0 0 6px; }
+.lead { color: #a79e8c; margin: 0 0 8px; }
+.ok { color: #8fa06b; }
+.ng { color: #c97a6e; }
+button {
+  background: #6e7f4f;
+  color: #ede6d6;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+table { border-collapse: collapse; margin-top: 10px; width: 100%; }
+th, td { border-bottom: 1px solid rgba(237, 230, 214, 0.09); padding: 4px 6px; text-align: left; vertical-align: top; }
+td.detail { color: #a79e8c; font-size: 12px; word-break: break-all; }

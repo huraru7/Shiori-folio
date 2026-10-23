@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useExtensionsStore } from "../../store/useExtensionsStore";
 import type { ExtensionInfo } from "../../types";
+import ExtensionFrame from "./ExtensionFrame";
 import "./ExtensionsScreen.css";
 
 const STATUS_LABEL: Record<ExtensionInfo["status"], string> = {
@@ -22,6 +23,9 @@ function ExtensionsScreen() {
   const error = useExtensionsStore((s) => s.error);
   const load = useExtensionsStore((s) => s.load);
   const approve = useExtensionsStore((s) => s.approve);
+  // 開いている画面の部品の拡張機能(仮。段階2で、いまの画面の横の小さな枠にする)
+  const [opened, setOpened] = useState<string | null>(null);
+  const openedExt = list?.find((e) => e.name === opened && e.status === "ready" && e.entry);
 
   useEffect(() => {
     if (list === null) load();
@@ -33,6 +37,22 @@ function ExtensionsScreen() {
         portable/extensions/ に置いた拡張機能です。詩織の起動時に読み込みます。足したり外したりしたら、詩織を起動し直してください。
       </p>
       {error && <div className="extensions-screen__error">{error}</div>}
+      {openedExt && openedExt.name && openedExt.entry && (
+        <div className="extensions-screen__frame">
+          <div className="extensions-screen__frame-bar">
+            <span>{openedExt.title}</span>
+            <button type="button" className="extensions-screen__close" onClick={() => setOpened(null)}>
+              閉じる
+            </button>
+          </div>
+          <ExtensionFrame
+            key={openedExt.name}
+            name={openedExt.name}
+            entry={openedExt.entry}
+            title={openedExt.title ?? openedExt.name}
+          />
+        </div>
+      )}
       {list === null && !error && <p className="extensions-screen__empty">読み込み中...</p>}
       {list !== null && list.length === 0 && (
         <p className="extensions-screen__empty">拡張機能はまだありません。</p>
@@ -58,6 +78,15 @@ function ExtensionsScreen() {
               <div className="extensions-screen__uses">
                 使うもの: {ext.uses.length === 0 ? "なし" : ext.uses.map((u) => u.label).join("、")}
               </div>
+            )}
+            {ext.status === "ready" && ext.kind === "ui" && ext.name && (
+              <button
+                type="button"
+                className="extensions-screen__approve"
+                onClick={() => setOpened(ext.name)}
+              >
+                開く
+              </button>
             )}
             {ext.status === "needs-approval" && ext.name && (
               <button

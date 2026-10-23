@@ -361,6 +361,8 @@ export interface ExtensionInfo {
   version: string | null;
   description: string | null;
   kind: "ui" | "program" | null;
+  // 画面の部品の入口(拡張機能のフォルダからの相対パス)
+  entry: string | null;
   places: ("window" | "pet")[];
   uses: ExtensionUse[];
   status: ExtensionStatus;

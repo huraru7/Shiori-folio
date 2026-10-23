@@ -3,9 +3,18 @@
 <head>
 <meta charset="utf-8">
 <title>試しの画面</title>
+<link rel="stylesheet" href="style.css">
+<script src="/_shiori/shiori.js"></script>
+<script src="app.js" defer></script>
 </head>
 <body>
-<!-- 段階1のステップ4(画面の部品の囲いと窓口)で、中身を作る -->
-<p>試しの画面(hello-ui)</p>
+<h1>試しの画面(hello-ui)</h1>
+<p class="lead">段階1の受け入れ基準を確かめる。「全部試す」を押すと、下の表に結果が出る。</p>
+<p id="script-check" class="ng">スクリプトが動いていない(CSPの'self'で app.js が読めていない)</p>
+<button id="run-all" type="button">全部試す</button>
+<table>
+  <thead><tr><th>試すこと</th><th>期待</th><th>結果</th></tr></thead>
+  <tbody id="results"></tbody>
+</table>
 </body>
 </html>
