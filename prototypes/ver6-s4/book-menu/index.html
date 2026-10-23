@@ -1,0 +1,718 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>本のメニューの見本</title>
+<!--
+  詩織Ver6.0段階4の見本。ペットを押すと開く「本のメニュー」を3案並べて、ふらるが1つを選ぶためのもの。
+  外の部品は使わない(フォントはリポジトリの src/assets/fonts を相対で読む。無ければ明朝体で代わりに出る)。
+  本体のコードとは別物で、選ばれた案を元のセッションが本体に組み込む。
+-->
+<style>
+  @font-face {
+    font-family: 'Shippori Mincho';
+    src: url('../../../src/assets/fonts/ShipporiMincho-Regular.woff2') format('woff2');
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: 'Shippori Mincho';
+    src: url('../../../src/assets/fonts/ShipporiMincho-Medium.woff2') format('woff2');
+    font-weight: 500;
+  }
+  @font-face {
+    font-family: 'Noto Sans JP';
+    src: url('../../../src/assets/fonts/NotoSansJP-Regular.woff2') format('woff2');
+    font-weight: 400;
+  }
+
+  /* デザインの値は src/styles/tokens.css から写した。 */
+  :root {
+    --bg: #17150F;
+    --bg-deep: #100F0A;
+    --paper: #EDE6D6;
+    --paper-dim: #A79E8C;
+    --glass: rgba(237, 230, 214, 0.04);
+    --glass-border: rgba(237, 230, 214, 0.09);
+    --moss: #8FA06B;
+    --moss-deep: #6E7F4F;
+    --lamp: #F0B464;
+    --lamp-glow: rgba(240, 180, 100, 0.35);
+    --font-display: 'Shippori Mincho', 'Yu Mincho', serif;
+    --font-body: 'Noto Sans JP', sans-serif;
+    --fs-xs: 12px;
+    --fs-sm: 13px;
+    --fs-md: 14px;
+    --fs-base: 15px;
+    --fs-lg: 17px;
+    --fs-xl: 19px;
+
+    /* 本のページの色(この見本だけの値)。紙は --paper を少し温めて、文字は墨の色にする。 */
+    --page: #EFE7D3;
+    --page-edge: #D9CDB2;
+    --ink: #2B271D;
+    --ink-dim: #6B6252;
+    --ink-line: rgba(43, 39, 29, 0.18);
+    --hover: rgba(143, 160, 107, 0.22);
+
+    /* 開け閉めの長さ */
+    --dur: 0.3s;
+    --ease: cubic-bezier(0.2, 0.8, 0.25, 1);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg-deep);
+    color: var(--paper);
+    font-family: var(--font-body);
+    font-size: var(--fs-md);
+    line-height: 1.6;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 28px 16px 64px;
+  }
+
+  h1 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: var(--fs-xl);
+    margin: 0 0 6px;
+  }
+
+  .lead {
+    color: var(--paper-dim);
+    font-size: var(--fs-sm);
+    margin: 0 0 18px;
+  }
+
+  /* 上の操作の帯 */
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 18px;
+    align-items: center;
+    padding: 10px 14px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass);
+    border-radius: 8px;
+    margin-bottom: 22px;
+    font-size: var(--fs-sm);
+  }
+
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .seg button {
+    font: inherit;
+    color: var(--paper-dim);
+    background: none;
+    border: 0;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+
+  .seg button + button { border-left: 1px solid var(--glass-border); }
+
+  .seg button[aria-pressed="true"] {
+    color: var(--bg);
+    background: var(--moss);
+  }
+
+  .controls label { display: inline-flex; gap: 6px; align-items: center; color: var(--paper-dim); cursor: pointer; }
+  .controls input { accent-color: var(--moss); }
+
+  /* 1つの案 */
+  .plan { margin-bottom: 30px; }
+
+  .plan-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .plan-head h2 {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: var(--fs-lg);
+    margin: 0;
+  }
+
+  .plan-head h2 span {
+    color: var(--moss);
+    margin-right: 8px;
+  }
+
+  .plan-note {
+    color: var(--paper-dim);
+    font-size: var(--fs-sm);
+    margin: 0 0 8px;
+  }
+
+  /* 画面に見立てた帯。中の位置はJSで決める。 */
+  .desk {
+    position: relative;
+    height: 360px;
+    border-radius: 10px;
+    border: 1px solid var(--glass-border);
+    background:
+      radial-gradient(ellipse at 20% 0%, rgba(143, 160, 107, 0.08), transparent 60%),
+      linear-gradient(180deg, #1D1A13, var(--bg));
+    overflow: hidden;
+  }
+
+  .desk::after {
+    /* タスクバーに見立てた帯 */
+    content: '';
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    height: 10px;
+    background: rgba(0, 0, 0, 0.35);
+  }
+
+  .log {
+    margin-top: 6px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: var(--fs-xs);
+    color: var(--paper-dim);
+    min-height: 1.6em;
+  }
+
+  /* ペットの仮の絵(128×192) */
+  .pet {
+    position: absolute;
+    bottom: 10px;
+    width: 128px;
+    height: 192px;
+    padding: 0;
+    border: 1px dashed rgba(143, 160, 107, 0.6);
+    border-radius: 6px;
+    background: rgba(143, 160, 107, 0.07);
+    color: var(--paper-dim);
+    font: inherit;
+    font-size: var(--fs-xs);
+    cursor: pointer;
+  }
+
+  .pet:focus-visible { outline: 2px solid var(--moss); outline-offset: 3px; }
+
+  .pet-label {
+    position: absolute;
+    top: 10px; left: 0; right: 0;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  /* ペットが手に持っている本 */
+  .pet-book {
+    position: absolute;
+    left: 40px;
+    top: 104px;
+    width: 48px;
+    height: 34px;
+    border-radius: 2px 4px 4px 2px;
+    background: var(--moss-deep);
+    box-shadow: inset 4px 0 0 rgba(0, 0, 0, 0.25), 0 2px 0 var(--page-edge);
+    transition: transform var(--dur) var(--ease), opacity var(--dur) var(--ease);
+  }
+
+  .pet[aria-expanded="true"] .pet-book { transform: translateY(-4px) rotate(-6deg); }
+  .plan[data-side="left"] .pet[aria-expanded="true"] .pet-book { transform: translateY(-4px) rotate(6deg); }
+
+  /* 本の中の項目(3案で共通) */
+  .items { list-style: none; margin: 0; padding: 0; }
+
+  .item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: 0;
+    border-bottom: 1px dotted var(--ink-line);
+    background: none;
+    color: var(--ink);
+    font-family: var(--font-display);
+    font-size: var(--fs-base);
+    text-align: left;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+
+  .item:hover, .item:focus-visible { background: var(--hover); outline: none; }
+
+  .seal {
+    flex: none;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--moss-deep);
+    border-radius: 3px;
+    color: var(--moss-deep);
+    font-size: var(--fs-xs);
+    font-weight: 500;
+  }
+
+  .item--back { color: var(--ink-dim); }
+  .item--back .seal { border-style: dashed; }
+
+  .menu {
+    position: absolute;
+    bottom: 34px;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .menu.is-open { visibility: visible; pointer-events: auto; }
+
+  /* ===== 案A: 横に見開きで開く ===== */
+  .menu--a {
+    width: 420px;
+    height: 270px;
+    perspective: 1400px;
+  }
+
+  .spread {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    padding: 7px;
+    border-radius: 6px;
+    background: var(--moss-deep);
+    box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+    transform: scale(0.3);
+    opacity: 0;
+    transition: transform var(--dur) var(--ease), opacity calc(var(--dur) * 0.6) linear;
+    transform-style: preserve-3d;
+  }
+
+  .plan[data-side="left"] .spread { flex-direction: row-reverse; transform-origin: 100% 85%; }
+  .plan[data-side="right"] .spread { flex-direction: row; transform-origin: 0% 85%; }
+
+  .is-open .spread { transform: none; opacity: 1; }
+
+  .spread .page {
+    flex: 1;
+    position: relative;
+    background: var(--page);
+    padding: 14px 14px 12px;
+    color: var(--ink);
+  }
+
+  /* 近い方のページ(ペット側)に項目、遠い方のページは見出しと、これから増える小道具の余白 */
+  .plan[data-side="right"] .page--near { border-radius: 3px 0 0 3px; box-shadow: inset -14px 0 16px -12px rgba(0, 0, 0, 0.35); }
+  .plan[data-side="left"]  .page--near { border-radius: 0 3px 3px 0; box-shadow: inset 14px 0 16px -12px rgba(0, 0, 0, 0.35); }
+  .plan[data-side="right"] .page--far  { border-radius: 0 3px 3px 0; box-shadow: inset 14px 0 16px -12px rgba(0, 0, 0, 0.35); }
+  .plan[data-side="left"]  .page--far  { border-radius: 3px 0 0 3px; box-shadow: inset -14px 0 16px -12px rgba(0, 0, 0, 0.35); }
+
+  .page--far {
+    backface-visibility: hidden;
+    transition: transform var(--dur) var(--ease);
+  }
+
+  .plan[data-side="right"] .page--far { transform-origin: 0% 50%; transform: rotateY(-180deg); }
+  .plan[data-side="left"]  .page--far { transform-origin: 100% 50%; transform: rotateY(180deg); }
+  .is-open .page--far { transform: none !important; }
+
+  .page-title {
+    font-family: var(--font-display);
+    font-weight: 500;
+    font-size: var(--fs-md);
+    color: var(--ink-dim);
+    letter-spacing: 0.15em;
+    margin: 0 0 6px;
+  }
+
+  .ruled {
+    height: 150px;
+    margin-top: 10px;
+    background: repeating-linear-gradient(180deg, transparent 0 39px, var(--ink-line) 39px 40px);
+  }
+
+  .page-foot {
+    position: absolute;
+    bottom: 8px; left: 0; right: 0;
+    text-align: center;
+    font-size: var(--fs-xs);
+    color: var(--ink-dim);
+    font-family: var(--font-display);
+  }
+
+  /* ===== 案B: 縦に1ページで開く ===== */
+  .menu--b {
+    width: 230px;
+    height: 270px;
+    perspective: 900px;
+  }
+
+  .sheet {
+    position: absolute;
+    inset: 0;
+    padding: 6px;
+    border-radius: 5px;
+    background: var(--moss-deep);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.55);
+    transform-origin: 50% 100%;
+    transform: rotateX(-88deg) scale(0.6);
+    opacity: 0;
+    transition: transform var(--dur) var(--ease), opacity calc(var(--dur) * 0.5) linear;
+  }
+
+  .plan[data-side="right"] .sheet { transform-origin: 0% 100%; }
+  .plan[data-side="left"]  .sheet { transform-origin: 100% 100%; }
+
+  .is-open .sheet { transform: none; opacity: 1; }
+
+  .sheet .page {
+    height: 100%;
+    background: var(--page);
+    border-radius: 3px;
+    padding: 16px 14px 12px;
+    position: relative;
+    box-shadow: inset 0 14px 14px -12px rgba(0, 0, 0, 0.3);
+  }
+
+  /* 上のとじ紐 */
+  .sheet::before {
+    content: '';
+    position: absolute;
+    top: -5px; left: 50%;
+    width: 60px; height: 10px;
+    margin-left: -30px;
+    border-radius: 5px;
+    background: var(--moss-deep);
+  }
+
+  /* ===== 案C: 本から札が飛び出す ===== */
+  .menu--c {
+    width: 236px;
+    height: 190px;
+  }
+
+  .tags {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 10px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .tag {
+    position: relative;
+    opacity: 0;
+    transition: transform calc(var(--dur) * 0.75) var(--ease), opacity calc(var(--dur) * 0.5) linear;
+  }
+
+  /* 札は本(ペット側)から引き出されるように、ペットの方から滑り出る。上の札ほど少し遅れて出る。 */
+  .plan[data-side="right"] .tag { transform: translateX(-70%) scaleX(0.3); transform-origin: 0 50%; }
+  .plan[data-side="left"]  .tag { transform: translateX(70%) scaleX(0.3); transform-origin: 100% 50%; }
+  .is-open .tag { transform: none !important; opacity: 1; }
+  .is-open .tag:nth-child(3) { transition-delay: 0s; }
+  .is-open .tag:nth-child(2) { transition-delay: calc(var(--dur) * 0.12); }
+  .is-open .tag:nth-child(1) { transition-delay: calc(var(--dur) * 0.24); }
+
+  .tag .item {
+    height: 46px;
+    white-space: nowrap;
+    border: 0;
+    background: var(--page);
+    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+    padding: 0 26px 0 12px;
+    border-radius: 0;
+  }
+
+  /* 栞の先を燕尾に切る。ペットから遠い側を切る。 */
+  .plan[data-side="right"] .tag .item {
+    clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 50%, 100% 100%, 0 100%);
+    border-left: 5px solid var(--moss-deep);
+  }
+
+  .plan[data-side="left"] .tag .item {
+    clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%, 14px 50%);
+    border-right: 5px solid var(--moss-deep);
+    padding: 0 12px 0 26px;
+    flex-direction: row-reverse;
+    text-align: right;
+  }
+
+  .tag .item:hover, .tag .item:focus-visible { background: #E3DCC4; }
+  .tag .item:hover .seal, .tag .item:focus-visible .seal { background: var(--hover); }
+  .tag:nth-child(1) .item { width: 92%; }
+  .plan[data-side="left"] .tag:nth-child(1) .item { margin-left: 8%; }
+
+  /* 項目を押したときの仮の知らせ */
+  .toast {
+    position: absolute;
+    top: 12px; left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--glass-border);
+    color: var(--paper);
+    font-size: var(--fs-xs);
+    opacity: 0;
+    transition: opacity 0.2s linear;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  .toast.is-shown { opacity: 1; }
+
+  /* 動きを抑える設定では、動きなしで出す。見本では、上の切り替えでも同じ状態を試せる。 */
+  @media (prefers-reduced-motion: reduce) {
+    .desk *, .desk *::before { transition: none !important; }
+  }
+
+  .reduce .desk *, .reduce .desk *::before { transition: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>本のメニューの見本(Ver6.0 段階4)</h1>
+  <p class="lead">四角がペットの仮の絵(128×192)。押すと本が開き、外を押すか、もう一度ペットを押すと閉じます(Escでも閉じます)。ペットを端に置くと、本は反対側に開きます。項目を押すと、上に仮の知らせが出ます。</p>
+
+  <div class="controls">
+    <span>ペットの場所(3案まとめて)</span>
+    <span class="seg" id="pos-all" role="group" aria-label="ペットの場所">
+      <button type="button" data-pos="left">左端</button>
+      <button type="button" data-pos="middle">中ほど</button>
+      <button type="button" data-pos="right" aria-pressed="true">右端</button>
+    </span>
+    <label><input type="checkbox" id="reduce"> 動きを抑える設定のつもりで見る</label>
+    <span id="os-reduce" style="color:var(--paper-dim)"></span>
+  </div>
+
+  <section class="plan" data-plan="a" data-pos="right">
+    <div class="plan-head">
+      <h2><span>案A</span>横に見開きで開く</h2>
+      <span class="seg pos" role="group" aria-label="案Aのペットの場所">
+        <button type="button" data-pos="left">左端</button>
+        <button type="button" data-pos="middle">中ほど</button>
+        <button type="button" data-pos="right" aria-pressed="true">右端</button>
+      </span>
+    </div>
+    <p class="plan-note">手の本がふくらみ、遠い方のページがめくれて見開きになる。ペット側のページに項目、もう片方は見出しと、小道具が増えたときの続き。</p>
+    <div class="desk">
+      <div class="menu menu--a" role="menu" aria-label="本のメニュー">
+        <div class="spread">
+          <div class="page page--near">
+            <p class="page-title">しおりの本</p>
+            <ul class="items">
+              <li><button type="button" class="item item--back" role="menuitem" data-name="ウィンドウに戻る"><span class="seal">窓</span>ウィンドウに戻る</button></li>
+              <li><button type="button" class="item" role="menuitem" data-name="計算機"><span class="seal">計</span>計算機</button></li>
+              <li><button type="button" class="item" role="menuitem" data-name="タイマー"><span class="seal">時</span>タイマー</button></li>
+            </ul>
+            <div class="page-foot">一</div>
+          </div>
+          <div class="page page--far" aria-hidden="true">
+            <p class="page-title">つづき</p>
+            <div class="ruled"></div>
+            <div class="page-foot">二</div>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="pet" aria-expanded="false" aria-label="ペット(押すと本が開く)">
+        <span class="pet-label">ペット(仮)<br>128×192</span>
+        <span class="pet-book"></span>
+      </button>
+      <div class="toast" aria-live="polite"></div>
+    </div>
+    <div class="log"></div>
+  </section>
+
+  <section class="plan" data-plan="b" data-pos="right">
+    <div class="plan-head">
+      <h2><span>案B</span>縦に1ページで開く</h2>
+      <span class="seg pos" role="group" aria-label="案Bのペットの場所">
+        <button type="button" data-pos="left">左端</button>
+        <button type="button" data-pos="middle">中ほど</button>
+        <button type="button" data-pos="right" aria-pressed="true">右端</button>
+      </span>
+    </div>
+    <p class="plan-note">手帳を上にめくるように、縦長の1ページが起き上がる。項目は上から1列。</p>
+    <div class="desk">
+      <div class="menu menu--b" role="menu" aria-label="本のメニュー">
+        <div class="sheet">
+          <div class="page">
+            <p class="page-title">しおりの本</p>
+            <ul class="items">
+              <li><button type="button" class="item item--back" role="menuitem" data-name="ウィンドウに戻る"><span class="seal">窓</span>ウィンドウに戻る</button></li>
+              <li><button type="button" class="item" role="menuitem" data-name="計算機"><span class="seal">計</span>計算機</button></li>
+              <li><button type="button" class="item" role="menuitem" data-name="タイマー"><span class="seal">時</span>タイマー</button></li>
+            </ul>
+            <div class="page-foot">一</div>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="pet" aria-expanded="false" aria-label="ペット(押すと本が開く)">
+        <span class="pet-label">ペット(仮)<br>128×192</span>
+        <span class="pet-book"></span>
+      </button>
+      <div class="toast" aria-live="polite"></div>
+    </div>
+    <div class="log"></div>
+  </section>
+
+  <section class="plan" data-plan="c" data-pos="right">
+    <div class="plan-head">
+      <h2><span>案C</span>本から札(栞)が飛び出す</h2>
+      <span class="seg pos" role="group" aria-label="案Cのペットの場所">
+        <button type="button" data-pos="left">左端</button>
+        <button type="button" data-pos="middle">中ほど</button>
+        <button type="button" data-pos="right" aria-pressed="true">右端</button>
+      </span>
+    </div>
+    <p class="plan-note">本は手に持ったまま、項目ごとの栞が下から順に滑り出る。ページの枠を持たないので、いちばん場所をとらない。</p>
+    <div class="desk">
+      <div class="menu menu--c" role="menu" aria-label="本のメニュー">
+        <ul class="tags">
+          <li class="tag"><button type="button" class="item item--back" role="menuitem" data-name="ウィンドウに戻る"><span class="seal">窓</span>ウィンドウに戻る</button></li>
+          <li class="tag"><button type="button" class="item" role="menuitem" data-name="計算機"><span class="seal">計</span>計算機</button></li>
+          <li class="tag"><button type="button" class="item" role="menuitem" data-name="タイマー"><span class="seal">時</span>タイマー</button></li>
+        </ul>
+      </div>
+      <button type="button" class="pet" aria-expanded="false" aria-label="ペット(押すと本が開く)">
+        <span class="pet-label">ペット(仮)<br>128×192</span>
+        <span class="pet-book"></span>
+      </button>
+      <div class="toast" aria-live="polite"></div>
+    </div>
+    <div class="log"></div>
+  </section>
+</div>
+
+<script>
+  // ペットと本の位置の決め方(本体に組み込むときの考え方の見本でもある)。
+  // ペットの左右の空きを比べ、広い方に本を開く。端に寄せたときは、自然に反対側になる。
+  const EDGE = 16;     // 画面の端とペットのすき間
+  const GAP = 10;      // ペットと本のすき間
+  const PET_W = 128;
+
+  const plans = [...document.querySelectorAll('.plan')];
+  const planLabels = { a: '案A', b: '案B', c: '案C' };
+
+  function petX(plan) {
+    const W = plan.querySelector('.desk').clientWidth;
+    const pos = plan.dataset.pos;
+    if (pos === 'left') return EDGE;
+    if (pos === 'right') return W - EDGE - PET_W;
+    return Math.round(W / 2 - PET_W / 2);
+  }
+
+  function layout(plan) {
+    const W = plan.querySelector('.desk').clientWidth;
+    const x = petX(plan);
+    const spaceLeft = x;
+    const spaceRight = W - x - PET_W;
+    const side = spaceRight >= spaceLeft ? 'right' : 'left';
+    plan.dataset.side = side;
+
+    const pet = plan.querySelector('.pet');
+    const menu = plan.querySelector('.menu');
+    pet.style.left = x + 'px';
+    // offsetWidthは変形(scale)の影響を受けないので、閉じていても本当の幅が取れる
+    const mw = menu.offsetWidth;
+    menu.style.left = (side === 'right' ? x + PET_W + GAP : x - GAP - mw) + 'px';
+  }
+
+  function log(plan, text) {
+    const el = plan.querySelector('.log');
+    const t = new Date().toTimeString().slice(0, 8);
+    el.textContent = `${t} [PET] ${text}`;
+  }
+
+  function setOpen(plan, open) {
+    const menu = plan.querySelector('.menu');
+    const pet = plan.querySelector('.pet');
+    if (menu.classList.contains('is-open') === open) return;
+    menu.classList.toggle('is-open', open);
+    pet.setAttribute('aria-expanded', String(open));
+    const sideText = plan.dataset.side === 'right' ? '右へ' : '左へ';
+    log(plan, open ? `本を開く(${planLabels[plan.dataset.plan]}・${sideText})` : `本を閉じる(${planLabels[plan.dataset.plan]})`);
+    if (open) {
+      // 開いたら最初の項目に合わせる(キーボードでもすぐ選べるように)
+      setTimeout(() => menu.querySelector('.item').focus({ preventScroll: true }), 0);
+    }
+  }
+
+  function setPos(plan, pos) {
+    setOpen(plan, false);
+    plan.dataset.pos = pos;
+    plan.querySelectorAll('.pos button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.pos === pos)));
+    layout(plan);
+  }
+
+  let toastTimer = new Map();
+  function showToast(plan, text) {
+    const toast = plan.querySelector('.toast');
+    toast.textContent = text;
+    toast.classList.add('is-shown');
+    clearTimeout(toastTimer.get(plan));
+    toastTimer.set(plan, setTimeout(() => toast.classList.remove('is-shown'), 1600));
+  }
+
+  plans.forEach(plan => {
+    plan.querySelector('.pet').addEventListener('click', () => {
+      setOpen(plan, !plan.querySelector('.menu').classList.contains('is-open'));
+    });
+    plan.querySelectorAll('.pos button').forEach(b => b.addEventListener('click', () => setPos(plan, b.dataset.pos)));
+    plan.querySelectorAll('.menu .item').forEach(item => item.addEventListener('click', () => {
+      const name = item.dataset.name;
+      setOpen(plan, false);
+      showToast(plan, name === 'ウィンドウに戻る' ? 'ウィンドウの形に戻る(見本)' : `${name}を、ペットの横の枠で開く(見本)`);
+      log(plan, `${name}を選ぶ(${planLabels[plan.dataset.plan]})`);
+    }));
+    layout(plan);
+  });
+
+  // 本の外を押すと閉じる
+  document.addEventListener('pointerdown', e => {
+    plans.forEach(plan => {
+      if (!plan.querySelector('.menu').classList.contains('is-open')) return;
+      // 自分の本とペットの上は除く(ペットは押した側で開け閉めする)
+      if (plan.contains(e.target) && (e.target.closest('.menu') || e.target.closest('.pet'))) return;
+      setOpen(plan, false);
+    });
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') plans.forEach(plan => setOpen(plan, false));
+  });
+
+  document.querySelectorAll('#pos-all button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('#pos-all button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    plans.forEach(plan => setPos(plan, b.dataset.pos));
+  }));
+
+  document.getElementById('reduce').addEventListener('change', e => {
+    document.documentElement.classList.toggle('reduce', e.target.checked);
+  });
+
+  const mq = matchMedia('(prefers-reduced-motion: reduce)');
+  function showOsReduce() {
+    document.getElementById('os-reduce').textContent = mq.matches ? '(このPCは動きを抑える設定になっています)' : '';
+  }
+  mq.addEventListener('change', showOsReduce);
+  showOsReduce();
+
+  addEventListener('resize', () => plans.forEach(layout));
+</script>
+</body>
+</html>

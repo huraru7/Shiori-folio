@@ -1,0 +1,7 @@
+{
+  "frameWidth": 128,
+  "frameHeight": 192,
+  "animations": {
+    "idle": { "file": "idle.png", "frames": 1, "loop": true }
+  }
+}
