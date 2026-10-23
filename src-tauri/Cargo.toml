@@ -57,5 +57,8 @@ windows-sys = { version = "0.59", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_IO",
     "Win32_System_Ioctl",
+    # 拡張機能の別のプログラムを、詩織が落ちても残さないため(詩織Ver6.0の段階1)
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
 ] }
 

@@ -1,0 +1,17 @@
+{
+  "name": "hello-program",
+  "version": "0.1.0",
+  "title": "試しのプログラム",
+  "description": "段階1の受け入れ基準を確かめるための、別のプログラムの拡張機能。あいさつを返し、頼まれると、わざと落ちる",
+  "kind": "program",
+  "entry": { "win": "bin/hello-program.exe", "mac": "bin/hello-program" },
+  "places": ["window"],
+  "uses": [],
+  "provides": [
+    { "method": "greet", "description": "あいさつを返す(params.whoに名前)" },
+    { "method": "crash", "description": "わざと落ちる(見張りの再起動を確かめるため)" }
+  ],
+  "errors": [
+    { "code": "hello-program-001", "message": "知らない操作を頼まれた" }
+  ]
+}

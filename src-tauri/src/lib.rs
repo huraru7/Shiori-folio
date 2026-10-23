@@ -5360,6 +5360,18 @@ pub fn run() {
         }))
         .setup(|app| {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            // 別のプログラムの拡張機能(詩織Ver6.0の段階1)。頼みごとは、画面の部品と同じ窓口に通す
+            {
+                let handle = app.handle().clone();
+                let handler: hub::process::Handler = Arc::new(move |name, method, params| {
+                    hub::bridge::call(&handle.state::<hub::HubState>(), name, method, params)
+                });
+                let programs = hub::process::Programs::new(handler);
+                if let Ok(state) = app.state::<hub::HubState>().0.lock() {
+                    hub::start_ready_programs(&state, &programs);
+                }
+                app.manage(hub::process::ProgramsState(programs));
+            }
             // ホットキーの変更はコントロールパネルからconfig.jsonへ保存されるが、
             // 反映にはアプリ再起動が必要(次回起動時にここで読み直される)。
             let hotkey = app_config()
@@ -5422,6 +5434,7 @@ pub fn run() {
             log_ui_event,
             hub::list_extensions,
             hub::approve_extension,
+            hub::call_extension,
             hub::bridge::ext_call
         ])
         .build(tauri::generate_context!())
@@ -5448,6 +5461,9 @@ pub fn run() {
                 }
                 if let Some(stt) = app_handle.try_state::<Arc<SttManager>>() {
                     stt.stop_now("アプリ終了のため");
+                }
+                if let Some(programs) = app_handle.try_state::<hub::process::ProgramsState>() {
+                    programs.0.stop_all();
                 }
             }
         });

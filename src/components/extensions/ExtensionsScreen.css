@@ -139,3 +139,13 @@
   border: none;
   background: var(--bg-deep);
 }
+
+.extensions-screen__buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.extensions-screen__lead .extensions-screen__close {
+  margin-left: 10px;
+}

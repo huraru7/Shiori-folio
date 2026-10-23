@@ -94,6 +94,9 @@ export const api = {
   // 画面の部品の拡張機能からの頼みごと。断られたときは{ code, message }でrejectする。
   extCall: (name: string, method: string, params: unknown) =>
     invoke<unknown>("ext_call", { name, method, params }),
+  // 本体の画面から、拡張機能のprovidesにある操作を呼ぶ(段階1の仮の入り口で確かめるため)。
+  callExtension: (name: string, method: string, params?: unknown) =>
+    invoke<unknown>("call_extension", { name, method, params: params ?? null }),
   // forceがfalseなら、前回の取り込みから間もないときは省く。
   refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
   // hostがnullなら全端末の合算。

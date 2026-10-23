@@ -365,10 +365,20 @@ export interface ExtensionInfo {
   entry: string | null;
   places: ("window" | "pet")[];
   uses: ExtensionUse[];
+  // ほかの拡張機能から呼ばれてよい操作
+  provides: string[];
   status: ExtensionStatus;
   // 初めての承認か(falseなら、使うものが増えたための承認)
   firstTime: boolean;
   addedUses: ExtensionUse[];
   errorCode: string | null;
   errorMessage: string | null;
+  // 別のプログラムの拡張機能の、いまの動き(画面の部品はnull)
+  runtime: ExtensionRunState | null;
+  restarts: number;
 }
+
+export type ExtensionRunState =
+  | { state: "starting" }
+  | { state: "running" }
+  | { state: "stopped"; reason: string };

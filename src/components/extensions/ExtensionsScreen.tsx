@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useExtensionsStore } from "../../store/useExtensionsStore";
-import type { ExtensionInfo } from "../../types";
+import { api } from "../../api/tauri";
+import type { ExtensionInfo, ExtensionRunState } from "../../types";
 import ExtensionFrame from "./ExtensionFrame";
 import "./ExtensionsScreen.css";
 
@@ -9,6 +10,18 @@ const STATUS_LABEL: Record<ExtensionInfo["status"], string> = {
   "needs-approval": "未承認",
   invalid: "読めない",
 };
+
+function runLabel(run: ExtensionRunState, restarts: number): string {
+  const again = restarts > 0 ? `(再起動 ${restarts}回)` : "";
+  switch (run.state) {
+    case "starting":
+      return `起動中${again}`;
+    case "running":
+      return `動いている${again}`;
+    case "stopped":
+      return `止まっている: ${run.reason}`;
+  }
+}
 
 const KIND_LABEL: Record<"ui" | "program", string> = {
   ui: "画面の部品",
@@ -26,6 +39,20 @@ function ExtensionsScreen() {
   // 開いている画面の部品の拡張機能(仮。段階2で、いまの画面の横の小さな枠にする)
   const [opened, setOpened] = useState<string | null>(null);
   const openedExt = list?.find((e) => e.name === opened && e.status === "ready" && e.entry);
+  // 別のプログラムの拡張機能を呼んだ結果(拡張機能の名前ごと)
+  const [callResults, setCallResults] = useState<Record<string, string>>({});
+
+  const callProvided = async (name: string, method: string) => {
+    setCallResults((r) => ({ ...r, [name]: `${method} を呼んでいます...` }));
+    try {
+      const result = await api.callExtension(name, method, method === "greet" ? { who: "ふらる" } : {});
+      setCallResults((r) => ({ ...r, [name]: `${method}: ${JSON.stringify(result)}` }));
+    } catch (err) {
+      const e = err as { code?: string; message?: string };
+      setCallResults((r) => ({ ...r, [name]: `${method}: ${e.code ?? ""} ${e.message ?? String(err)}` }));
+    }
+    load();
+  };
 
   useEffect(() => {
     if (list === null) load();
@@ -35,6 +62,9 @@ function ExtensionsScreen() {
     <div className="extensions-screen">
       <p className="extensions-screen__lead">
         portable/extensions/ に置いた拡張機能です。詩織の起動時に読み込みます。足したり外したりしたら、詩織を起動し直してください。
+        <button type="button" className="extensions-screen__close" onClick={() => load()}>
+          状態を読み直す
+        </button>
       </p>
       {error && <div className="extensions-screen__error">{error}</div>}
       {openedExt && openedExt.name && openedExt.entry && (
@@ -79,6 +109,15 @@ function ExtensionsScreen() {
                 使うもの: {ext.uses.length === 0 ? "なし" : ext.uses.map((u) => u.label).join("、")}
               </div>
             )}
+            {ext.runtime && (
+              <div className="extensions-screen__uses">動き: {runLabel(ext.runtime, ext.restarts)}</div>
+            )}
+            {ext.status === "ready" && ext.kind === "program" && ext.name && (
+              <ProvidedButtons name={ext.name} methods={ext.provides} onCall={callProvided} />
+            )}
+            {ext.name && callResults[ext.name] && (
+              <div className="extensions-screen__desc">{callResults[ext.name]}</div>
+            )}
             {ext.status === "ready" && ext.kind === "ui" && ext.name && (
               <button
                 type="button"
@@ -100,6 +139,31 @@ function ExtensionsScreen() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// 別のプログラムの拡張機能のprovidesを、ボタンにして並べる(段階1の仮の入り口)。
+function ProvidedButtons({
+  name,
+  methods,
+  onCall,
+}: {
+  name: string;
+  methods: string[];
+  onCall: (name: string, method: string) => void;
+}) {
+  return (
+    <div className="extensions-screen__buttons">
+      {methods.map((m) => (
+        <button key={m} type="button" className="extensions-screen__approve" onClick={() => onCall(name, m)}>
+          {m} を呼ぶ
+        </button>
+      ))}
+      {/* 説明書のprovidesに無い操作は、詩織が断る(EXT-020)ことを確かめる */}
+      <button type="button" className="extensions-screen__close" onClick={() => onCall(name, "nope")}>
+        説明書に無い操作を呼ぶ
+      </button>
     </div>
   );
 }

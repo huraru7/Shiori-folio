@@ -7,12 +7,15 @@
 pub mod approvals;
 pub mod bridge;
 pub mod manifest;
+pub mod process;
 pub mod protocol;
 
 use crate::error_codes::{self, ErrorCode};
 use crate::shiori_log;
 use approvals::{Approval, ApprovalFile};
+use bridge::CallError;
 use manifest::{Kind, Manifest, Place};
+use process::{ProgramsState, RunState};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -175,6 +178,47 @@ impl Hub {
     }
 }
 
+impl Extension {
+    /// 別のプログラムの拡張機能なら、このOSの実行ファイルの場所。
+    pub fn program_exe(&self) -> Option<PathBuf> {
+        let m = self.manifest.as_ref().filter(|m| m.kind == Kind::Program)?;
+        m.entry.for_this_os().map(|e| self.dir.join(e))
+    }
+}
+
+/// 承認済みの別のプログラムの拡張機能を、全部起動する(詩織の起動時)。
+pub fn start_ready_programs(hub: &Hub, programs: &process::Programs) {
+    for ext in hub.extensions().iter().filter(|e| e.status == Status::Ready) {
+        if let Some(exe) = ext.program_exe() {
+            programs.start(&ext.folder, exe, ext.dir.clone());
+        }
+    }
+}
+
+/// ほかの拡張機能の`provides`にある操作を呼ぶ(詩織を通した呼び出し)。相手の説明書に無い操作は断る。
+pub fn call_provided(
+    hub_state: &HubState,
+    programs: &process::Programs,
+    target: &str,
+    method: &str,
+    params: &serde_json::Value,
+) -> Result<serde_json::Value, CallError> {
+    let (kind, provided) = {
+        let hub = hub_state.0.lock().map_err(|e| CallError::new(error_codes::EXT_009, e.to_string()))?;
+        let ext = hub.ready(target).ok_or_else(|| CallError::new(error_codes::EXT_009, target))?;
+        let m = ext.manifest.as_ref().ok_or_else(|| CallError::new(error_codes::EXT_009, target))?;
+        (m.kind, m.provides.iter().any(|p| p.method == method))
+    };
+    if !provided {
+        return Err(CallError::new(error_codes::EXT_020, format!("{target}の{method}")));
+    }
+    match kind {
+        Kind::Program => programs.call(target, method, params, process::CALL_TIMEOUT),
+        // 画面の部品の提供する操作を中継するのは、段階2以降(画面が開いていないと答えられないため)
+        Kind::Ui => Err(CallError::new(error_codes::EXT_012, format!("画面の部品{target}の{method}"))),
+    }
+}
+
 fn log_extension(ext: &Extension) {
     match (&ext.status, &ext.manifest) {
         (Status::Ready, Some(m)) => {
@@ -230,12 +274,17 @@ pub struct ExtensionDto {
     pub entry: Option<String>,
     pub places: Vec<&'static str>,
     pub uses: Vec<UseDto>,
+    /// ほかの拡張機能から呼ばれてよい操作
+    pub provides: Vec<String>,
     /// "ready" | "needs-approval" | "invalid"
     pub status: &'static str,
     pub first_time: bool,
     pub added_uses: Vec<UseDto>,
     pub error_code: Option<&'static str>,
     pub error_message: Option<String>,
+    /// 別のプログラムの拡張機能の、いまの動き(画面の部品は`None`)
+    pub runtime: Option<RunState>,
+    pub restarts: u32,
 }
 
 impl From<&Extension> for ExtensionDto {
@@ -260,29 +309,83 @@ impl From<&Extension> for ExtensionDto {
                 .map(|m| m.places.iter().map(|p| if *p == Place::Window { "window" } else { "pet" }).collect())
                 .unwrap_or_default(),
             uses: m.map(|m| use_dtos(&m.uses)).unwrap_or_default(),
+            provides: m.map(|m| m.provides.iter().map(|p| p.method.clone()).collect()).unwrap_or_default(),
             status,
             first_time,
             added_uses: use_dtos(&added),
             error_code,
             error_message,
+            runtime: None,
+            restarts: 0,
         }
     }
 }
 
-#[tauri::command]
-pub fn list_extensions(state: tauri::State<'_, HubState>) -> Result<Vec<ExtensionDto>, String> {
-    let hub = state.0.lock().map_err(|e| e.to_string())?;
-    Ok(hub.extensions().iter().map(ExtensionDto::from).collect())
+fn to_dtos(hub: &Hub, programs: &process::Programs) -> Vec<ExtensionDto> {
+    hub.extensions()
+        .iter()
+        .map(|e| {
+            let mut dto = ExtensionDto::from(e);
+            if let Some((state, restarts)) = programs.state_of(&e.folder) {
+                dto.runtime = Some(state);
+                dto.restarts = restarts;
+            }
+            dto
+        })
+        .collect()
 }
 
 #[tauri::command]
-pub fn approve_extension(state: tauri::State<'_, HubState>, name: String) -> Result<Vec<ExtensionDto>, String> {
+pub fn list_extensions(
+    state: tauri::State<'_, HubState>,
+    programs: tauri::State<'_, ProgramsState>,
+) -> Result<Vec<ExtensionDto>, String> {
+    let hub = state.0.lock().map_err(|e| e.to_string())?;
+    Ok(to_dtos(&hub, &programs.0))
+}
+
+#[tauri::command]
+pub fn approve_extension(
+    state: tauri::State<'_, HubState>,
+    programs: tauri::State<'_, ProgramsState>,
+    name: String,
+) -> Result<Vec<ExtensionDto>, String> {
     let mut hub = state.0.lock().map_err(|e| e.to_string())?;
     hub.approve(&name).map_err(|(code, detail)| {
         shiori_log::error(code.code, "拡張機能を承認できなかった", &[("name", &name), ("詳しく", &detail)]);
         format!("{}: {} ({detail})", code.code, code.message)
     })?;
-    Ok(hub.extensions().iter().map(ExtensionDto::from).collect())
+    // 別のプログラムなら、承認したときに起動する
+    if let Some(ext) = hub.ready(&name) {
+        if let Some(exe) = ext.program_exe() {
+            programs.0.start(&name, exe, ext.dir.clone());
+        }
+    }
+    Ok(to_dtos(&hub, &programs.0))
+}
+
+/// 本体の画面から、拡張機能の`provides`にある操作を呼ぶ(段階1の仮の入り口で、別のプログラムの
+/// 動きを確かめるため)。時間がかかることがあるので、画面を止めないよう別のスレッドで待つ。
+#[tauri::command]
+pub async fn call_extension(
+    app: tauri::AppHandle,
+    name: String,
+    method: String,
+    params: Option<serde_json::Value>,
+) -> Result<serde_json::Value, CallError> {
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let hub = app.state::<HubState>();
+        let programs = app.state::<ProgramsState>();
+        let result = call_provided(&hub, &programs.0, &name, &method, &params.unwrap_or(serde_json::Value::Null));
+        match &result {
+            Ok(_) => shiori_log::info("HUB", "画面から拡張機能を呼んだ", &[("name", &name), ("method", &method)]),
+            Err(e) => shiori_log::warn(e.code, "画面からの呼び出しが失敗した", &[("name", &name), ("method", &method), ("理由", &e.message)]),
+        }
+        result
+    })
+    .await
+    .map_err(|e| CallError::new(error_codes::EXT_017, e.to_string()))?
 }
 
 #[cfg(test)]
