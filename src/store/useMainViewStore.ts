@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { api } from "../api/tauri";
 
 // 右ゾーンで表示している画面(詩織Ver3.9、ウィンドウとDockをやめてタブ切り替えにした)。
 // 永続化はせず、起動のたびにホームから始める。
@@ -21,10 +22,23 @@ interface MainViewStore {
   clearLibraryQuery: () => void;
 }
 
-export const useMainViewStore = create<MainViewStore>((set) => ({
+// タブの移動をログに残す。記録に失敗しても、画面の切り替えは止めない。
+function logMove(from: MainView, to: MainView) {
+  if (from !== to) {
+    api.logUiEvent("タブを移った", { from, to }).catch(() => undefined);
+  }
+}
+
+export const useMainViewStore = create<MainViewStore>((set, get) => ({
   active: "home",
-  setActive: (view) => set({ active: view }),
+  setActive: (view) => {
+    logMove(get().active, view);
+    set({ active: view });
+  },
   libraryQuery: null,
-  searchInLibrary: (query) => set({ active: "library", libraryQuery: query }),
+  searchInLibrary: (query) => {
+    logMove(get().active, "library");
+    set({ active: "library", libraryQuery: query });
+  },
   clearLibraryQuery: () => set({ libraryQuery: null }),
 }));

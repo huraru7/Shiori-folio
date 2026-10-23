@@ -68,12 +68,15 @@ impl RecordingState {
                             drop(stream);
                             let samples = buffer.lock().map_err(|e| e.to_string())?.clone();
                             let peak = samples.iter().fold(0.0f32, |m, &s| m.max(s.abs()));
-                            eprintln!(
-                                "録音診断: サンプル数={} サンプルレート={}Hz チャンネル数={} 音量ピーク={:.4}",
-                                samples.len(),
-                                sample_rate,
-                                channels,
-                                peak
+                            crate::shiori_log::info(
+                                "STT",
+                                "録音を止めた",
+                                &[
+                                    ("サンプル数", &samples.len()),
+                                    ("サンプルレート", &sample_rate),
+                                    ("チャンネル数", &channels),
+                                    ("音量ピーク", &format!("{peak:.4}")),
+                                ],
                             );
                             if peak < SILENCE_PEAK_THRESHOLD {
                                 return Err(
@@ -105,9 +108,10 @@ fn build_and_play_stream() -> Result<(cpal::Stream, Arc<Mutex<Vec<f32>>>, u32, u
     let device = host
         .default_input_device()
         .ok_or_else(|| "入力デバイス(マイク)が見つかりません".to_string())?;
-    eprintln!(
-        "録音デバイス: {}",
-        device.name().unwrap_or_else(|_| "(名前取得不可)".to_string())
+    crate::shiori_log::info(
+        "STT",
+        "録音を始めた",
+        &[("デバイス", &device.name().unwrap_or_else(|_| "(名前取得不可)".to_string()))],
     );
     let config = device
         .default_input_config()

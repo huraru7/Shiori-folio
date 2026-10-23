@@ -24,6 +24,7 @@ use rmcp::{
     ServiceExt,
 };
 
+use shiori_folio_lib::shiori_log;
 use shiori_folio_lib::{
     build_embedding_command, build_rag_command, library_root, load_search_backend_config, project_root,
     rag_client, shared_daemon, shelf_root,
@@ -193,7 +194,22 @@ impl ShioriLibrary {
             filter,
             args.include_history,
         )
-        .map_err(|e| McpError::internal_error(e, None))?;
+        .map_err(|e| {
+            shiori_log::error("MCP", "検索に失敗した", &[("道具", &"search_library"), ("語", &args.query), ("理由", &e)]);
+            McpError::internal_error(e, None)
+        })?;
+        shiori_log::info(
+            "MCP",
+            "検索した",
+            &[
+                ("道具", &"search_library"),
+                ("語", &args.query),
+                ("経緯", &args.include_history),
+                ("offset", &args.offset),
+                ("件数", &results.len()),
+                ("上位", &shiori_log::summarize_hits(results.iter().map(|r| (r.title.as_str(), r.source.as_str(), r.best_score)), 3)),
+            ],
+        );
 
         let json = serde_json::to_string_pretty(&results)
             .map_err(|e| McpError::internal_error(format!("結果のJSON化に失敗: {e}"), None))?;
@@ -256,7 +272,20 @@ impl ShioriLibrary {
             args.offset,
             args.topic.as_deref(),
         )
-        .map_err(|e| McpError::internal_error(e, None))?;
+        .map_err(|e| {
+            shiori_log::error("MCP", "検索に失敗した", &[("道具", &"search_shelf"), ("語", &args.query), ("理由", &e)]);
+            McpError::internal_error(e, None)
+        })?;
+        shiori_log::info(
+            "MCP",
+            "検索した",
+            &[
+                ("道具", &"search_shelf"),
+                ("語", &args.query),
+                ("件数", &results.len()),
+                ("上位", &shiori_log::summarize_hits(results.iter().map(|r| (r.title.as_str(), r.source.as_str(), r.best_score)), 3)),
+            ],
+        );
 
         let json = serde_json::to_string_pretty(&results)
             .map_err(|e| McpError::internal_error(format!("結果のJSON化に失敗: {e}"), None))?;
@@ -285,9 +314,16 @@ impl ServerHandler for ShioriLibrary {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // stdioはMCPプロトコル通信専用のため、ログを出す場合は必ずstderrへ
-    // (今回は最小構成のためログ自体は出していない)。
+    // stdioはMCPプロトコル通信専用のため、記録はログのファイルにだけ書く(標準出力には出さない)。
+    let root = project_root();
+    shiori_log::init(
+        &root.join("data").join("logs"),
+        shiori_log::LogKind::Mcp,
+        &shiori_log::LogSettings::from_config(&root),
+    );
+    shiori_log::info("MCP", "起動した", &[("版", &env!("CARGO_PKG_VERSION"))]);
     let service = ShioriLibrary::new().serve(stdio()).await?;
     service.waiting().await?;
+    shiori_log::info("MCP", "終了した", &[]);
     Ok(())
 }

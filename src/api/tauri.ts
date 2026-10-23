@@ -83,6 +83,9 @@ export const api = {
 
   // 画面側の未処理のエラーをdata/logs/へ記録する(詩織Ver4.0)。
   logFrontendError: (message: string) => invoke<void>("log_frontend_error", { message }),
+  // 画面の操作(タブの移動など)をログに残す(詩織Ver6.0の段階1)。部品名は本体側でUIに固定される。
+  logUiEvent: (event: string, fields?: Record<string, string>) =>
+    invoke<void>("log_ui_event", { event, fields: fields ?? null }),
   // forceがfalseなら、前回の取り込みから間もないときは省く。
   refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
   // hostがnullなら全端末の合算。

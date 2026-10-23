@@ -16,7 +16,8 @@ type FieldKey =
   | "showMonth"
   | "showDay"
   | "showWeekday"
-  | "showSeconds";
+  | "showSeconds"
+  | "logDetail";
 
 // 変更内容によって「即時反映」「サービス再起動が必要」「アプリ再起動が必要」が
 // 異なるため、フィールドごとにどちらに属するかを持たせておく。
@@ -33,6 +34,7 @@ const RESTART_KIND: Record<FieldKey, "immediate" | "llm-restart" | "app-restart"
   showDay: "immediate",
   showWeekday: "immediate",
   showSeconds: "immediate",
+  logDetail: "immediate",
 };
 
 // ポート番号・ホットキー・コンテキストサイズ・自発的想起のしきい値を扱うページ。
@@ -94,6 +96,7 @@ export function AdvancedSettingsPage() {
         ...(form.showDay !== original.showDay && { showDay: form.showDay }),
         ...(form.showWeekday !== original.showWeekday && { showWeekday: form.showWeekday }),
         ...(form.showSeconds !== original.showSeconds && { showSeconds: form.showSeconds }),
+        ...(form.logDetail !== original.logDetail && { logDetail: form.logDetail }),
       };
       await api.setConfig(update);
       useDateDisplayStore.getState().set({
@@ -195,6 +198,15 @@ export function AdvancedSettingsPage() {
           label="時刻の秒を表示"
           checked={form.showSeconds}
           onChange={(v) => setForm({ ...form, showSeconds: v })}
+        />
+      </div>
+
+      <div className="control-panel__panel">
+        <div className="control-panel__panel-label">ログ</div>
+        <ToggleRow
+          label="詳細な動作も記録する(不具合を調べるとき)"
+          checked={form.logDetail}
+          onChange={(v) => setForm({ ...form, logDetail: v })}
         />
       </div>
 

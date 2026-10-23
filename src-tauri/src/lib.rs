@@ -1,5 +1,6 @@
 #[macro_use]
-mod app_log;
+pub mod shiori_log;
+pub mod error_codes;
 mod audio;
 mod claude_stats;
 mod claude_status;
@@ -537,8 +538,32 @@ fn emit_startup_stage(app: Option<&tauri::AppHandle>, label: &str) {
 // 進捗を同時に表示できる。
 fn emit_service_status(app: Option<&tauri::AppHandle>, status: &ServiceStatus) {
     use tauri::Emitter;
+    log_service_status(status);
     if let Some(app) = app {
         let _ = app.emit("shiori:service-status", status);
+    }
+}
+
+/// サービスの状態の移り変わりをログに残す(詩織Ver6.0の段階1)。起動画面への通知と同じ時に書く。
+fn log_service_status(status: &ServiceStatus) {
+    let part = match status.name.as_str() {
+        "llm" => "LLM",
+        "embedding" => "EMB",
+        "rag" => "RAG",
+        "stt" => "STT",
+        _ => "APP",
+    };
+    let fields: [(&str, &dyn std::fmt::Display); 2] = [("名前", &status.name), ("ポート", &status.port)];
+    if let Some(error) = &status.error {
+        shiori_log::error(part, "サービスの起動に失敗した", &[fields[0], fields[1], ("理由", error)]);
+    } else if status.skipped {
+        shiori_log::info(part, "サービスを起動しなかった(外部AIモード)", &fields);
+    } else if status.healthy {
+        shiori_log::info(part, "サービスが動き始めた", &fields);
+    } else if status.started {
+        shiori_log::info(part, "サービスを起動した(応答待ち)", &fields);
+    } else {
+        shiori_log::debug(part, "サービスの起動を始めた", &fields);
     }
 }
 
@@ -1291,6 +1316,8 @@ struct ConfigDto {
     show_weekday: bool,
     show_seconds: bool,
     mode: AppMode,
+    // ログに「詳細」の重さも書くか(詩織Ver6.0の段階1)
+    log_detail: bool,
 }
 
 // 実機SSDを取り外せる状態にする(取り外し機能)。止める対象の選び方は`eject.rs`を参照。
@@ -1443,11 +1470,22 @@ fn set_app_mode_blocking(app: &tauri::AppHandle, mode: AppMode) -> Result<Servic
     }
 }
 
+/// 画面の操作(タブの移動など)を記録する(詩織Ver6.0の段階1)。部品名はUIに固定し、
+/// 画面から渡せるのは出来事と、キーと値の組だけにする。
+#[tauri::command]
+async fn log_ui_event(event: String, fields: Option<std::collections::BTreeMap<String, String>>) -> Result<(), String> {
+    let fields = fields.unwrap_or_default();
+    let pairs: Vec<(&str, &dyn std::fmt::Display)> =
+        fields.iter().map(|(k, v)| (k.as_str(), v as &dyn std::fmt::Display)).collect();
+    shiori_log::info("UI", &event, &pairs);
+    Ok(())
+}
+
 /// 画面側(フロント)の未処理のエラーを記録する(詩織Ver4.0)。
 #[tauri::command]
 async fn log_frontend_error(message: String) -> Result<(), String> {
     run_blocking(move || {
-        app_log::write("FRONT", &message);
+        shiori_log::error("UI", "画面の未処理のエラー", &[("内容", &message)]);
         Ok(())
     })
     .await
@@ -1514,6 +1552,7 @@ fn get_config_blocking() -> Result<ConfigDto, String> {
         show_weekday: config.ui.show_weekday,
         show_seconds: config.ui.show_seconds,
         mode: config.mode,
+        log_detail: shiori_log::LogSettings::from_config(&project_root()).detail,
     })
 }
 
@@ -1535,6 +1574,7 @@ struct ConfigUpdate {
     show_day: Option<bool>,
     show_weekday: Option<bool>,
     show_seconds: Option<bool>,
+    log_detail: Option<bool>,
 }
 
 fn validate_config_update(update: &ConfigUpdate) -> Result<(), String> {
@@ -1636,9 +1676,18 @@ fn set_config_blocking(update: ConfigUpdate) -> Result<(), String> {
     if let Some(v) = update.show_seconds {
         value["ui"]["showSeconds"] = serde_json::json!(v);
     }
+    let log_detail = update.log_detail;
+    if let Some(v) = log_detail {
+        value["log"]["detail"] = serde_json::json!(v);
+    }
 
     let pretty = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     std::fs::write(&path, pretty).map_err(|e| format!("config.jsonの書き込みに失敗: {e}"))?;
+    // ログの「詳細」は、再起動を待たずに切り替える
+    if let Some(v) = log_detail {
+        shiori_log::set_detail(v);
+        shiori_log::info("CFG", "ログの詳細を切り替えた", &[("詳細", &v)]);
+    }
     Ok(())
 }
 
@@ -2073,7 +2122,17 @@ async fn read_shelf_doc(name: String) -> Result<String, String> {
 async fn search_shelf(query: String) -> Result<Vec<String>, String> {
     run_blocking(move || {
         let config = app_config()?;
-        let hits = rag_client::search_shelf(config.rag.port, &query, 50, 0, None)?;
+        let hits = rag_client::search_shelf(config.rag.port, &query, 50, 0, None)
+            .inspect_err(|e| shiori_log::error("RAG", "棚の検索に失敗した", &[("語", &query), ("理由", e)]))?;
+        shiori_log::info(
+            "SHELF",
+            "棚で検索した",
+            &[
+                ("語", &query),
+                ("件数", &hits.len()),
+                ("上位", &shiori_log::summarize_hits(hits.iter().map(|h| (h.title.as_str(), h.source.as_str(), h.best_score)), 3)),
+            ],
+        );
         Ok(hits.into_iter().filter(|h| h.best_score >= 0.3).map(|h| h.source).collect())
     })
     .await
@@ -2172,7 +2231,18 @@ fn search_library_blocking(
         exclude_stale: !filter.include_stale,
         ..Default::default()
     };
-    let results = rag_client::search_library(config.rag.port, &query, limit, offset, Some(rag_filter), false)?;
+    let results = rag_client::search_library(config.rag.port, &query, limit, offset, Some(rag_filter), false)
+        .inspect_err(|e| shiori_log::error("RAG", "図書館の検索に失敗した", &[("語", &query), ("理由", e)]))?;
+    shiori_log::info(
+        "LIB",
+        "図書館で検索した",
+        &[
+            ("語", &query),
+            ("offset", &offset),
+            ("件数", &results.len()),
+            ("上位", &shiori_log::summarize_hits(results.iter().map(|r| (r.title.as_str(), r.source.as_str(), r.best_score)), 3)),
+        ],
+    );
     Ok(results
         .into_iter()
         .map(|r| {
@@ -3160,8 +3230,15 @@ fn correct_unverified_claims(
     };
     match corrected {
         Some(replacement) => {
-            eprintln!(
-                "[fact_guard] 確かめていない内容の応答を検知し、置き換えました。\nユーザー発話: {user_text}\n置き換え前: {reply}\n置き換え後: {replacement}"
+            // 会話の中身は残さず、字数だけを残す(Ver6.0のログの決まり)
+            shiori_log::info(
+                "LLM",
+                "確かめていない内容の応答を置き換えた",
+                &[
+                    ("発話の字数", &user_text.chars().count()),
+                    ("置き換え前の字数", &reply.chars().count()),
+                    ("置き換え後の字数", &replacement.chars().count()),
+                ],
             );
             replacement.to_string()
         }
@@ -3184,7 +3261,7 @@ const APP_STATE_GUARD_CONTEXT: &str = "ふらるさんは、要確認リスト(�
      ありません。「ある」とも「ない」とも断定せず、「私からは確認できないので、\n\
      要確認の画面で見てもらえますか」のように、正直に伝えてください。";
 
-fn correct_third_person_self_reference(text: &str, user_text: &str) -> String {
+fn correct_third_person_self_reference(text: &str) -> String {
     let rules = match text_transform::load_rules("person-correction.json") {
         Ok(rules) => rules,
         Err(e) => {
@@ -3195,9 +3272,7 @@ fn correct_third_person_self_reference(text: &str, user_text: &str) -> String {
     let (corrected, triggered) = text_transform::apply_rules(text, &rules);
 
     if !triggered.is_empty() {
-        eprintln!(
-            "[self_reference_guard] 三人称→一人称の補正が発動しました(適用ルール: {triggered:?})。\nユーザー発話: {user_text}\n補正前: {text}\n補正後: {corrected}"
-        );
+        shiori_log::info("LLM", "三人称を一人称に補正した", &[("規則", &format!("{triggered:?}"))]);
     }
 
     corrected
@@ -3650,7 +3725,7 @@ fn send_message_impl(
     // 実行する。この場合search_knowledgeが実質的に既に実行されているので、
     // active_toolもこの時点でsearchにしておく(UIのソース表示にも使う)。
     let identity_guard_context = if is_identity_question(&text) {
-        eprintln!("[identity_guard] アイデンティティ関連のキーワードを検知し、search_knowledgeを直接実行します");
+        shiori_log::info("LLM", "自分についての質問を検知し、直接検索する", &[]);
         active_tool = Some("search_knowledge".to_string());
         on_activity("search_knowledge");
         build_identity_guard_context(&config, &text, &mut sources)
@@ -3662,7 +3737,7 @@ fn send_message_impl(
     // こちらも検知したら確実に実行してしまう(上記コメント参照)。
     let memo_guard_context = if identity_guard_context.is_none() {
         parse_memo_intent(&text).map(|content| {
-            eprintln!("[memo_guard] メモ保存の意図を検知し、直接保存します(content={content})");
+            shiori_log::info("LLM", "メモの保存の意図を検知し、直接保存する", &[("字数", &content.chars().count())]);
             active_tool = Some("memo".to_string());
             on_activity("memo");
             build_memo_guard_context(&config, &content, &mut sources)
@@ -3676,7 +3751,7 @@ fn send_message_impl(
     let history_guard_context = if identity_guard_context.is_none() && memo_guard_context.is_none()
     {
         if is_history_question(&text) {
-            eprintln!("[history_guard] 経緯・変遷関連のキーワードを検知し、経緯モードでsearch_knowledgeを直接実行します");
+            shiori_log::info("LLM", "経緯についての質問を検知し、経緯モードで検索する", &[]);
             active_tool = Some("search_knowledge".to_string());
             on_activity("search_knowledge");
             build_history_guard_context(&config, &text, &mut sources)
@@ -3694,7 +3769,7 @@ fn send_message_impl(
         && history_guard_context.is_none()
         && is_app_state_question(&text)
     {
-        eprintln!("[app_state_guard] 確かめる手段のない状態についての質問を検知しました");
+        shiori_log::info("LLM", "確かめる手段のない状態についての質問を検知した", &[]);
         Some(APP_STATE_GUARD_CONTEXT.to_string())
     } else {
         None
@@ -3718,10 +3793,13 @@ fn send_message_impl(
         }
         context
     };
-    eprintln!(
-        "[passive_recall] {:.2}s hit={}",
-        passive_recall_start.elapsed().as_secs_f32(),
-        passive_recall.is_some()
+    shiori_log::debug(
+        "LLM",
+        "受け身の想起",
+        &[
+            ("秒", &format!("{:.2}", passive_recall_start.elapsed().as_secs_f32())),
+            ("当たり", &passive_recall.is_some()),
+        ],
     );
 
     let mut messages_vec = vec![serde_json::json!({
@@ -3784,7 +3862,7 @@ fn send_message_impl(
                 .to_string();
 
             if let Some((name, args)) = parse_leaked_tool_call(&content) {
-                eprintln!("表示ガード: ツール呼び出しの生文字列混入を検知し、{name}として処理しました");
+                shiori_log::warn("LLM", "応答に混ざったツール呼び出しの文字列を、呼び出しとして処理した", &[("道具", &name)]);
                 active_tool = Some(name.clone());
                 on_activity(&name);
                 let tool_result = match execute_tool(&name, &args, &config, &mut sources) {
@@ -3875,7 +3953,7 @@ fn send_message_impl(
         has_references,
         app_state_guard_context.is_some(),
     );
-    final_content = correct_third_person_self_reference(&final_content, &text);
+    final_content = correct_third_person_self_reference(&final_content);
 
     log_conversation(&detected_mode, &text, &final_content)?;
     push_history(&text, &final_content, sources.as_ref());
@@ -4000,7 +4078,7 @@ impl SttManager {
         if let Ok(mut guard) = self.child.lock() {
             if let Some(mut child) = guard.take() {
                 let _ = child.kill();
-                eprintln!("whisper-server: {reason}停止しました");
+                shiori_log::info("STT", "whisper-serverを止めた", &[("理由", &reason)]);
             }
         }
     }
@@ -5247,7 +5325,13 @@ fn handle_hotkey_toggle(app: &tauri::AppHandle) {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     use tauri_plugin_global_shortcut::ShortcutState;
-    app_log::init(project_root().join("data").join("logs"));
+    let root = project_root();
+    shiori_log::init(
+        &root.join("data").join("logs"),
+        shiori_log::LogKind::App,
+        &shiori_log::LogSettings::from_config(&root),
+    );
+    shiori_log::info("APP", "起動した", &[("版", &env!("CARGO_PKG_VERSION")), ("場所", &root.display())]);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -5329,7 +5413,8 @@ pub fn run() {
             resolve_pending_inbox_item,
             get_tts_failures,
             get_passive_recall_stats,
-            get_ragas_history
+            get_ragas_history,
+            log_ui_event
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -5339,6 +5424,7 @@ pub fn run() {
             // ここで止めないと閉じた後もプロセスが孤立して残り続けてしまう。
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 use tauri::Manager;
+                shiori_log::info("APP", "終了する", &[]);
                 if let Some(backend) = app_handle.try_state::<BackendState>() {
                     if let Ok(mut procs) = backend.0.lock() {
                         if let Some(mut c) = procs.llm.take() {

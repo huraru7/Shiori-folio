@@ -232,6 +232,8 @@ export interface AppConfigDto {
   showWeekday: boolean;
   showSeconds: boolean;
   mode: AppMode;
+  // ログに「詳細」の重さも書くか(詩織Ver6.0の段階1)
+  logDetail: boolean;
 }
 
 // 会話モード/外部AIモード(詩織Ver4.0)。

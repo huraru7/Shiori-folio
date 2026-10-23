@@ -25,6 +25,7 @@ use sha2::{Digest, Sha256};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 
+use shiori_folio_lib::shiori_log;
 use shiori_folio_lib::{library_root, load_search_backend_config, project_root, rag_client, shelf_root};
 
 // 詩織Ver3.1(journal廃止・project/area配下へのkind統合、2026-09-16)。
@@ -148,6 +149,30 @@ struct TagEntry {
 }
 
 fn main() -> Result<()> {
+    let root = project_root();
+    shiori_log::init(
+        &root.join("data").join("logs"),
+        shiori_log::LogKind::Save,
+        &shiori_log::LogSettings::from_config(&root),
+    );
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    shiori_log::info("SAVE", "始めた", &[("引数", &args.join(" "))]);
+    let outcome = run();
+    if let Err(e) = &outcome {
+        shiori_log::error("SAVE", "失敗した", &[("理由", &format!("{e:#}"))]);
+    }
+    outcome
+}
+
+/// 保存の結果を標準出力にJSONで出し、ログにも残す。
+fn print_result(route: &str, result: &serde_json::Value) -> Result<()> {
+    let dest = result.get("destination").and_then(|v| v.as_str()).unwrap_or("");
+    shiori_log::info("SAVE", "保存した", &[("種類", &route), ("先", &dest)]);
+    println!("{}", serde_json::to_string_pretty(result)?);
+    Ok(())
+}
+
+fn run() -> Result<()> {
     let mut copy_mode = false;
     let mut expect_updated = None;
     let mut source_arg = None;
@@ -252,7 +277,7 @@ fn main() -> Result<()> {
         "inbox_reason": inbox_reason,
         "newly_pending_tags": newly_pending_tags,
     });
-    println!("{}", serde_json::to_string_pretty(&result)?);
+    print_result("記事", &result)?;
     Ok(())
 }
 
@@ -464,10 +489,14 @@ fn reindex_saved_file(root: &Path, dest_path: &Path) {
                 eprintln!(
                     "警告: 即時re-indexに失敗しました({e})。次回のRAGサーバー起動時に反映されます。"
                 );
+                shiori_log::warn("SAVE", "即時の索引に失敗した", &[("理由", &e)]);
             }
         }
         Ok(_) => {}
-        Err(e) => eprintln!("警告: 検索バックエンド設定の読み込みに失敗しました({e})。"),
+        Err(e) => {
+            eprintln!("警告: 検索バックエンド設定の読み込みに失敗しました({e})。");
+            shiori_log::warn("SAVE", "検索の設定を読めない", &[("理由", &e)]);
+        }
     }
 }
 
@@ -650,6 +679,7 @@ fn save_memory(
         let history_dir = root.join("_system").join(MEMORY_HISTORY_DIR);
         if let Err(e) = prune_memory_history(&history_dir, &key) {
             eprintln!("警告: 古い退避の整理に失敗しました({e:#})。");
+            shiori_log::warn("SAVE", "古い退避の整理に失敗した", &[("理由", &format!("{e:#}"))]);
         }
     }
 
@@ -661,6 +691,7 @@ fn save_memory(
             "memoryが上限を超えています({lines}行・{chars}字。上限は{MEMORY_MAX_LINES}行・{MEMORY_MAX_CHARS}字)。完了した項目を消し、履歴が要る内容はjournal/decisionへ移して整理してください"
         );
         eprintln!("警告: {w}");
+        shiori_log::warn("SAVE", "memoryが上限を超えた", &[("行", &lines), ("字", &chars)]);
         warnings.push(w);
     }
 
@@ -674,7 +705,7 @@ fn save_memory(
         "newly_pending_tags": newly_pending_tags,
         "warnings": warnings,
     });
-    println!("{}", serde_json::to_string_pretty(&result)?);
+    print_result("memory", &result)?;
     Ok(())
 }
 
@@ -803,10 +834,14 @@ fn reindex_shelf_saved_file(file_name: &str) {
                 eprintln!(
                     "警告: 棚の即時re-indexに失敗しました({e})。次回のRAGサーバー起動時に反映されます。"
                 );
+                shiori_log::warn("SAVE", "棚の即時の索引に失敗した", &[("理由", &e)]);
             }
         }
         Ok(_) => {}
-        Err(e) => eprintln!("警告: 検索バックエンド設定の読み込みに失敗しました({e})。"),
+        Err(e) => {
+            eprintln!("警告: 検索バックエンド設定の読み込みに失敗しました({e})。");
+            shiori_log::warn("SAVE", "検索の設定を読めない", &[("理由", &e)]);
+        }
     }
 }
 
@@ -874,7 +909,7 @@ fn save_shelf(source: &Path, mut fm: Frontmatter, body: &str) -> Result<()> {
         "draft": is_draft,
         "history_file": history_file.map(|p| p.display().to_string()),
     });
-    println!("{}", serde_json::to_string_pretty(&result)?);
+    print_result("棚", &result)?;
     Ok(())
 }
 
@@ -1038,7 +1073,7 @@ fn save_asset(
         "inbox_reason": serde_json::Value::Null,
         "newly_pending_tags": newly_pending_tags,
     });
-    println!("{}", serde_json::to_string_pretty(&result)?);
+    print_result("素材", &result)?;
     Ok(())
 }
 
