@@ -39,29 +39,44 @@ for (const [tab, pane] of [
 
 let reservations = []; // [{id, at, label}] 詩織に預けた予約
 
+// 行は予約が増えたり減ったりしたときだけ作り直し、それ以外は残りの時間の文字だけを書き換える
+// (1秒に10回作り直すと、押している間にボタンが入れ替わり、押しても届かないことがあった)
+let renderedKey = "";
+const leftEls = new Map(); // 予約のid → 残りの時間を出す要素
+
 function renderTimers() {
   const now = Date.now();
   reservations = reservations.filter((r) => r.at > now);
-  timersEl.textContent = "";
-  for (const r of reservations) {
-    const li = document.createElement("li");
-    const left = document.createElement("span");
-    left.className = "left";
-    left.textContent = ShioriTime.formatLeft(r.at - now);
-    const what = document.createElement("span");
-    what.className = "what";
-    const d = new Date(r.at);
-    const clock = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-    what.textContent = r.label ? `${r.label}(${clock})` : `${clock}に知らせる`;
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "cancel";
-    cancel.textContent = "取り消す";
-    cancel.addEventListener("click", () => cancelTimer(r.id));
-    li.append(left, what, cancel);
-    timersEl.append(li);
+  const key = reservations.map((r) => `${r.id}:${r.at}:${r.label}`).join("|");
+  if (key !== renderedKey) {
+    renderedKey = key;
+    leftEls.clear();
+    timersEl.textContent = "";
+    for (const r of reservations) {
+      const li = document.createElement("li");
+      const left = document.createElement("span");
+      left.className = "left";
+      leftEls.set(r.id, left);
+      const what = document.createElement("span");
+      what.className = "what";
+      const d = new Date(r.at);
+      const clock = `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+      what.textContent = r.label ? `${r.label}(${clock})` : `${clock}に知らせる`;
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "cancel";
+      cancel.textContent = "取り消す";
+      cancel.addEventListener("click", () => cancelTimer(r.id));
+      li.append(left, what, cancel);
+      timersEl.append(li);
+    }
+    emptyEl.hidden = reservations.length > 0;
   }
-  emptyEl.hidden = reservations.length > 0;
+  for (const r of reservations) {
+    const el = leftEls.get(r.id);
+    const text = ShioriTime.formatLeft(r.at - now);
+    if (el && el.textContent !== text) el.textContent = text;
+  }
 }
 
 async function refreshTimers() {
@@ -205,6 +220,12 @@ async function liveChecks() {
     byButton = (await shiori.call("schedule.list", {})).find((r) => r.label === "自己確認の操作") ?? null;
   }
   results.push(["欄に打って始めるを押す", byButton !== null, byButton ? `id=${byButton.id}` : messageEl.textContent || "予約されない"]);
+  // 一覧の「取り消す」は、残りの時間が変わっても同じボタンのまま(入れ替わると押しても届かない)
+  await refreshTimers();
+  const before = timersEl.querySelector(".cancel");
+  await new Promise((r) => setTimeout(r, 1200));
+  const after = timersEl.querySelector(".cancel");
+  results.push(["取り消すのボタンが入れ替わらない", !!before && before === after, before ? "" : "ボタンが無い"]);
   if (byButton) await shiori.call("schedule.cancel", { id: byButton.id });
 
   const label = "自己確認";
