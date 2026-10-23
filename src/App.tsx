@@ -1,47 +1,36 @@
 import { useEffect, useState } from "react";
 import TopBar from "./components/TopBar";
-import { getLeftCollapsed, setLeftCollapsed } from "./lib/leftCollapsed";
-import ActivityIndicator from "./components/ActivityIndicator";
-import VoiceBar from "./components/VoiceBar";
-import ConversationLog from "./components/ConversationLog";
-import CharacterStage from "./components/character/CharacterStage";
+import Sidebar from "./components/sidebar/Sidebar";
 import MainArea from "./components/main/MainArea";
-import DebugScreen from "./components/debug/DebugScreen";
+import PendingModal from "./components/main/PendingModal";
 import StartupScreen from "./components/startup/StartupScreen";
 import CloseGuard from "./components/eject/CloseGuard";
-import ExternalModeNotice from "./components/ExternalModeNotice";
 import ApprovalModal from "./components/extensions/ApprovalModal";
+import Effects from "./components/effects/Effects";
 import { useAppModeStore } from "./store/useAppModeStore";
 import { useShioriStore } from "./store/useShioriStore";
+import { usePendingStore } from "./store/usePendingStore";
+import { useSidebarStore } from "./store/useSidebarStore";
+import { useExtensionsStore } from "./store/useExtensionsStore";
+import { useMotionStore } from "./store/useMotionStore";
+import { getSelfTestMode, runSelfTest } from "./lib/selfTest";
 import "./App.css";
 
-// 全体レイアウト。ヘッダー(全幅)＋本体行(左ゾーン flex:3＝Live2D/オーブ・
-// チャット・入力欄、右ゾーン flex:7＝タブで1画面ずつ切り替えるMainArea)の構成。
-// 右ゾーンは2026-08-12からデスクトップ型のウィンドウとDockだったが、あまり
-// 使わなかったため詩織Ver3.9でタブ切り替えに戻した。デバッグのみ、内部が
-// 複雑な既存UIのため独立した全画面表示のまま。
-// タスク管理機能(ProjectPanel)は廃止済み(メモ機能に置き換え、2026-08-08)。
+// 全体レイアウト(詩織Ver6.0の段階2)。上の帯(全幅)の下に、左の縦の列と、選んだ画面を1つ出す
+// 場所(MainArea)を並べる。会話も列の画面の1つ。それまでの「左に会話・右に上のタブ」の形は、
+// 増える機能に耐えないため、構想メモで左の縦の列に決めた。
 // Zustandはグローバルフックのため、Providerは不要。
 function App() {
-  const [isDebugOpen, setIsDebugOpen] = useState(false);
   const [showStartup, setShowStartup] = useState(true);
-  const [leftCollapsed, setLeftCollapsedState] = useState(getLeftCollapsed);
-  const mode = useAppModeStore((s) => s.mode);
-  const switchingMode = useAppModeStore((s) => s.switching);
-  // 外部AIモードのときと、会話モードへ戻して会話用AIを起動している最中は、会話の代わりに案内を出す。
-  const showExternalNotice = mode === "external" || (mode === "conversation" && switchingMode);
+  const pendingOpen = usePendingStore((s) => s.open);
 
   useEffect(() => {
     useAppModeStore.getState().load();
+    usePendingStore.getState().load();
+    useSidebarStore.getState().load();
+    useExtensionsStore.getState().load();
+    useMotionStore.getState().load();
   }, []);
-
-  const toggleLeftCollapsed = () => {
-    setLeftCollapsedState((prev) => {
-      const next = !prev;
-      setLeftCollapsed(next);
-      return next;
-    });
-  };
 
   useEffect(() => {
     // ホットキー(Ctrl+Alt+S)経由のRustイベントを購読し、
@@ -68,43 +57,36 @@ function App() {
       .catch((err) => console.error("バックエンドサービスの起動に失敗:", err));
   }, []);
 
-  if (isDebugOpen) {
-    return (
-      <>
-        <CloseGuard />
-        <DebugScreen onClose={() => setIsDebugOpen(false)} />
-      </>
-    );
-  }
+  useEffect(() => {
+    // 自己確認の起動(詩織Ver6.0の段階2)なら、起動画面が消えてから列の項目を全部確かめる
+    if (showStartup) return;
+    getSelfTestMode().then((m) => {
+      if (m.enabled) runSelfTest();
+    });
+  }, [showStartup]);
 
   return (
     <>
       <CloseGuard />
+      <Effects />
       {showStartup && <StartupScreen onFinished={() => setShowStartup(false)} />}
       {/* 拡張機能の承認(詩織Ver6.0の段階1)。起動画面が消えてから出す */}
       {!showStartup && <ApprovalModal />}
       <div className="app">
-        <TopBar leftCollapsed={leftCollapsed} onToggleLeftCollapsed={toggleLeftCollapsed} />
+        <TopBar />
         <div className="app__body">
-          <section className={`app__left${leftCollapsed ? " app__left--collapsed" : ""}`}>
-            {showExternalNotice ? (
-              <ExternalModeNotice />
-            ) : (
-              <>
-                <ConversationLog />
-                <div className="app__left-bottom">
-                  <ActivityIndicator />
-                  <CharacterStage />
-                  <VoiceBar />
-                </div>
-              </>
-            )}
-          </section>
-          <section className="app__right">
-            <MainArea onOpenDebug={() => setIsDebugOpen(true)} />
+          <Sidebar />
+          <section className="app__main">
+            <MainArea />
           </section>
         </div>
       </div>
+      {pendingOpen && (
+        <PendingModal
+          onClose={() => usePendingStore.getState().setOpen(false)}
+          onItemsChange={(items) => usePendingStore.getState().setItems(items)}
+        />
+      )}
     </>
   );
 }

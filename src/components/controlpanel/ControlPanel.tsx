@@ -7,16 +7,21 @@ import { ModelSwitchPage } from "./ModelSwitchPage";
 import { SystemStatusPage } from "./SystemStatusPage";
 import { VoiceSettingsPage } from "./VoiceSettingsPage";
 import { EjectPage } from "../eject/EjectPage";
+import { SidebarSettingsPage } from "./SidebarSettingsPage";
+import { DebugPage } from "./DebugPage";
 import { HISTORY_LENGTH } from "./shared";
 
-type NavKey = "system" | "voice" | "advanced" | "model" | "eject";
+type NavKey = "system" | "sidebar" | "voice" | "advanced" | "model" | "eject" | "debug";
 
 const NAV_ITEMS: { key: NavKey; label: string; level: "safe" | "caution" | "danger" }[] = [
   { key: "system", label: "システム状態", level: "safe" },
+  { key: "sidebar", label: "列と演出", level: "safe" },
   { key: "voice", label: "音声設定", level: "safe" },
   { key: "advanced", label: "詳細設定", level: "caution" },
   { key: "model", label: "モデル切替", level: "danger" },
   { key: "eject", label: "SSDの取り外し", level: "caution" },
+  // デバッグ(詩織Ver6.0の段階2で、上のタブの右の全画面表示から、ほかのページと同じタブにした)
+  { key: "debug", label: "デバッグ", level: "caution" },
 ];
 
 // 設定画面(2026-08-12にウィンドウ化、詩織Ver3.9で右ゾーンのタブの1つにした)。
@@ -86,6 +91,7 @@ function ControlPanel() {
           <div
             key={item.key}
             className={`control-panel__nav-item${activeNav === item.key ? " control-panel__nav-item--active" : ""}${isSwitchingModel ? " control-panel__nav-item--disabled" : ""}`}
+            data-nav-key={item.key}
             onClick={() => !isSwitchingModel && setActiveNav(item.key)}
             title={item.label}
           >
@@ -107,9 +113,11 @@ function ControlPanel() {
             tempHistory={tempHistory}
           />
         )}
+        {activeNav === "sidebar" && <SidebarSettingsPage />}
         {activeNav === "voice" && <VoiceSettingsPage />}
         {activeNav === "advanced" && <AdvancedSettingsPage />}
         {activeNav === "eject" && <EjectPage />}
+        {activeNav === "debug" && <DebugPage />}
         {activeNav === "model" && (
           <ModelSwitchPage onSwitchingChange={setIsSwitchingModel} platform={info?.platform ?? null} />
         )}

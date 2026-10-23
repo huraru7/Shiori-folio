@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { useExtensionsStore } from "../../store/useExtensionsStore";
 import { api } from "../../api/tauri";
 import type { ExtensionInfo, ExtensionRunState } from "../../types";
-import ExtensionFrame from "./ExtensionFrame";
+import { useMainViewStore } from "../../store/useMainViewStore";
+import { extensionUrl } from "./ExtensionFrame";
 import "./ExtensionsScreen.css";
 
 const STATUS_LABEL: Record<ExtensionInfo["status"], string> = {
@@ -23,22 +24,31 @@ function runLabel(run: ExtensionRunState, restarts: number): string {
   }
 }
 
+const SLOT_LABEL: Record<ExtensionInfo["slot"], string> = {
+  screen: "列の画面",
+  tool: "列の小道具",
+};
+
 const KIND_LABEL: Record<"ui" | "program", string> = {
   ui: "画面の部品",
   program: "別のプログラム",
 };
 
-// 拡張機能の一覧(詩織Ver6.0の段階1の、仮の入り口)。portable/extensions/に置いた拡張機能と、
-// その状態(使える・未承認・読めない)を見せ、未承認のものはここから承認できる。
-// 見た目は仮で、段階2で左の縦の列に移す。
+// 拡張機能の一覧(詩織Ver6.0の段階1、段階2で左の縦の列のいちばん下に移した)。portable/extensions/に
+// 置いた拡張機能と、その状態(使える・未承認・読めない)を見せ、未承認のものはここから承認できる。
+// 画面の部品の拡張機能は、列(画面か小道具)から開く。ここの「開く」も同じ動きにする。
 function ExtensionsScreen() {
   const list = useExtensionsStore((s) => s.list);
   const error = useExtensionsStore((s) => s.error);
   const load = useExtensionsStore((s) => s.load);
   const approve = useExtensionsStore((s) => s.approve);
-  // 開いている画面の部品の拡張機能(仮。段階2で、いまの画面の横の小さな枠にする)
-  const [opened, setOpened] = useState<string | null>(null);
-  const openedExt = list?.find((e) => e.name === opened && e.status === "ready" && e.entry);
+  const setActive = useMainViewStore((s) => s.setActive);
+  const toggleTool = useMainViewStore((s) => s.toggleTool);
+  const openExtension = (ext: ExtensionInfo) => {
+    if (!ext.name) return;
+    if (ext.slot === "screen") setActive(`ext:${ext.name}`);
+    else toggleTool(ext.name);
+  };
   // 別のプログラムの拡張機能を呼んだ結果(拡張機能の名前ごと)
   const [callResults, setCallResults] = useState<Record<string, string>>({});
 
@@ -67,22 +77,6 @@ function ExtensionsScreen() {
         </button>
       </p>
       {error && <div className="extensions-screen__error">{error}</div>}
-      {openedExt && openedExt.name && openedExt.entry && (
-        <div className="extensions-screen__frame">
-          <div className="extensions-screen__frame-bar">
-            <span>{openedExt.title}</span>
-            <button type="button" className="extensions-screen__close" onClick={() => setOpened(null)}>
-              閉じる
-            </button>
-          </div>
-          <ExtensionFrame
-            key={openedExt.name}
-            name={openedExt.name}
-            entry={openedExt.entry}
-            title={openedExt.title ?? openedExt.name}
-          />
-        </div>
-      )}
       {list === null && !error && <p className="extensions-screen__empty">読み込み中...</p>}
       {list !== null && list.length === 0 && (
         <p className="extensions-screen__empty">拡張機能はまだありません。</p>
@@ -91,9 +85,13 @@ function ExtensionsScreen() {
         {list?.map((ext) => (
           <li key={ext.folder} className="extensions-screen__item">
             <div className="extensions-screen__head">
+              {ext.status === "ready" && ext.kind === "ui" && ext.name && ext.icon && (
+                <img className="extensions-screen__icon" src={extensionUrl(ext.name, ext.icon)} alt="" />
+              )}
               <span className="extensions-screen__title">{ext.title ?? ext.folder}</span>
               {ext.version && <span className="extensions-screen__meta">版 {ext.version}</span>}
               {ext.kind && <span className="extensions-screen__meta">{KIND_LABEL[ext.kind]}</span>}
+              {ext.kind === "ui" && <span className="extensions-screen__meta">{SLOT_LABEL[ext.slot]}</span>}
               <span className={`extensions-screen__status extensions-screen__status--${ext.status}`}>
                 {STATUS_LABEL[ext.status]}
               </span>
@@ -122,7 +120,8 @@ function ExtensionsScreen() {
               <button
                 type="button"
                 className="extensions-screen__approve"
-                onClick={() => setOpened(ext.name)}
+                data-ripple
+                onClick={() => openExtension(ext)}
               >
                 開く
               </button>

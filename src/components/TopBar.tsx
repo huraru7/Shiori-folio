@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useDateDisplayStore, type DateDisplayConfig } from "../store/useDateDisplayStore";
 import { useAppModeStore } from "../store/useAppModeStore";
+import { pendingBadgeCount, usePendingStore } from "../store/usePendingStore";
 import shioriMark from "../assets/logo/shiori-mark-header.png";
 import "./TopBar.css";
 
@@ -17,23 +18,22 @@ function formatDate(now: Date, cfg: DateDisplayConfig): string {
   return numeric ? `${numeric}${weekday}` : weekday;
 }
 
-interface Props {
-  leftCollapsed: boolean;
-  onToggleLeftCollapsed: () => void;
-}
-
 // ヘッダー(2026-08-12、UI/UX改善指示書2章、2026-08-13ロゴ実装で仮置きから差し替え)。
 // 挨拶文・今日の手入れ件数の表示は廃止し、ロゴマークに置き換えた。図書館・設定への
 // 導線もヘッダーから削除し、右ゾーンのタブ(MainArea)側に統合している。
 // 日付の年/月/日/曜日と時刻の秒の表示・非表示は設定画面(詳細設定)から切り替えられ、
 // 保存するとすぐ反映される(useDateDisplayStore)。
-// 左ゾーン(会話UI)の折りたたみトグル(詩織Ver3.0、UI改善4-3節)もここに配置する。
-function TopBar({ leftCollapsed, onToggleLeftCollapsed }: Props) {
+// 会話の場所の折りたたみは、詩織Ver6.0の段階2で会話を左の列の画面の1つにしたため無くした。
+// 「要確認」は、上のタブの右から上の帯に移した(件数の印は、知らせの色の橙)。
+function TopBar() {
   const [now, setNow] = useState(new Date());
   const dateConfig = useDateDisplayStore((s) => s.config);
   const mode = useAppModeStore((s) => s.mode);
   const switchingMode = useAppModeStore((s) => s.switching);
   const changeMode = useAppModeStore((s) => s.change);
+  const pending = usePendingStore((s) => s.items);
+  const setPendingOpen = usePendingStore((s) => s.setOpen);
+  const pendingCount = pending ? pendingBadgeCount(pending) : 0;
 
   useEffect(() => {
     // 秒を出さないときも、分の切り替わりが遅れないよう1秒ごとに更新する。
@@ -55,14 +55,6 @@ function TopBar({ leftCollapsed, onToggleLeftCollapsed }: Props) {
     <header className="top-bar">
       <div className="top-bar__logo">
         <img src={shioriMark} className="top-bar__logo-mark" alt="詩織" />
-        <button
-          className="top-bar__collapse-btn"
-          onClick={onToggleLeftCollapsed}
-          title={leftCollapsed ? "会話エリアを表示" : "会話エリアを折りたたむ"}
-          aria-label={leftCollapsed ? "会話エリアを表示" : "会話エリアを折りたたむ"}
-        >
-          {leftCollapsed ? "▶" : "◀"}
-        </button>
       </div>
       {mode && (
         <div className="top-bar__mode" role="group" aria-label="モード">
@@ -88,6 +80,16 @@ function TopBar({ leftCollapsed, onToggleLeftCollapsed }: Props) {
           </button>
         </div>
       )}
+      <button
+        type="button"
+        className="top-bar__pending"
+        data-ripple
+        title="要確認の記録"
+        onClick={() => setPendingOpen(true)}
+      >
+        要確認
+        {pendingCount > 0 && <span className="top-bar__badge">{pendingCount}</span>}
+      </button>
       <div className="top-bar__datetime">
         <div className="top-bar__date">{formatDate(now, dateConfig)}</div>
         <div className="top-bar__time">{timeText}</div>

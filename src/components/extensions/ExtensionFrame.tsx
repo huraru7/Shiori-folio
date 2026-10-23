@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { api } from "../../api/tauri";
+import "./ExtensionFrame.css";
 
 // 画面の部品の拡張機能を開く囲い(詩織Ver6.0の段階1)。
 // - 拡張機能は専用のURLの仕組み(shiori-ext)で配られ、CSPでネットとほかの場所からの読み込みを止めている
@@ -9,7 +10,7 @@ import { api } from "../../api/tauri";
 //   拡張機能が名乗った名前は信じない
 
 // WebView2(Windows)は独自の仕組みのURLを http://<名前>.localhost/ に読み替える。WKWebView(Mac)はそのまま。
-const EXT_ORIGIN = navigator.userAgent.includes("Windows")
+export const EXT_ORIGIN = navigator.userAgent.includes("Windows")
   ? "http://shiori-ext.localhost"
   : "shiori-ext://localhost";
 
@@ -24,6 +25,18 @@ export function extensionUrl(name: string, entry: string): string {
 // 開いているiframeのwindowと、拡張機能の名前の対応。頼みごとの送り主を見分けるのに使う。
 const frames = new Map<Window, string>();
 let listening = false;
+
+// 自己確認の起動(段階2)。本体が {shiori: 1, selftestRun: true} を拡張機能のiframeへ送ると、
+// 自分の確かめを持つ拡張機能は {shiori: 1, selftest: {started: true}} を返してから確かめを走らせ、
+// 終わったら {shiori: 1, selftest: {ok, ng}} を返す。送り主のiframeから決めた名前を付けて、
+// 画面の中のイベント(SELF_TEST_EVENT)にして流す。
+export const SELF_TEST_EVENT = "shiori-ext-selftest";
+export interface SelfTestDone {
+  name: string;
+  started: boolean;
+  ok: number;
+  ng: number;
+}
 
 interface Request {
   shiori: 1;
@@ -43,7 +56,19 @@ function listen() {
   window.addEventListener("message", (event) => {
     const source = event.source as Window | null;
     const name = source ? frames.get(source) : undefined;
-    if (!source || !name || !isRequest(event.data)) return;
+    if (!source || !name) return;
+    const done = (event.data as { selftest?: { started?: unknown; ok?: unknown; ng?: unknown } } | null)?.selftest;
+    if ((event.data as { shiori?: number })?.shiori === 1 && done) {
+      const detail: SelfTestDone = {
+        name,
+        started: done.started === true,
+        ok: Number(done.ok) || 0,
+        ng: Number(done.ng) || 0,
+      };
+      window.dispatchEvent(new CustomEvent(SELF_TEST_EVENT, { detail }));
+      return;
+    }
+    if (!isRequest(event.data)) return;
     const { id, method, params } = event.data;
     api
       .extCall(name, method, params)

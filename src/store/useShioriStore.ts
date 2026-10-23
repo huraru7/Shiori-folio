@@ -7,6 +7,7 @@ import type {
   OrbStatus,
   ShioriMessage,
 } from "../types";
+import { useMainViewStore } from "./useMainViewStore";
 
 // モジュールスコープで保持し、subscribeToBackendEventsの多重登録を防ぐガード。
 // React StrictModeの開発時二重実行では、1回目の登録(非同期)が完了する前に
@@ -172,6 +173,9 @@ export const useShioriStore = create<ShioriState>((set, get) => ({
         const unlistenStarted = await listen("voice:recording-started", () => {
           set({ isRecording: true });
           get().setOrbStatus("listening");
+          // ホットキーで録音を始めたら、会話の画面へ移る(詩織Ver6.0の段階2で、会話を列の画面の1つにしたため。
+          // 録音中の様子と返事が見えるように)
+          useMainViewStore.getState().setActive("conversation");
         });
         const unlistenTranscribed = await listen<{ text: string }>(
           "voice:transcribed",

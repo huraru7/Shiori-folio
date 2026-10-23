@@ -1,0 +1,43 @@
+/* 会話の画面(詩織Ver6.0の段階2)。左に会話(それまでの左の場所の形をそのまま移した)、
+   右にナレッジ。画面が狭いときは、ナレッジを細くする。 */
+.conversation-screen {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.conversation-screen__talk {
+  flex: 1 1 0;
+  min-width: 320px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  min-height: 0;
+}
+
+/* キャラクター表示エリア＋入力欄を1つの「下部エリア」としてまとめ、常に下部に固定する。
+   会話の記録(flex:1)が上の残りの場所を使い、下から積み上がる。 */
+.conversation-screen__bottom {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.conversation-screen__knowledge {
+  flex: 0 1 clamp(260px, 36%, 520px);
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+  border-left: 0.5px solid var(--glass-border);
+}
+
+.conversation-screen__knowledge-title {
+  font-family: var(--font-display);
+  font-size: var(--fs-base);
+  color: var(--paper-dim);
+  letter-spacing: 0.06em;
+  margin-bottom: 12px;
+}

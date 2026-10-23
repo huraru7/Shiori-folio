@@ -28,45 +28,20 @@ body {
   flex-direction: column;
   height: 100vh;
   min-width: 0;
+  /* 星(背景の端の演出)より前に出す */
+  position: relative;
+  z-index: 1;
 }
 
-/* ヘッダー(全幅)の下、本体行を左3:右7で常に維持する
-   (flex-basis:0 + min-width:0で、どんなウィンドウ幅でも比率が崩れない)。 */
+/* 上の帯(全幅)の下に、左の縦の列と、選んだ画面を1つ出す場所を並べる(詩織Ver6.0の段階2)。 */
 .app__body {
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
 }
 
-.app__left {
-  flex: 3 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  position: relative;
-  border-right: 0.5px solid var(--glass-border);
-}
-
-/* 左ゾーン折りたたみ(詩織Ver3.0、UI改善4-3節)。display:noneで完全に
-   非表示にする(アンマウントはしない。録音中等の内部stateを保持したまま
-   畳めるようにするため)。右ゾーンはflex-basisが0のままなので、左が
-   居場所を失えば自動的に画面幅いっぱいまで広がる。 */
-.app__left--collapsed {
-  display: none;
-}
-
-/* キャラクター表示エリア＋入力欄を1つの「下部エリア」としてまとめ、
-   常に左ゾーンの下部に固定する(2026-08-12、0-2)。チャットログ(flex:1)が
-   上の残りスペースを使い、下から積み上がる。 */
-.app__left-bottom {
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
-.app__right {
-  flex: 7 1 0;
+.app__main {
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;

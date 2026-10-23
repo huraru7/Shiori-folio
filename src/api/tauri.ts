@@ -11,6 +11,8 @@ import type {
   EjectOutcome,
   EjectPreview,
   ExtensionInfo,
+  SelfTestMode,
+  SidebarLayout,
   KnowledgeResult,
   LibraryFile,
   ModelInfo,
@@ -97,6 +99,18 @@ export const api = {
   // 本体の画面から、拡張機能のprovidesにある操作を呼ぶ(段階1の仮の入り口で確かめるため)。
   callExtension: (name: string, method: string, params?: unknown) =>
     invoke<unknown>("call_extension", { name, method, params: params ?? null }),
+
+  // 左の縦の列の並びと非表示(詩織Ver6.0の段階2)。data/ui/sidebar.jsonに置く。
+  getSidebarLayout: () => invoke<SidebarLayout>("get_sidebar_layout"),
+  setSidebarLayout: (layout: SidebarLayout) => invoke<void>("set_sidebar_layout", { layout }),
+  // data/ui/icons/に差し替えのPNGがある、本体の画面のid
+  listIconOverrides: () => invoke<string[]>("list_icon_overrides"),
+
+  // 自己確認の起動(詩織Ver6.0の段階2)。ふつうの起動では、書く・閉じるは何もしない。
+  selfTestMode: () => invoke<SelfTestMode>("self_test_mode"),
+  selfTestLog: (item: string, result: "OK" | "NG", fields?: Record<string, string>) =>
+    invoke<void>("self_test_log", { item, result, fields: fields ?? null }),
+  selfTestFinish: (ok: number, ng: number) => invoke<void>("self_test_finish", { ok, ng }),
   // forceがfalseなら、前回の取り込みから間もないときは省く。
   refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
   // hostがnullなら全端末の合算。

@@ -1,11 +1,10 @@
 import { create } from "zustand";
 import { api } from "../api/tauri";
 
-// 右ゾーンで表示している画面(詩織Ver3.9、ウィンドウとDockをやめてタブ切り替えにした)。
-// 永続化はせず、起動のたびにホームから始める。
-export type MainView =
+// 本体の画面のid(詩織Ver6.0の段階2で、上のタブから左の縦の列に移した)。
+export type BuiltinView =
   | "home"
-  | "knowledge"
+  | "conversation"
   | "library"
   | "library-browse"
   | "shelf"
@@ -14,19 +13,27 @@ export type MainView =
   | "extensions"
   | "settings";
 
+// 選んでいる画面。画面の拡張機能は "ext:{名前}"。永続化はせず、起動のたびにホームから始める。
+export type MainView = BuiltinView | `ext:${string}`;
+
 interface MainViewStore {
   active: MainView;
   setActive: (view: MainView) => void;
+  // 小道具の枠で開いている拡張機能の名前(開ける枠は1つ)
+  openTool: string | null;
+  // 同じ小道具をもう一度押すと閉じ、別の小道具を押すと入れ替わる
+  toggleTool: (name: string) => void;
+  closeTool: () => void;
   // ホームの検索欄から図書館へ渡す検索語。図書館が受け取ったらnullに戻す。
   libraryQuery: string | null;
   searchInLibrary: (query: string) => void;
   clearLibraryQuery: () => void;
 }
 
-// タブの移動をログに残す。記録に失敗しても、画面の切り替えは止めない。
+// 画面の移動をログに残す。記録に失敗しても、画面の切り替えは止めない。
 function logMove(from: MainView, to: MainView) {
   if (from !== to) {
-    api.logUiEvent("タブを移った", { from, to }).catch(() => undefined);
+    api.logUiEvent("画面を移った", { from, to }).catch(() => undefined);
   }
 }
 
@@ -35,6 +42,17 @@ export const useMainViewStore = create<MainViewStore>((set, get) => ({
   setActive: (view) => {
     logMove(get().active, view);
     set({ active: view });
+  },
+  openTool: null,
+  toggleTool: (name) => {
+    const next = get().openTool === name ? null : name;
+    api.logUiEvent(next ? "小道具を開いた" : "小道具を閉じた", { name }).catch(() => undefined);
+    set({ openTool: next });
+  },
+  closeTool: () => {
+    const current = get().openTool;
+    if (current) api.logUiEvent("小道具を閉じた", { name: current }).catch(() => undefined);
+    set({ openTool: null });
   },
   libraryQuery: null,
   searchInLibrary: (query) => {

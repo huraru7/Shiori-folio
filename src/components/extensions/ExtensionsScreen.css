@@ -1,4 +1,5 @@
-/* 拡張機能の一覧(詩織Ver6.0の段階1の、仮の入り口)。段階2で左の縦の列に移す。 */
+/* 拡張機能の一覧(詩織Ver6.0の段階1、段階2で左の縦の列のいちばん下に移した)。
+   押すボタンは、設定の画面の「変更を保存」と同じ苔色の塗りにそろえた(段階2)。 */
 .extensions-screen {
   font-family: var(--font-body);
   color: var(--paper);
@@ -91,34 +92,26 @@
 
 .extensions-screen__approve {
   margin-top: 10px;
-  background: var(--moss-deep);
-  color: var(--paper);
+  background: var(--moss);
+  color: var(--bg-deep);
   border: none;
-  border-radius: 6px;
-  padding: 6px 14px;
+  border-radius: 8px;
+  padding: 6px 16px;
   font-family: var(--font-body);
   font-size: var(--fs-sm);
+  font-weight: 700;
   cursor: pointer;
 }
 
 .extensions-screen__approve:hover {
-  background: var(--moss);
+  background: var(--paper);
 }
 
-.extensions-screen__frame {
-  border: 0.5px solid var(--glass-border);
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 14px;
-}
-
-.extensions-screen__frame-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 12px;
-  background: var(--glass);
-  font-size: var(--fs-sm);
+.extensions-screen__icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+  align-self: center;
 }
 
 .extensions-screen__close {
@@ -129,15 +122,6 @@
   font-size: var(--fs-xs);
   padding: 2px 10px;
   cursor: pointer;
-}
-
-/* 拡張機能の画面の背景は、拡張機能の側で決める */
-.extension-frame {
-  display: block;
-  width: 100%;
-  height: 420px;
-  border: none;
-  background: var(--bg-deep);
 }
 
 .extensions-screen__buttons {

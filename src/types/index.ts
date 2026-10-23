@@ -234,6 +234,8 @@ export interface AppConfigDto {
   mode: AppMode;
   // ログに「詳細」の重さも書くか(詩織Ver6.0の段階1)
   logDetail: boolean;
+  // 水紋と星の動きを抑えるか(詩織Ver6.0の段階2)。nullならOSの「視差効果を減らす」に従う
+  reduceMotion: boolean | null;
 }
 
 // 会話モード/外部AIモード(詩織Ver4.0)。
@@ -364,6 +366,10 @@ export interface ExtensionInfo {
   // 画面の部品の入口(拡張機能のフォルダからの相対パス)
   entry: string | null;
   places: ("window" | "pet")[];
+  // 左の縦の列のどこに出すか(詩織Ver6.0の段階2)
+  slot: "screen" | "tool";
+  // アイコン(拡張機能のフォルダからの相対パス)
+  icon: string | null;
   uses: ExtensionUse[];
   // ほかの拡張機能から呼ばれてよい操作
   provides: string[];
@@ -376,6 +382,19 @@ export interface ExtensionInfo {
   // 別のプログラムの拡張機能の、いまの動き(画面の部品はnull)
   runtime: ExtensionRunState | null;
   restarts: number;
+}
+
+// 左の縦の列の並びと非表示の記録(詩織Ver6.0の段階2、sidebar_layout.rsと同じ形)
+export interface SidebarLayout {
+  order: string[];
+  hidden: string[];
+}
+
+// 自己確認の起動(詩織Ver6.0の段階2、self_test.rsと同じ形)
+export interface SelfTestMode {
+  enabled: boolean;
+  // わざと壊す画面のid
+  breakTarget: string | null;
 }
 
 export type ExtensionRunState =

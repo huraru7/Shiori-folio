@@ -1,0 +1,68 @@
+/* 小道具の枠(詩織Ver6.0の段階2)。画面の右の端に、幅360ほどで重ねずに並べる。 */
+.tool-frame {
+  flex: 0 0 360px;
+  max-width: 45%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 0.5px solid var(--glass-border);
+  background: rgba(16, 15, 10, 0.4);
+}
+
+.tool-frame[hidden] {
+  display: none;
+}
+
+.tool-frame__bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 0.5px solid var(--glass-border);
+}
+
+.tool-frame__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-base);
+  color: var(--paper);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-frame__close {
+  margin-left: auto;
+  font: inherit;
+  font-size: var(--fs-sm);
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 0.5px solid var(--glass-border);
+  background: transparent;
+  color: var(--paper-dim);
+  cursor: pointer;
+}
+
+.tool-frame__close:hover {
+  color: var(--paper);
+  background: var(--glass);
+}
+
+.tool-frame__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-frame__slot {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-frame__slot[hidden] {
+  display: none;
+}

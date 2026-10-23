@@ -508,3 +508,57 @@
   color: var(--paper-dim);
   font-size: var(--fs-sm);
 }
+
+/* 列と演出のページ(詩織Ver6.0の段階2) */
+.sidebar-settings__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar-settings__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sidebar-settings__row .control-panel__btn {
+  padding: 4px 12px;
+  font-size: var(--fs-sm);
+}
+
+.sidebar-settings__icon {
+  width: 24px;
+  height: 24px;
+  image-rendering: pixelated;
+}
+
+.sidebar-settings__letter {
+  width: 24px;
+  text-align: center;
+  font-family: var(--font-display);
+}
+
+.sidebar-settings__label {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--paper);
+}
+
+.sidebar-settings__show {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--fs-sm);
+  color: var(--paper-dim);
+  width: 72px;
+}
+
+.sidebar-settings__note {
+  margin: 8px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--paper-dim);
+}

@@ -1,0 +1,92 @@
+/* 左の縦の列(詩織Ver6.0の段階2)。アイコンの大きさ(--sidebar-icon)はウィンドウの高さに合わせて
+   Sidebar.tsxが決め(24ドットの整数倍)、項目と列の幅もそれに合わせる。 */
+.sidebar {
+  --sidebar-item: calc(var(--sidebar-icon, 48px) + 8px);
+  flex: 0 0 auto;
+  width: calc(var(--sidebar-item) + 12px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 0;
+  border-right: 0.5px solid var(--glass-border);
+  background: rgba(16, 15, 10, 0.35);
+  overflow-y: auto;
+  position: relative;
+  z-index: 2;
+}
+
+.sidebar__group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.sidebar__group--bottom {
+  margin-top: auto;
+  padding-top: 8px;
+}
+
+.sidebar__line {
+  width: 60%;
+  border: none;
+  border-top: 0.5px solid var(--glass-border);
+  margin: 6px 0;
+}
+
+.sidebar__item {
+  position: relative;
+  width: var(--sidebar-item);
+  height: var(--sidebar-item);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.5px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.72;
+  transition: opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.sidebar__item:hover {
+  opacity: 1;
+  background: var(--glass);
+}
+
+.sidebar__item--active {
+  opacity: 1;
+  background: rgba(143, 160, 107, 0.12);
+  border-color: rgba(143, 160, 107, 0.4);
+}
+
+.sidebar__icon {
+  width: var(--sidebar-icon, 48px);
+  height: var(--sidebar-icon, 48px);
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+
+.sidebar__letter {
+  font-family: var(--font-display);
+  font-size: calc(var(--sidebar-icon, 48px) * 0.45);
+  color: var(--paper);
+}
+
+/* 名前は、指を乗せた項目の右に出す(位置はSidebar.tsxが項目のいまの位置から決める) */
+.sidebar__tip {
+  position: fixed;
+  transform: translateY(-50%);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 0.5px solid var(--glass-border);
+  background: var(--bg-deep);
+  color: var(--paper);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1200;
+}

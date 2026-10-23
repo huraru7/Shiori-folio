@@ -1,0 +1,62 @@
+/* 画面の演出(詩織Ver6.0の段階2)。水紋は苔色の細い線、星は紙の色の小さな点。 */
+.effects__stars {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.effects__star {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--paper);
+  box-shadow: 0 0 4px rgba(237, 230, 214, 0.6);
+  opacity: 0;
+  animation-name: effects-twinkle;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+/* 周期のほとんどは消えていて、終わりの少しの間だけ瞬く(まばらに見せるため) */
+@keyframes effects-twinkle {
+  0%,
+  86%,
+  100% {
+    opacity: 0;
+  }
+  93% {
+    opacity: 0.75;
+  }
+}
+
+.effects__ripples {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.effects__ripple {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(143, 160, 107, 0.55);
+  animation-name: effects-ripple;
+  animation-timing-function: ease-out;
+  animation-fill-mode: forwards;
+}
+
+.effects__ripple--wide {
+  border-color: rgba(143, 160, 107, 0.18);
+}
+
+@keyframes effects-ripple {
+  from {
+    transform: scale(0.1);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
