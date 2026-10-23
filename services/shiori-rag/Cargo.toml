@@ -1,0 +1,39 @@
+[package]
+name = "shiori-rag"
+version = "0.1.0"
+edition = "2024"
+description = "詩織のRAG(検索・索引・素材の抽出)。services/rag(Python)のRust版"
+
+[[bin]]
+name = "shiori-rag"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.104"
+candle-core = { version = "0.11", default-features = false }
+candle-nn = { version = "0.11", default-features = false }
+candle-transformers = { version = "0.11", default-features = false }
+chrono = "0.4.45"
+encoding_rs = "0.8.42"
+hex = "0.4.3"
+html5ever = "0.40.1"
+lopdf = { version = "0.42", default-features = false }
+pdf-extract = "0.12.1"
+quick-xml = "0.42.0"
+rayon = "1.12.0"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["preserve_order", "float_roundtrip"] }
+sha2 = "0.11.1"
+tiktoken-rs = "0.12.1"
+tiny_http = "0.12.0"
+tokenizers = { version = "0.22", default-features = false, features = ["onig"] }
+unicode-normalization = "0.1.26"
+ureq = { version = "2", features = ["json"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
+
+[profile.release]
+debug = false
+
+[dev-dependencies]
+tempfile = "3.27.0"

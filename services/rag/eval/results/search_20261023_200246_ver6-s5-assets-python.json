@@ -1,0 +1,264 @@
+{
+ "tag": "ver6-s5-assets-python",
+ "summary": {
+  "overall": {
+   "n": 15,
+   "hit@1": 0.9333333333333333,
+   "hit@3": 1.0,
+   "hit@5": 1.0,
+   "mrr": 0.9666666666666667
+  },
+  "by_kind": {
+   "colloquial": {
+    "n": 15,
+    "hit@1": 0.9333333333333333,
+    "hit@3": 1.0,
+    "hit@5": 1.0,
+    "mrr": 0.9666666666666667
+   }
+  },
+  "not_found_correct": null
+ },
+ "rows": [
+  {
+   "id": "A01",
+   "kind": "colloquial",
+   "query": "冷却ポンプはいつ点検するんだっけ",
+   "expected": [
+    "notes.txt.meta"
+   ],
+   "note": "txt",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "notes.txt.meta",
+    "library-organizing-20261007-date-and-finished-project.md",
+    "library-organizing-20261010-journal-sections.md"
+   ]
+  },
+  {
+   "id": "A02",
+   "kind": "colloquial",
+   "query": "ゼブラトークンという合言葉",
+   "expected": [
+    "notes.txt.meta"
+   ],
+   "note": "txt",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "notes.txt.meta",
+    "startup-services-parallelization-plan-20261002.md",
+    "space-survival-boardgame-overview.md"
+   ]
+  },
+  {
+   "id": "A03",
+   "kind": "colloquial",
+   "query": "QUASARFLUX calibration",
+   "expected": [
+    "report.pdf.meta"
+   ],
+   "note": "pdf",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "report.pdf.meta",
+    "yesod-accessory-plan.md",
+    "startup-services-parallelization-plan-20261002.md"
+   ]
+  },
+  {
+   "id": "A04",
+   "kind": "colloquial",
+   "query": "星間通信モジュールの帯域は何で決まる?",
+   "expected": [
+    "spec.docx.meta"
+   ],
+   "note": "docx",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "spec.docx.meta",
+    "plan-shiori-ver6-s2-window-ui-20261023.md",
+    "elyona-universe/memory.md"
+   ]
+  },
+  {
+   "id": "A05",
+   "kind": "colloquial",
+   "query": "ムーンベリーの売上",
+   "expected": [
+    "sales.xlsx.meta"
+   ],
+   "note": "xlsx",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "sales.xlsx.meta",
+    "pc-migration-plan.md",
+    "ゲーム基盤を考える講義まとめ.md"
+   ]
+  },
+  {
+   "id": "A06",
+   "kind": "colloquial",
+   "query": "海底ケーブルの保守の計画名",
+   "expected": [
+    "page.html.meta"
+   ],
+   "note": "html",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "page.html.meta",
+    "ver3.5-spec.md",
+    "plan-shiori-save-shelf-20261023.md"
+   ]
+  },
+  {
+   "id": "A07",
+   "kind": "colloquial",
+   "query": "霧の夜にだけともす補助灯の色",
+   "expected": [
+    "lighthouse.pdf.meta"
+   ],
+   "note": "pdf(日本語)",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "lighthouse.pdf.meta",
+    "plan-shiori-ver6-s2-window-ui-20261023.md",
+    "plan-shiori-ver6-20261023.md"
+   ]
+  },
+  {
+   "id": "A08",
+   "kind": "colloquial",
+   "query": "秋の渡りの時期に灯台の明かりをどうする?",
+   "expected": [
+    "lighthouse.pdf.meta"
+   ],
+   "note": "pdf(日本語、2ページ目)",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "lighthouse.pdf.meta",
+    "character-design-shiori-20261023.md",
+    "plan-shiori-ver6-20261023.md"
+   ]
+  },
+  {
+   "id": "A09",
+   "kind": "colloquial",
+   "query": "赤玉土とケト土の割合",
+   "expected": [
+    "recipe.docx.meta"
+   ],
+   "note": "docx(段落・表)",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "recipe.docx.meta",
+    "log-1789532710.md",
+    "character-design-shiori-20261023.md"
+   ]
+  },
+  {
+   "id": "A10",
+   "kind": "colloquial",
+   "query": "望遠鏡の係はどのクラス?",
+   "expected": [
+    "deck.pptx.meta"
+   ],
+   "note": "pptx(2枚目)",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "deck.pptx.meta",
+    "journal-1787473123.md",
+    "yesod-game-design-20261018.md"
+   ]
+  },
+  {
+   "id": "A11",
+   "kind": "colloquial",
+   "query": "片付けは何時から",
+   "expected": [
+    "deck.pptx.meta"
+   ],
+   "note": "pptx(11枚目、番号の並び)",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "deck.pptx.meta",
+    "session-close.md",
+    "shiori-roadmap-rev2.md"
+   ]
+  },
+  {
+   "id": "A12",
+   "kind": "colloquial",
+   "query": "星砂の小瓶の発注先",
+   "expected": [
+    "stock.xlsx.meta"
+   ],
+   "note": "xlsx(2枚目のシート)",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "stock.xlsx.meta",
+    "plan-shiori-ver6-s2-window-ui-20261023.md",
+    "plan-shiori-ver6-20261023.md"
+   ]
+  },
+  {
+   "id": "A13",
+   "kind": "colloquial",
+   "query": "縁側で線香花火",
+   "expected": [
+    "old.txt.meta"
+   ],
+   "note": "txt(Shift_JIS)",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "old.txt.meta",
+    "space-survival-boardgame-overview.md",
+    "space-survival-boardgame-design.md"
+   ]
+  },
+  {
+   "id": "A14",
+   "kind": "colloquial",
+   "query": "猫のたまの好物",
+   "expected": [
+    "list.csv.meta"
+   ],
+   "note": "csv(UTF-16)",
+   "rank": 2,
+   "correct": true,
+   "top": [
+    "startup-services-parallelization-plan-20261002.md",
+    "list.csv.meta",
+    "pc-migration-plan.md"
+   ]
+  },
+  {
+   "id": "A15",
+   "kind": "colloquial",
+   "query": "十三夜に供える団子の数",
+   "expected": [
+    "entity.html.meta"
+   ],
+   "note": "html(文字参照)",
+   "rank": 1,
+   "correct": true,
+   "top": [
+    "entity.html.meta",
+    "recipe.docx.meta",
+    "profile-priorities.md"
+   ]
+  }
+ ]
+}
