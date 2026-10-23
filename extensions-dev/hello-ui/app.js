@@ -184,7 +184,9 @@ function addRow(test, ok, detail) {
 }
 
 const results = document.getElementById("results");
-document.getElementById("run-all").addEventListener("click", async () => {
+
+// 全部試して、表に出す。selfTestのときは、1項目ずつの結果もログに書く(段階2の自己確認の起動)。
+async function runAll(selfTest) {
   results.textContent = "";
   let passed = 0;
   for (const test of TESTS) {
@@ -197,6 +199,15 @@ document.getElementById("run-all").addEventListener("click", async () => {
     }
     if (ok) passed += 1;
     addRow(test, ok, detail);
+    if (selfTest) {
+      await shiori
+        .call("log.write", {
+          level: ok ? "info" : "warn",
+          event: "試した",
+          fields: { 項目: test.label, 結果: ok ? "期待どおり" : "違う", 中身: String(detail).slice(0, 160) },
+        })
+        .catch(() => undefined);
+    }
   }
   // 結果の数もログに残す(ふらるが画面を読まなくても、ログで確かめられるように)
   await shiori
@@ -206,4 +217,19 @@ document.getElementById("run-all").addEventListener("click", async () => {
       fields: { 期待どおり: String(passed), 全部: String(TESTS.length) },
     })
     .catch(() => undefined);
+  return passed;
+}
+
+document.getElementById("run-all").addEventListener("click", () => runAll(false));
+
+// 自己確認の起動(段階2)。本体から頼まれたら、始めたと返してから全部試し、結果の数を返す。
+let selfTestRunning = false;
+window.addEventListener("message", async (event) => {
+  if (event.source !== window.parent || !event.data || event.data.shiori !== 1 || !event.data.selftestRun) return;
+  if (selfTestRunning) return;
+  selfTestRunning = true;
+  window.parent.postMessage({ shiori: 1, selftest: { started: true } }, "*");
+  const passed = await runAll(true);
+  window.parent.postMessage({ shiori: 1, selftest: { ok: passed, ng: TESTS.length - passed } }, "*");
+  selfTestRunning = false;
 });

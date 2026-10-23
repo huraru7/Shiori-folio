@@ -6,6 +6,7 @@
   "kind": "ui",
   "entry": "index.html",
   "places": ["window"],
+  "slot": "tool",
   "uses": ["storage", "library.read", "ext.call"],
   "provides": [
     { "method": "greet", "description": "あいさつを返す" }

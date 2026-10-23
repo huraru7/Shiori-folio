@@ -274,6 +274,10 @@ pub struct ExtensionDto {
     /// 画面の部品の入口(拡張機能のフォルダからの相対パス)。別のプログラムは`None`
     pub entry: Option<String>,
     pub places: Vec<&'static str>,
+    /// 左の縦の列のどこに出すか("screen" | "tool")
+    pub slot: &'static str,
+    /// アイコン(拡張機能のフォルダからの相対パス)
+    pub icon: Option<String>,
     pub uses: Vec<UseDto>,
     /// ほかの拡張機能から呼ばれてよい操作
     pub provides: Vec<String>,
@@ -309,6 +313,8 @@ impl From<&Extension> for ExtensionDto {
             places: m
                 .map(|m| m.places.iter().map(|p| if *p == Place::Window { "window" } else { "pet" }).collect())
                 .unwrap_or_default(),
+            slot: if m.map(|m| m.slot) == Some(manifest::Slot::Screen) { "screen" } else { "tool" },
+            icon: m.and_then(|m| m.icon.clone()),
             uses: m.map(|m| use_dtos(&m.uses)).unwrap_or_default(),
             provides: m.map(|m| m.provides.iter().map(|p| p.method.clone()).collect()).unwrap_or_default(),
             status,

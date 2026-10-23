@@ -3,6 +3,8 @@ pub mod shiori_log;
 pub mod error_codes;
 pub mod hub;
 mod audio;
+mod self_test;
+mod sidebar_layout;
 mod claude_stats;
 mod claude_status;
 mod db;
@@ -143,11 +145,21 @@ struct UiConfig {
     // 時刻の秒の表示(詩織Ver3.9)。
     #[serde(default)]
     show_seconds: bool,
+    // 水紋と星の動きを抑えるか(詩織Ver6.0の段階2)。未設定ならOSの「視差効果を減らす」に従う
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reduce_motion: Option<bool>,
 }
 
 impl Default for UiConfig {
     fn default() -> Self {
-        Self { show_year: true, show_month: true, show_day: true, show_weekday: false, show_seconds: false }
+        Self {
+            show_year: true,
+            show_month: true,
+            show_day: true,
+            show_weekday: false,
+            show_seconds: false,
+            reduce_motion: None,
+        }
     }
 }
 
@@ -1319,6 +1331,8 @@ struct ConfigDto {
     mode: AppMode,
     // ログに「詳細」の重さも書くか(詩織Ver6.0の段階1)
     log_detail: bool,
+    // 水紋と星の動きを抑えるか(詩織Ver6.0の段階2)。未設定ならnull
+    reduce_motion: Option<bool>,
 }
 
 // 実機SSDを取り外せる状態にする(取り外し機能)。止める対象の選び方は`eject.rs`を参照。
@@ -1554,6 +1568,7 @@ fn get_config_blocking() -> Result<ConfigDto, String> {
         show_seconds: config.ui.show_seconds,
         mode: config.mode,
         log_detail: shiori_log::LogSettings::from_config(&project_root()).detail,
+        reduce_motion: config.ui.reduce_motion,
     })
 }
 
@@ -1576,6 +1591,7 @@ struct ConfigUpdate {
     show_weekday: Option<bool>,
     show_seconds: Option<bool>,
     log_detail: Option<bool>,
+    reduce_motion: Option<bool>,
 }
 
 fn validate_config_update(update: &ConfigUpdate) -> Result<(), String> {
@@ -1676,6 +1692,9 @@ fn set_config_blocking(update: ConfigUpdate) -> Result<(), String> {
     }
     if let Some(v) = update.show_seconds {
         value["ui"]["showSeconds"] = serde_json::json!(v);
+    }
+    if let Some(v) = update.reduce_motion {
+        value["ui"]["reduceMotion"] = serde_json::json!(v);
     }
     let log_detail = update.log_detail;
     if let Some(v) = log_detail {
@@ -5360,6 +5379,8 @@ pub fn run() {
         }))
         .setup(|app| {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
+            // 自己確認の起動(詩織Ver6.0の段階2)なら、打ち切りの見張りを始める
+            self_test::start_watchdog(app.handle().clone());
             // 別のプログラムの拡張機能(詩織Ver6.0の段階1)。頼みごとは、画面の部品と同じ窓口に通す
             {
                 let handle = app.handle().clone();
@@ -5442,7 +5463,13 @@ pub fn run() {
             hub::list_extensions,
             hub::approve_extension,
             hub::call_extension,
-            hub::bridge::ext_call
+            hub::bridge::ext_call,
+            self_test::self_test_mode,
+            self_test::self_test_log,
+            self_test::self_test_finish,
+            sidebar_layout::get_sidebar_layout,
+            sidebar_layout::set_sidebar_layout,
+            sidebar_layout::list_icon_overrides
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

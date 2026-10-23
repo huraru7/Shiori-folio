@@ -3,6 +3,8 @@
 //! `shiori-ext://localhost/{名前}/{ファイル}`(Windowsでは`http://shiori-ext.localhost/{名前}/{ファイル}`)で、
 //! 承認済みの画面の部品の拡張機能のフォルダの中のファイルだけを返す。`/_shiori/shiori.js`は、
 //! 拡張機能が詩織に頼みごとをするための小さな部品(どの拡張機能からも読める)。
+//! `/_shiori/icons/{id}.png`は、左の縦の列の本体の画面のアイコンの差し替え(段階2、
+//! `portable/data/ui/icons/`に置いたPNG)。
 //!
 //! 返すときに守りの指定(CSP)を付け、ネットへの接続と、ほかの場所からの読み込みをできなくする。
 //! 本体の画面は、これを`<iframe sandbox="allow-scripts">`で開く(`allow-same-origin`を付けないので、
@@ -31,6 +33,12 @@ pub fn handle<R: Runtime>(ctx: UriSchemeContext<'_, R>, request: Request<Vec<u8>
     let path = path.trim_start_matches('/');
     if path == "_shiori/shiori.js" {
         return ok(BRIDGE_JS.as_bytes().to_vec(), "text/javascript; charset=utf-8");
+    }
+    if let Some(file) = path.strip_prefix("_shiori/icons/") {
+        return match crate::sidebar_layout::icon_override(file) {
+            Some(bytes) => ok(bytes, "image/png"),
+            None => not_found(path, "差し替えのアイコンが無い"),
+        };
     }
     let Some((name, file)) = path.split_once('/') else {
         return not_found(path, "名前とファイルの形になっていない");

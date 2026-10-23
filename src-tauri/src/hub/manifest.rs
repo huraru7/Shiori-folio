@@ -43,6 +43,17 @@ pub enum Place {
     Pet,
 }
 
+/// 左の縦の列のどこに出すか(段階2)。画面の部品の拡張機能だけが使う。
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum Slot {
+    /// 列の上の「画面」。選ぶと、画面全体がこの拡張機能になる
+    Screen,
+    /// 線の下の「小道具」。いまの画面の横の小さな枠で開く
+    #[default]
+    Tool,
+}
+
 /// 始める場所。画面の部品はHTMLのファイル、別のプログラムはOSごとの実行ファイル。
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 #[serde(untagged)]
@@ -102,6 +113,9 @@ pub struct Manifest {
     pub kind: Kind,
     pub entry: Entry,
     pub places: Vec<Place>,
+    /// 列のどこに出すか(省略したら小道具)
+    #[serde(default)]
+    pub slot: Slot,
     #[serde(default)]
     pub uses: Vec<String>,
     #[serde(default)]

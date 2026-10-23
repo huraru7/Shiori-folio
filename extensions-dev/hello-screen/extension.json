@@ -1,0 +1,12 @@
+{
+  "name": "hello-screen",
+  "version": "0.1.0",
+  "title": "試しの大きな画面",
+  "description": "段階2の受け入れ基準(列の画面に増える)を確かめるための、画面の部品の拡張機能",
+  "icon": "icon.png",
+  "kind": "ui",
+  "entry": "index.html",
+  "places": ["window"],
+  "slot": "screen",
+  "uses": []
+}
