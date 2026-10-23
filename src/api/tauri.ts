@@ -111,6 +111,9 @@ export const api = {
   selfTestLog: (item: string, result: "OK" | "NG", fields?: Record<string, string>) =>
     invoke<void>("self_test_log", { item, result, fields: fields ?? null }),
   selfTestFinish: (ok: number, ng: number) => invoke<void>("self_test_finish", { ok, ng }),
+  // 自己確認(段階3): クリップボードの読み戻しと、Claude・要確認の試しの知らせ
+  selfTestClipboardText: () => invoke<string | null>("self_test_clipboard_text"),
+  selfTestNotify: (kind: "claude" | "pending") => invoke<number | null>("self_test_notify", { kind }),
   // forceがfalseなら、前回の取り込みから間もないときは省く。
   refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
   // hostがnullなら全端末の合算。

@@ -7,6 +7,7 @@ import StartupScreen from "./components/startup/StartupScreen";
 import CloseGuard from "./components/eject/CloseGuard";
 import ApprovalModal from "./components/extensions/ApprovalModal";
 import Effects from "./components/effects/Effects";
+import Notices from "./components/notices/Notices";
 import { useAppModeStore } from "./store/useAppModeStore";
 import { useShioriStore } from "./store/useShioriStore";
 import { usePendingStore } from "./store/usePendingStore";
@@ -81,6 +82,8 @@ function App() {
           </section>
         </div>
       </div>
+      {/* 知らせの札(詩織Ver6.0の段階3) */}
+      <Notices />
       {pendingOpen && (
         <PendingModal
           onClose={() => usePendingStore.getState().setOpen(false)}

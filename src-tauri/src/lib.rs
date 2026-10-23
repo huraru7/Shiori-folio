@@ -4,6 +4,7 @@ pub mod error_codes;
 pub mod hub;
 mod audio;
 mod self_test;
+mod notify;
 mod sidebar_layout;
 mod claude_stats;
 mod claude_status;
@@ -179,6 +180,34 @@ struct AppConfig {
     ui: UiConfig,
     #[serde(default)]
     mode: AppMode,
+    #[serde(default)]
+    notify: NotifyConfig,
+}
+
+/// 知らせの設定(詩織Ver6.0の段階3)。音を鳴らすかを、知らせの種類ごとに持つ。
+#[derive(Deserialize, Serialize, Clone, Default)]
+struct NotifyConfig {
+    #[serde(default)]
+    sound: NotifySound,
+}
+
+#[derive(Deserialize, Serialize, Clone, Copy, Debug, PartialEq)]
+struct NotifySound {
+    #[serde(default = "default_true")]
+    timer: bool,
+    #[serde(default)]
+    claude: bool,
+    #[serde(default)]
+    pending: bool,
+    #[serde(default)]
+    extension: bool,
+}
+
+/// 既定はタイマーの終わりだけ鳴らす
+impl Default for NotifySound {
+    fn default() -> Self {
+        Self { timer: true, claude: false, pending: false, extension: false }
+    }
 }
 
 /// 詩織の使い方(詩織Ver4.0)。外部AIモードは、Claudeなど外部のAIと詩織のlibraryを
@@ -1375,6 +1404,8 @@ struct ConfigDto {
     log_detail: bool,
     // 水紋と星の動きを抑えるか(詩織Ver6.0の段階2)。未設定ならnull
     reduce_motion: Option<bool>,
+    // 知らせの種類ごとに音を鳴らすか(詩織Ver6.0の段階3)
+    notify_sound: NotifySound,
 }
 
 // 実機SSDを取り外せる状態にする(取り外し機能)。止める対象の選び方は`eject.rs`を参照。
@@ -1611,6 +1642,7 @@ fn get_config_blocking() -> Result<ConfigDto, String> {
         mode: config.mode,
         log_detail: shiori_log::LogSettings::from_config(&project_root()).detail,
         reduce_motion: config.ui.reduce_motion,
+        notify_sound: config.notify.sound,
     })
 }
 
@@ -1634,6 +1666,7 @@ struct ConfigUpdate {
     show_seconds: Option<bool>,
     log_detail: Option<bool>,
     reduce_motion: Option<bool>,
+    notify_sound: Option<NotifySound>,
 }
 
 fn validate_config_update(update: &ConfigUpdate) -> Result<(), String> {
@@ -1737,6 +1770,9 @@ fn set_config_blocking(update: ConfigUpdate) -> Result<(), String> {
     }
     if let Some(v) = update.reduce_motion {
         value["ui"]["reduceMotion"] = serde_json::json!(v);
+    }
+    if let Some(v) = update.notify_sound {
+        value["notify"]["sound"] = serde_json::json!(v);
     }
     let log_detail = update.log_detail;
     if let Some(v) = log_detail {
@@ -2750,6 +2786,16 @@ fn parse_inbox_frontmatter(content: &str) -> InboxFrontmatterFields {
 #[tauri::command]
 async fn list_pending_items() -> Result<PendingItemsDto, String> {
     run_blocking(move || list_pending_items_blocking()).await
+}
+
+/// 要確認の件数(画面の `pendingBadgeCount` と同じく、未着手だけを数える)。知らせの見張りが使う。
+fn pending_badge_count() -> Option<usize> {
+    let items = list_pending_items_blocking().ok()?;
+    Some(
+        items.tags.iter().filter(|t| t.status == "pending").count()
+            + items.projects.iter().filter(|p| p.status == "pending").count()
+            + items.inbox.iter().filter(|i| i.review_status.is_none()).count(),
+    )
 }
 
 fn list_pending_items_blocking() -> Result<PendingItemsDto, String> {
@@ -5397,6 +5443,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -5423,6 +5470,9 @@ pub fn run() {
             use tauri_plugin_global_shortcut::GlobalShortcutExt;
             // 自己確認の起動(詩織Ver6.0の段階2)なら、打ち切りの見張りを始める
             self_test::start_watchdog(app.handle().clone());
+            // 知らせと時刻の予約(詩織Ver6.0の段階3)。Claudeの作業の終わりと要確認も見張る
+            notify::start(app.handle().clone());
+            notify::watch_pending(pending_badge_count);
             // 別のプログラムの拡張機能(詩織Ver6.0の段階1)。頼みごとは、画面の部品と同じ窓口に通す
             {
                 let handle = app.handle().clone();
@@ -5509,6 +5559,8 @@ pub fn run() {
             self_test::self_test_mode,
             self_test::self_test_log,
             self_test::self_test_finish,
+            self_test::self_test_clipboard_text,
+            self_test::self_test_notify,
             sidebar_layout::get_sidebar_layout,
             sidebar_layout::set_sidebar_layout,
             sidebar_layout::list_icon_overrides

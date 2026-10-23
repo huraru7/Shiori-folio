@@ -236,6 +236,23 @@ export interface AppConfigDto {
   logDetail: boolean;
   // 水紋と星の動きを抑えるか(詩織Ver6.0の段階2)。nullならOSの「視差効果を減らす」に従う
   reduceMotion: boolean | null;
+  // 知らせの種類ごとに音を鳴らすか(詩織Ver6.0の段階3)
+  notifySound: NotifySound;
+}
+
+// 知らせの種類(詩織Ver6.0の段階3)。タイマーの終わり・Claudeの作業の終わり・要確認・拡張機能からの知らせ
+export type NoticeKind = "timer" | "claude" | "pending" | "extension";
+
+export type NotifySound = Record<NoticeKind, boolean>;
+
+// 本体の知らせの入口(notify.rs)から届く知らせ1つ
+export interface Notice {
+  id: number;
+  kind: NoticeKind;
+  title: string;
+  body: string;
+  source: string | null;
+  at: number;
 }
 
 // 会話モード/外部AIモード(詩織Ver4.0)。

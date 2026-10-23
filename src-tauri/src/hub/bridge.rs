@@ -28,11 +28,13 @@ const METHODS: &[MethodDef] = &[
     MethodDef { method: "shelf.search", uses: Some("library.read"), ready: true },
     MethodDef { method: "library.get", uses: Some("library.read"), ready: true },
     MethodDef { method: "ext.call", uses: Some("ext.call"), ready: true },
-    // 段階3で作る
-    MethodDef { method: "clipboard.write", uses: Some("clipboard.write"), ready: false },
-    MethodDef { method: "notify.show", uses: Some("notify"), ready: false },
-    MethodDef { method: "schedule.add", uses: Some("schedule"), ready: false },
-    MethodDef { method: "schedule.cancel", uses: Some("schedule"), ready: false },
+    // 段階3
+    MethodDef { method: "clipboard.write", uses: Some("clipboard.write"), ready: true },
+    MethodDef { method: "notify.show", uses: Some("notify"), ready: true },
+    MethodDef { method: "schedule.add", uses: Some("schedule"), ready: true },
+    MethodDef { method: "schedule.cancel", uses: Some("schedule"), ready: true },
+    MethodDef { method: "schedule.list", uses: Some("schedule"), ready: true },
+    // まだ作っていない(小道具では使わない)
     MethodDef { method: "llm.ask", uses: Some("llm.ask"), ready: false },
 ];
 
@@ -102,6 +104,11 @@ pub fn call(
 fn run(name: &str, method: &str, params: &Value) -> Result<Value, CallError> {
     match method {
         "log.write" => log_write(name, params),
+        "clipboard.write" => clipboard_write(name, params),
+        "notify.show" => crate::notify::notify_show(name, params),
+        "schedule.add" => crate::notify::schedule_add(name, params),
+        "schedule.cancel" => crate::notify::schedule_cancel(name, params),
+        "schedule.list" => crate::notify::schedule_list(name),
         _ => Err(CallError::new(error_codes::EXT_012, method)),
     }
 }
@@ -170,6 +177,27 @@ fn read_library_file(path: &str) -> Result<String, CallError> {
         return Err(denied("libraryと棚の中の.md・.metaだけを読める"));
     }
     std::fs::read_to_string(&full).map_err(|e| CallError::new(error_codes::EXT_021, e.to_string()))
+}
+
+/// クリップボードに文を書く(本体の側で書く。囲いの中からはOSのクリップボードに触れない)。
+/// ログには字数だけを書き、文は書かない。
+fn clipboard_write(name: &str, params: &Value) -> Result<Value, CallError> {
+    const MAX: usize = 100_000;
+    let text = params
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CallError::new(error_codes::EXT_014, "textが要る(文字列)"))?;
+    let chars = text.chars().count();
+    if chars > MAX {
+        return Err(CallError::new(error_codes::EXT_014, format!("textは{MAX}文字まで")));
+    }
+    let app = crate::notify::app().ok_or_else(|| CallError::new(error_codes::EXT_024, "画面がまだ無い"))?;
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    app.clipboard()
+        .write_text(text.to_string())
+        .map_err(|e| CallError::new(error_codes::EXT_024, e.to_string()))?;
+    shiori_log::info("HUB", "クリップボードに書いた", &[("name", &name), ("字数", &chars)]);
+    Ok(serde_json::json!({}))
 }
 
 /// 拡張機能のログ。部品名に拡張機能の名前を使う。`fields`は文字列の値だけを受ける。
@@ -262,7 +290,7 @@ mod tests {
         assert_eq!(call(&state, None, "hello-ui", "clipboard.write", &p).unwrap_err().code, "EXT-011");
         // 知らない頼みごと
         assert_eq!(call(&state, None, "hello-ui", "fs.read", &p).unwrap_err().code, "EXT-010");
-        // 書いてあるが、まだ作っていない(段階3で作る)
+        // 書いてあるが、まだ作っていない
         assert_eq!(call(&state, None, "hello-ui", "llm.ask", &p).unwrap_err().code, "EXT-012");
         // 置き場は使える
         let set = serde_json::json!({ "key": "a", "value": 1 });
@@ -272,6 +300,28 @@ mod tests {
         assert_eq!(call(&state, None, "hello-ui", "ext.call", &ext).unwrap_err().code, "EXT-011");
         // 無い拡張機能
         assert_eq!(call(&state, None, "other", "log.write", &p).unwrap_err().code, "EXT-009");
+    }
+
+    #[test]
+    fn 予約と知らせは窓口から使え_書き間違いはEXT_014() {
+        let (_t, state) = state_with(r#""schedule", "notify", "clipboard.write""#, true);
+        let at = crate::notify::now_ms() + 60_000;
+        let added = call(&state, None, "hello-ui", "schedule.add", &serde_json::json!({ "at": at, "label": "洗濯" })).unwrap();
+        let id = added["id"].as_u64().unwrap();
+        let list = call(&state, None, "hello-ui", "schedule.list", &Value::Null).unwrap();
+        assert!(list.as_array().unwrap().iter().any(|r| r["id"] == id && r["label"] == "洗濯"));
+        let cancel = serde_json::json!({ "id": id });
+        assert_eq!(call(&state, None, "hello-ui", "schedule.cancel", &cancel), Ok(serde_json::json!({})));
+        assert_eq!(call(&state, None, "hello-ui", "schedule.cancel", &cancel).unwrap_err().code, "EXT-026");
+        let past = serde_json::json!({ "at": 1 });
+        assert_eq!(call(&state, None, "hello-ui", "schedule.add", &past).unwrap_err().code, "EXT-014");
+        let shown = call(&state, None, "hello-ui", "notify.show", &serde_json::json!({ "title": "やあ" })).unwrap();
+        assert!(shown["id"].as_u64().is_some());
+        assert_eq!(call(&state, None, "hello-ui", "notify.show", &Value::Null).unwrap_err().code, "EXT-014");
+        // 画面の無いテストでは、クリップボードはEXT-024になる(書き間違いは先にEXT-014)
+        assert_eq!(call(&state, None, "hello-ui", "clipboard.write", &Value::Null).unwrap_err().code, "EXT-014");
+        let text = serde_json::json!({ "text": "42" });
+        assert_eq!(call(&state, None, "hello-ui", "clipboard.write", &text).unwrap_err().code, "EXT-024");
     }
 
     #[test]

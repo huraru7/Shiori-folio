@@ -1,0 +1,92 @@
+/* 知らせの札(詩織Ver6.0の段階3)。上の帯の下、画面の右上に積む。
+   左の縁の橙(--lamp)は、段階2の「橙は知らせと灯りだけ」のとおり */
+.notices {
+  position: fixed;
+  top: 64px;
+  right: 16px;
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(320px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.notices__card {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  background: var(--bg-deep);
+  border: 1px solid var(--glass-border);
+  border-left: 3px solid var(--lamp);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 14px var(--lamp-glow);
+  pointer-events: auto;
+  animation: notices-in 0.35s ease-out;
+}
+
+.notices--still .notices__card {
+  animation: none;
+}
+
+@keyframes notices-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.notices__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 4px 10px 12px;
+  background: none;
+  border: none;
+  color: var(--paper);
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.notices__head {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--fs-xs);
+  color: var(--paper-dim);
+}
+
+.notices__kind {
+  color: var(--lamp);
+}
+
+.notices__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-base);
+}
+
+.notices__body {
+  font-size: var(--fs-sm);
+  color: var(--paper-dim);
+  overflow-wrap: anywhere;
+}
+
+.notices__close {
+  align-self: flex-start;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  color: var(--paper-dim);
+  cursor: pointer;
+  font-size: var(--fs-md);
+}
+
+.notices__close:hover,
+.notices__main:hover .notices__title {
+  color: var(--paper);
+}

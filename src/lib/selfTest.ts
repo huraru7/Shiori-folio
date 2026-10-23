@@ -4,6 +4,7 @@ import { useMainViewStore } from "../store/useMainViewStore";
 import { useSidebarStore } from "../store/useSidebarStore";
 import { useExtensionsStore } from "../store/useExtensionsStore";
 import { useMotionStore } from "../store/useMotionStore";
+import { useNoticeStore } from "../store/useNoticeStore";
 import { allItems, arrange, visibleItems, type SidebarItem } from "./sidebarItems";
 import { SELF_TEST_EVENT, type SelfTestDone } from "../components/extensions/ExtensionFrame";
 
@@ -126,6 +127,7 @@ export async function runSelfTest(): Promise<void> {
     }
     await checkSettingsPage(report);
     await checkEffects(report);
+    await checkNotices(report);
   } catch (e) {
     await report("自己確認の途中", false, { 内容: String(e).slice(0, 200) });
   } finally {
@@ -381,4 +383,97 @@ async function checkEffects(report: Report) {
     星: stars,
     水紋: ripples,
   });
+}
+
+// 知らせと窓口(段階3): 予約の時間が来ると札が出て、取り消した予約は出ない。クリップボードに書ける。
+// Claudeと要確認の札が出る。使うものに無い頼みごとは断られる。知らせの設定のページが開く。
+async function checkNotices(report: Report) {
+  const ready = (name: string) => (useExtensionsStore.getState().list ?? []).some((e) => e.folder === name && e.status === "ready");
+  const card = (kind: string, title?: string) =>
+    Array.from(document.querySelectorAll<HTMLElement>(`.notices__card[data-notice-kind="${kind}"]`)).some(
+      (c) => title === undefined || c.querySelector(".notices__title")?.textContent === title,
+    );
+  const codeOf = async (p: Promise<unknown>) => {
+    try {
+      await p;
+      return "OK";
+    } catch (e) {
+      return (e as { code?: string }).code ?? String(e);
+    }
+  };
+
+  if (ready("timer")) {
+    const now = Date.now();
+    const fire = "自己確認の予約";
+    const cancelled = "取り消す予約";
+    await api.extCall("timer", "schedule.add", { at: now + 2000, label: fire });
+    const second = (await api.extCall("timer", "schedule.add", { at: now + 2500, label: cancelled })) as { id: number };
+    await api.extCall("timer", "schedule.cancel", { id: second.id });
+    const fired = await waitFor(() => card("timer", fire), 8000);
+    await sleep(1500);
+    const notFired = !card("timer", cancelled);
+    const fromTimer = useNoticeStore.getState().notices.some((n) => n.kind === "timer" && n.source === "timer");
+    await report("知らせ:タイマー", fired && notFired && fromTimer, {
+      時間が来て札が出た: fired,
+      取り消した予約は出ない: notFired,
+      元はtimer: fromTimer,
+    });
+  } else {
+    await report("知らせ:タイマー", false, { 理由: "timerの拡張機能が使えない" });
+  }
+
+  for (const kind of ["claude", "pending"] as const) {
+    const id = await api.selfTestNotify(kind);
+    const shown = await waitFor(() => document.querySelector(`.notices__card[data-notice-id="${id}"]`) !== null, 3000);
+    await report(`知らせ:${kind}`, id !== null && shown, { 札が出た: shown });
+  }
+
+  // クリップボード。書いた文を本体の側で読み戻し、最後にもとの中身へ戻す
+  const writer = ["calculator", "converter"].find(ready);
+  if (writer) {
+    const original = await api.selfTestClipboardText();
+    const text = `shiori-selftest-${Date.now()}`;
+    const wrote = await codeOf(api.extCall(writer, "clipboard.write", { text }));
+    const readBack = await api.selfTestClipboardText();
+    if (original !== null) await api.extCall(writer, "clipboard.write", { text: original }).catch(() => undefined);
+    await report("窓口:クリップボード", wrote === "OK" && readBack === text, {
+      拡張機能: writer,
+      書いた: wrote,
+      読み戻して同じ: readBack === text,
+    });
+  } else {
+    await report("窓口:クリップボード", false, { 理由: "calculatorもconverterも使えない" });
+  }
+
+  // 断ること: 使うものに無い頼みごとはEXT-011、ほかの拡張機能の予約の取り消しはEXT-026
+  if (ready("hello-ui")) {
+    const refused = await codeOf(api.extCall("hello-ui", "clipboard.write", { text: "x" }));
+    await report("窓口:使うものに無い", refused === "EXT-011", { コード: refused });
+  }
+  if (ready("timer") && ready("calculator")) {
+    const added = (await api.extCall("timer", "schedule.add", { at: Date.now() + 60_000, label: "" })) as { id: number };
+    // calculatorはscheduleを使わないのでEXT-011。予約の持ち主の確かめは、本体のテスト(EXT-026)で行う
+    const other = await codeOf(api.extCall("calculator", "schedule.cancel", { id: added.id }));
+    await api.extCall("timer", "schedule.cancel", { id: added.id }).catch(() => undefined);
+    await report("窓口:ほかの拡張機能の予約", other === "EXT-011", { コード: other });
+  }
+
+  // 知らせの設定のページ
+  useMainViewStore.getState().setActive("settings");
+  await nextFrames();
+  document.querySelector<HTMLElement>('[data-nav-key="notify"]')?.click();
+  const page = await waitFor(() => document.querySelector("[data-notify-settings]") !== null, SCREEN_WAIT_MS);
+  const toggles = document.querySelectorAll('[data-notify-settings] input[type="checkbox"]').length;
+  const sound = useNoticeStore.getState().sound;
+  await report("設定:知らせ", page && toggles === 4, {
+    開いた: page,
+    切り替え: toggles,
+    音: Object.entries(sound)
+      .filter(([, on]) => on)
+      .map(([k]) => k)
+      .join(",") || "なし",
+  });
+  document.querySelector<HTMLElement>('[data-nav-key="system"]')?.click();
+  useMainViewStore.getState().setActive("home");
+  for (const n of useNoticeStore.getState().notices) useNoticeStore.getState().dismiss(n.id);
 }

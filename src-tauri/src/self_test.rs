@@ -117,3 +117,27 @@ mod tests {
         assert_eq!(args(&["x", "--self-test-break=library"]).break_target, None);
     }
 }
+
+/// 自己確認(段階3): クリップボードの中身を読み戻す。ふつうの起動では何も返さない。
+#[tauri::command]
+pub fn self_test_clipboard_text() -> Option<String> {
+    if !is_enabled() {
+        return None;
+    }
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    crate::notify::app()?.clipboard().read_text().ok()
+}
+
+/// 自己確認(段階3): Claudeと要確認の知らせを、試しに入口へ入れる(本当の終わりや増えを待たないため)。
+#[tauri::command]
+pub fn self_test_notify(kind: String) -> Option<u64> {
+    if !is_enabled() {
+        return None;
+    }
+    let kind = match kind.as_str() {
+        "claude" => crate::notify::Kind::Claude,
+        "pending" => crate::notify::Kind::Pending,
+        _ => return None,
+    };
+    Some(crate::notify::show(kind, "自己確認の知らせ", "試しに出した知らせ", None))
+}
