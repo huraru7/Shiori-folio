@@ -1,0 +1,21 @@
+[package]
+name = "pet-window"
+version = "0.1.0"
+edition = "2021"
+description = "Ver6.0 段階0の試作2・3(ペットのウィンドウと無操作の判定)"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# 本体と同じ版にそろえる。macos-private-apiはMacで透明なウィンドウを使うため
+tauri = { version = "=2.11.5", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_System_SystemInformation",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }

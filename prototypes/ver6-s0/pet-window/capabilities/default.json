@@ -1,0 +1,6 @@
+{
+  "identifier": "default",
+  "description": "試作のペットのウィンドウ",
+  "windows": ["pet"],
+  "permissions": ["core:default", "core:event:default"]
+}
