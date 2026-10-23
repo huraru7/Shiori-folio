@@ -238,6 +238,56 @@ export interface AppConfigDto {
   reduceMotion: boolean | null;
   // 知らせの種類ごとに音を鳴らすか(詩織Ver6.0の段階3)
   notifySound: NotifySound;
+  // ペットの形の切り替えのホットキーと、眠るまでの分(詩織Ver6.0の段階4)
+  petHotkey: string;
+  petSleepMinutes: number;
+  // 本と小道具の枠の大きさ(%)
+  petPanelPercent: number;
+}
+
+// ペットの形(詩織Ver6.0の段階4)。本体(pet/mod.rs)が決めた、いまの絵のコマ
+export type PetState =
+  | "appear"
+  | "normal"
+  | "sleep"
+  | "wake"
+  | "notify"
+  | "happy"
+  | "react"
+  | "dangle"
+  | "fly"
+  | "land";
+
+export interface PetFrame {
+  state: PetState;
+  activity: "walk" | "idle" | "read";
+  anim: string;
+  file: string;
+  frames: number;
+  frame: number;
+  facing: number;
+  scale: number;
+}
+
+export interface PetStatus {
+  mode: "window" | "pet";
+  state: PetState | null;
+  anim: string | null;
+  scale: number;
+  position: [number, number] | null;
+  size: [number, number] | null;
+  floor: number | null;
+  onFloor: boolean;
+  mainVisible: boolean;
+  petVisible: boolean;
+  panelVisible: boolean;
+  bubbleVisible: boolean;
+  panelItems: string[];
+  panelTool: { name: string; ok: number; ng: number } | null;
+  idleSeconds: number | null;
+  spritesOverridden: boolean;
+  hitOutside: boolean;
+  hitCenter: boolean;
 }
 
 // 知らせの種類(詩織Ver6.0の段階3)。タイマーの終わり・Claudeの作業の終わり・要確認・拡張機能からの知らせ

@@ -9,16 +9,19 @@ import { VoiceSettingsPage } from "./VoiceSettingsPage";
 import { EjectPage } from "../eject/EjectPage";
 import { SidebarSettingsPage } from "./SidebarSettingsPage";
 import { NotifySettingsPage } from "./NotifySettingsPage";
+import { PetSettingsPage } from "./PetSettingsPage";
 import { DebugPage } from "./DebugPage";
 import { HISTORY_LENGTH } from "./shared";
 
-type NavKey = "system" | "sidebar" | "notify" | "voice" | "advanced" | "model" | "eject" | "debug";
+type NavKey = "system" | "sidebar" | "notify" | "pet" | "voice" | "advanced" | "model" | "eject" | "debug";
 
 const NAV_ITEMS: { key: NavKey; label: string; level: "safe" | "caution" | "danger" }[] = [
   { key: "system", label: "システム状態", level: "safe" },
   { key: "sidebar", label: "列と演出", level: "safe" },
   // 知らせの音(詩織Ver6.0の段階3)
   { key: "notify", label: "知らせ", level: "safe" },
+  // ペットの形(詩織Ver6.0の段階4)
+  { key: "pet", label: "ペット", level: "safe" },
   { key: "voice", label: "音声設定", level: "safe" },
   { key: "advanced", label: "詳細設定", level: "caution" },
   { key: "model", label: "モデル切替", level: "danger" },
@@ -118,6 +121,7 @@ function ControlPanel() {
         )}
         {activeNav === "sidebar" && <SidebarSettingsPage />}
         {activeNav === "notify" && <NotifySettingsPage />}
+        {activeNav === "pet" && <PetSettingsPage />}
         {activeNav === "voice" && <VoiceSettingsPage />}
         {activeNav === "advanced" && <AdvancedSettingsPage />}
         {activeNav === "eject" && <EjectPage />}

@@ -24,7 +24,8 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+# macos-private-apiは、Macでペットのウィンドウを透明にするため(詩織Ver6.0の段階4)
+tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-opener = "2"
 tauri-plugin-global-shortcut = "2"
 # 拡張機能の答えをクリップボードへ書く(詩織Ver6.0の段階3)
@@ -48,6 +49,8 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "io-std"] }
 anyhow = "1"
 # 保存CLI(src/bin/shiori_save.rs)のfrontmatter・tags.yaml/projects.yaml解析向け。
 serde_yaml = "0.9"
+# ペットの絵の、透明な点の読み取り(詩織Ver6.0の段階4)
+png = "0.17"
 # 素材の取り込み(詩織Ver3.5)でコピー前後の一致をSHA-256で照合する。
 sha2 = "0.10"
 
@@ -62,5 +65,9 @@ windows-sys = { version = "0.59", features = [
     # 拡張機能の別のプログラムを、詩織が落ちても残さないため(詩織Ver6.0の段階1)
     "Win32_System_JobObjects",
     "Win32_System_Threading",
+    # ペットの無操作の判定・ボタンの状態・全画面の判定(詩織Ver6.0の段階4)
+    "Win32_System_SystemInformation",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 

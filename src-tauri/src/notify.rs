@@ -12,7 +12,7 @@
 use crate::error_codes;
 use crate::hub::bridge::CallError;
 use crate::shiori_log;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -29,7 +29,7 @@ const MAX_AHEAD_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 /// 拡張機能からの知らせの題と本文の長さの上限
 const MAX_TEXT: usize = 200;
 
-#[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Kind {
     Timer,
@@ -50,7 +50,7 @@ impl Kind {
 }
 
 /// 画面へ送る知らせ1つ。
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Notice {
     pub id: u64,
@@ -92,7 +92,10 @@ pub fn show(kind: Kind, title: &str, body: &str, source: Option<&str>) -> u64 {
     if let Some(app) = APP.get() {
         use tauri::{Emitter, Manager};
         let _ = app.emit(EVENT, &notice);
-        if let Some(window) = app.get_webview_window("main") {
+        // ペットの形のときは、ペットの吹き出しで知らせる(本体のウィンドウは隠れているので点滅させない)
+        if crate::pet::on_notice(&notice) {
+            taskbar = "ペット";
+        } else if let Some(window) = app.get_webview_window("main") {
             let front = window.is_focused().unwrap_or(false) && !window.is_minimized().unwrap_or(false);
             if !front {
                 let _ = window.request_user_attention(Some(tauri::UserAttentionType::Informational));

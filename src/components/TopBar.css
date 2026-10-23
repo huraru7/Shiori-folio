@@ -88,6 +88,10 @@
   flex-shrink: 0;
 }
 
+.top-bar__pet {
+  margin-right: 8px;
+}
+
 .top-bar__pending:hover {
   color: var(--paper);
   background: var(--glass);

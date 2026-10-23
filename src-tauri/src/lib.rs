@@ -5,6 +5,7 @@ pub mod hub;
 mod audio;
 mod self_test;
 mod notify;
+mod pet;
 mod sidebar_layout;
 mod claude_stats;
 mod claude_status;
@@ -182,6 +183,54 @@ struct AppConfig {
     mode: AppMode,
     #[serde(default)]
     notify: NotifyConfig,
+    #[serde(default)]
+    pet: PetConfig,
+}
+
+/// ペットの形の設定(詩織Ver6.0の段階4)。ホットキーの変更は、録音のホットキーと同じく次の起動から。
+#[derive(Deserialize, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PetConfig {
+    #[serde(default = "default_pet_hotkey")]
+    hotkey: String,
+    /// 最後の入力から、眠るまでの分
+    #[serde(default = "default_sleep_minutes")]
+    sleep_minutes: u32,
+    /// 本と小道具の枠の大きさ(%)
+    #[serde(default = "default_panel_percent")]
+    panel_percent: u32,
+}
+
+fn default_panel_percent() -> u32 {
+    100
+}
+
+fn default_pet_hotkey() -> String {
+    "ctrl+alt+d".to_string()
+}
+
+fn default_sleep_minutes() -> u32 {
+    5
+}
+
+impl Default for PetConfig {
+    fn default() -> Self {
+        Self {
+            hotkey: default_pet_hotkey(),
+            sleep_minutes: default_sleep_minutes(),
+            panel_percent: default_panel_percent(),
+        }
+    }
+}
+
+/// 本と小道具の枠の大きさ(%、本を開くたびに読み直す)
+fn pet_panel_percent() -> u32 {
+    app_config().map(|c| c.pet.panel_percent).unwrap_or_else(|_| default_panel_percent())
+}
+
+/// 眠るまでの分(ペットの形にするたびに読み直す)
+fn pet_sleep_minutes() -> u32 {
+    app_config().map(|c| c.pet.sleep_minutes).unwrap_or_else(|_| default_sleep_minutes())
 }
 
 /// 知らせの設定(詩織Ver6.0の段階3)。音を鳴らすかを、知らせの種類ごとに持つ。
@@ -1406,6 +1455,10 @@ struct ConfigDto {
     reduce_motion: Option<bool>,
     // 知らせの種類ごとに音を鳴らすか(詩織Ver6.0の段階3)
     notify_sound: NotifySound,
+    // ペットの形の切り替えのホットキーと、眠るまでの分(詩織Ver6.0の段階4)
+    pet_hotkey: String,
+    pet_sleep_minutes: u32,
+    pet_panel_percent: u32,
 }
 
 // 実機SSDを取り外せる状態にする(取り外し機能)。止める対象の選び方は`eject.rs`を参照。
@@ -1643,6 +1696,9 @@ fn get_config_blocking() -> Result<ConfigDto, String> {
         log_detail: shiori_log::LogSettings::from_config(&project_root()).detail,
         reduce_motion: config.ui.reduce_motion,
         notify_sound: config.notify.sound,
+        pet_hotkey: config.pet.hotkey,
+        pet_sleep_minutes: config.pet.sleep_minutes,
+        pet_panel_percent: config.pet.panel_percent,
     })
 }
 
@@ -1667,6 +1723,9 @@ struct ConfigUpdate {
     log_detail: Option<bool>,
     reduce_motion: Option<bool>,
     notify_sound: Option<NotifySound>,
+    pet_hotkey: Option<String>,
+    pet_sleep_minutes: Option<u32>,
+    pet_panel_percent: Option<u32>,
 }
 
 fn validate_config_update(update: &ConfigUpdate) -> Result<(), String> {
@@ -1704,6 +1763,24 @@ fn validate_config_update(update: &ConfigUpdate) -> Result<(), String> {
     if let Some(hotkey) = &update.hotkey {
         if hotkey.trim().is_empty() {
             return Err("ホットキーを空にはできません".to_string());
+        }
+    }
+    if let Some(hotkey) = &update.pet_hotkey {
+        if hotkey.trim().is_empty() {
+            return Err("形の切り替えのホットキーを空にはできません".to_string());
+        }
+        if hotkey.parse::<tauri_plugin_global_shortcut::Shortcut>().is_err() {
+            return Err(format!("形の切り替えのホットキーとして読めません(例: ctrl+alt+d): {hotkey}"));
+        }
+    }
+    if let Some(m) = update.pet_sleep_minutes {
+        if !(1..=120).contains(&m) {
+            return Err("眠るまでの時間は1〜120分で指定してください".to_string());
+        }
+    }
+    if let Some(p) = update.pet_panel_percent {
+        if !(60..=150).contains(&p) {
+            return Err("本と小道具の枠の大きさは60〜150%で指定してください".to_string());
         }
     }
     Ok(())
@@ -1773,6 +1850,15 @@ fn set_config_blocking(update: ConfigUpdate) -> Result<(), String> {
     }
     if let Some(v) = update.notify_sound {
         value["notify"]["sound"] = serde_json::json!(v);
+    }
+    if let Some(v) = &update.pet_hotkey {
+        value["pet"]["hotkey"] = serde_json::json!(v);
+    }
+    if let Some(v) = update.pet_sleep_minutes {
+        value["pet"]["sleepMinutes"] = serde_json::json!(v);
+    }
+    if let Some(v) = update.pet_panel_percent {
+        value["pet"]["panelPercent"] = serde_json::json!(v);
     }
     let log_detail = update.log_detail;
     if let Some(v) = log_detail {
@@ -5446,9 +5532,14 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        handle_hotkey_toggle(app);
+                        // 形の切り替え(詩織Ver6.0の段階4)と、録音
+                        if pet::is_pet_shortcut(shortcut) {
+                            pet::toggle_from_hotkey(app.clone());
+                        } else {
+                            handle_hotkey_toggle(app);
+                        }
                     }
                 })
                 .build(),
@@ -5498,6 +5589,9 @@ pub fn run() {
                 .map(|c| c.hotkey)
                 .unwrap_or_else(|_| "ctrl+alt+s".to_string());
             app.global_shortcut().register(hotkey.as_str())?;
+            // 形の切り替えのホットキー(詩織Ver6.0の段階4)。登録できなくても起動は止めない
+            let pet_hotkey = app_config().map(|c| c.pet.hotkey).unwrap_or_else(|_| default_pet_hotkey());
+            pet::register_hotkey(app.handle(), &pet_hotkey);
             // SSDを挿していなかった間の分も含め、このPCのClaudeの履歴を台帳へ取り込む。
             std::thread::spawn(|| {
                 if let Err(e) = refresh_claude_stats_blocking(true) {
@@ -5561,6 +5655,17 @@ pub fn run() {
             self_test::self_test_finish,
             self_test::self_test_clipboard_text,
             self_test::self_test_notify,
+            pet::pet_enter,
+            pet::pet_leave,
+            pet::pet_press,
+            pet::pet_sprites,
+            pet::pet_bubble_done,
+            pet::pet_open_source,
+            pet::pet_panel_report,
+            pet::pet_close_panel,
+            pet::pet_status,
+            pet::pet_selftest_panel,
+            pet::pet_selftest_close_panel,
             sidebar_layout::get_sidebar_layout,
             sidebar_layout::set_sidebar_layout,
             sidebar_layout::list_icon_overrides
@@ -5571,6 +5676,13 @@ pub fn run() {
             // アプリ終了時、起動したままの子プロセス(llama-server/whisper-server)を
             // 明示的にkillする。std::process::ChildはDropしても自動killされないため、
             // ここで止めないと閉じた後もプロセスが孤立して残り続けてしまう。
+            // 本体のウィンドウを閉じたら、詩織全体を終える。ペットの形の窓(段階4)は隠して残してあるので、
+            // これが無いと、本体のウィンドウを閉じても詩織が終わらずに残る
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &event {
+                if label == "main" {
+                    app_handle.exit(0);
+                }
+            }
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 use tauri::Manager;
                 shiori_log::info("APP", "終了する", &[]);

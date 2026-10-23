@@ -48,7 +48,7 @@ async function waitForAsync(check: () => Promise<boolean>, timeoutMs: number): P
 
 // 拡張機能に自分の確かめを頼み、終わるまで待つ。自分の確かめを持たない拡張機能(始めたと返さない)はnull。
 // iframeがまだ読み込み中のこともあるので、始めたと返すまで頼み直す。
-async function askExtension(iframe: HTMLIFrameElement | null, name: string): Promise<SelfTestDone | null> {
+export async function askExtension(iframe: HTMLIFrameElement | null, name: string): Promise<SelfTestDone | null> {
   if (!iframe) return null;
   let started = false;
   let done: SelfTestDone | null = null;
@@ -128,6 +128,7 @@ export async function runSelfTest(): Promise<void> {
     await checkSettingsPage(report);
     await checkEffects(report);
     await checkNotices(report);
+    await checkPet(report);
   } catch (e) {
     await report("自己確認の途中", false, { 内容: String(e).slice(0, 200) });
   } finally {
@@ -476,4 +477,68 @@ async function checkNotices(report: Report) {
   document.querySelector<HTMLElement>('[data-nav-key="system"]')?.click();
   useMainViewStore.getState().setActive("home");
   for (const n of useNoticeStore.getState().notices) useNoticeStore.getState().dismiss(n.id);
+}
+
+// ペットの形(段階4): ペットの形にして確かめてから、ウィンドウの形に戻す。
+// 本体のウィンドウは隠れている間も動いているが、時間を測る仕組みが遅くなることがあるので、待ち時間は長めにする。
+async function checkPet(report: Report) {
+  const status = () => api.petStatus();
+  const waitStatus = async (check: (s: Awaited<ReturnType<typeof status>>) => boolean, ms: number) => {
+    let last = await status();
+    const end = Date.now() + ms;
+    while (!check(last) && Date.now() < end) {
+      await sleep(200);
+      last = await status();
+    }
+    return last;
+  };
+
+  await api.petEnter();
+  let s = await waitStatus((x) => x.petVisible && x.onFloor, 5000);
+  const sizeOk = !!s.size && s.size[0] === 128 * s.scale && s.size[1] === 192 * s.scale;
+  await report("ペット:形の切り替え", s.mode === "pet" && s.petVisible && !s.mainVisible && sizeOk && s.onFloor, {
+    形: s.mode,
+    ペットが出た: s.petVisible,
+    本体は隠れた: !s.mainVisible,
+    大きさ: s.size ? `${s.size[0]}x${s.size[1]}` : "-",
+    倍率: s.scale,
+    床に立つ: s.onFloor,
+    差し替えの絵: s.spritesOverridden,
+  });
+
+  s = await waitStatus((x) => x.state === "normal", 4000);
+  await report("ペット:現れてから普段", s.state === "normal", { 状態: s.state ?? "-", 絵: s.anim ?? "-" });
+
+  await report("ペット:クリックの受け方", !s.hitOutside && s.hitCenter, {
+    絵の外は通す: !s.hitOutside,
+    絵の上は受ける: s.hitCenter,
+  });
+  await report("ペット:無操作の秒数", typeof s.idleSeconds === "number" && s.idleSeconds >= 0, {
+    秒: s.idleSeconds === null ? "取れない" : s.idleSeconds.toFixed(1),
+  });
+
+  await api.selfTestNotify("pending");
+  s = await waitStatus((x) => x.state === "notify" && x.bubbleVisible, 3000);
+  await report("ペット:知らせ", s.state === "notify" && s.bubbleVisible, { 状態: s.state ?? "-", 吹き出し: s.bubbleVisible });
+  await api.petBubbleDone();
+
+  await api.petSelftestPanel("calculator");
+  s = await waitStatus((x) => x.panelVisible && x.panelTool !== null, 30000);
+  const items = s.panelItems.join(",");
+  const itemsOk = items === "window,calculator,timer";
+  const toolOk = !!s.panelTool && s.panelTool.ng === 0 && s.panelTool.ok > 0;
+  await report("ペット:本と小道具", s.panelVisible && itemsOk && toolOk, {
+    本が開いた: s.panelVisible,
+    項目: items || "-",
+    小道具の自己確認: s.panelTool ? `${s.panelTool.name} 期待どおり${s.panelTool.ok} 違う${s.panelTool.ng}` : "-",
+  });
+  await api.petSelftestClosePanel();
+
+  await api.petLeave();
+  s = await waitStatus((x) => x.mainVisible && !x.petVisible, 5000);
+  await report("ペット:ウィンドウに戻る", s.mode === "window" && s.mainVisible && !s.petVisible && !s.panelVisible, {
+    形: s.mode,
+    本体が出た: s.mainVisible,
+    ペットは隠れた: !s.petVisible,
+  });
 }

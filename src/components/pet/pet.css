@@ -1,0 +1,160 @@
+/* ペットの形の窓(ペット・本・吹き出し)は、背景を透明にする(詩織Ver6.0の段階4)。
+   index.htmlの起動時の暗い背景を上書きする */
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+.pet {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  cursor: grab;
+  user-select: none;
+}
+
+.pet--dangle {
+  cursor: grabbing;
+}
+
+.pet__sprite {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  /* ドット絵をにじませない(大きさは整数倍に寄せてある) */
+  image-rendering: pixelated;
+  transform-origin: 50% 100%;
+}
+
+/* 絵が1枚の間の、動きの代わりの印と揺れ。本当の動きの絵に差し替えたら外す */
+@media (prefers-reduced-motion: no-preference) {
+  .pet--appear .pet__sprite {
+    animation: pet-appear 1s ease-out;
+  }
+  .pet--normal.pet--walk .pet__sprite {
+    animation: pet-bob 0.25s steps(2) infinite;
+  }
+  .pet--normal.pet--read .pet__sprite {
+    animation: pet-breathe 3s ease-in-out infinite;
+  }
+  .pet--react .pet__sprite {
+    animation: pet-squash 0.4s ease-out;
+  }
+  .pet--happy .pet__sprite {
+    animation: pet-hop 0.5s ease-out 4;
+  }
+  .pet--dangle .pet__sprite {
+    transform-origin: 50% 10%;
+    animation: pet-swing 0.5s ease-in-out infinite alternate;
+  }
+  .pet--land .pet__sprite {
+    animation: pet-squash 0.5s ease-out;
+  }
+  .pet--sleep .pet__sprite {
+    filter: brightness(0.8);
+  }
+}
+
+.pet__mark {
+  position: absolute;
+  font-family: var(--font-display, serif);
+  color: #ede6d6;
+  pointer-events: none;
+}
+
+.pet__mark--sleep {
+  top: 4%;
+  right: 22%;
+  font-size: 9vh;
+  animation: pet-z 2.4s ease-in-out infinite;
+}
+
+/* 知らせ: ランプのあたりの灯りが強くなる(右向きの絵では右手のあたり) */
+.pet__glow {
+  position: absolute;
+  left: 62%;
+  top: 46%;
+  width: 30%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(240, 180, 100, 0.85) 0%, rgba(240, 180, 100, 0) 70%);
+  pointer-events: none;
+  animation: pet-glow 1.2s ease-in-out infinite alternate;
+}
+
+.pet__glow--left {
+  left: 8%;
+}
+
+@keyframes pet-appear {
+  from {
+    opacity: 0;
+    transform: translateY(6%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pet-bob {
+  50% {
+    translate: 0 -1.2%;
+  }
+}
+
+@keyframes pet-breathe {
+  50% {
+    scale: 1 0.985;
+  }
+}
+
+@keyframes pet-squash {
+  30% {
+    scale: 1.06 0.94;
+  }
+}
+
+@keyframes pet-hop {
+  40% {
+    translate: 0 -6%;
+  }
+}
+
+@keyframes pet-swing {
+  from {
+    rotate: -6deg;
+  }
+  to {
+    rotate: 6deg;
+  }
+}
+
+@keyframes pet-z {
+  0% {
+    opacity: 0;
+    transform: translate(0, 20%);
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(40%, -40%);
+  }
+}
+
+@keyframes pet-glow {
+  from {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+}

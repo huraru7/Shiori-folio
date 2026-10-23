@@ -11,6 +11,8 @@ import type {
   EjectOutcome,
   EjectPreview,
   ExtensionInfo,
+  Notice,
+  PetStatus,
   SelfTestMode,
   SidebarLayout,
   KnowledgeResult,
@@ -114,6 +116,18 @@ export const api = {
   // 自己確認(段階3): クリップボードの読み戻しと、Claude・要確認の試しの知らせ
   selfTestClipboardText: () => invoke<string | null>("self_test_clipboard_text"),
   selfTestNotify: (kind: "claude" | "pending") => invoke<number | null>("self_test_notify", { kind }),
+  // ペットの形(詩織Ver6.0の段階4)
+  petEnter: () => invoke<void>("pet_enter"),
+  petLeave: () => invoke<void>("pet_leave"),
+  petPress: () => invoke<void>("pet_press"),
+  petBubbleDone: () => invoke<void>("pet_bubble_done"),
+  petOpenSource: (notice: Notice) => invoke<void>("pet_open_source", { notice }),
+  petPanelReport: (report: { items?: string[]; tool?: { name: string; ok: number; ng: number } }) =>
+    invoke<void>("pet_panel_report", report),
+  petClosePanel: () => invoke<void>("pet_close_panel"),
+  petStatus: () => invoke<PetStatus>("pet_status"),
+  petSelftestPanel: (tool?: string) => invoke<void>("pet_selftest_panel", { tool: tool ?? null }),
+  petSelftestClosePanel: () => invoke<void>("pet_selftest_close_panel"),
   // forceがfalseなら、前回の取り込みから間もないときは省く。
   refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
   // hostがnullなら全端末の合算。

@@ -15,6 +15,9 @@ import { useSidebarStore } from "./store/useSidebarStore";
 import { useExtensionsStore } from "./store/useExtensionsStore";
 import { useMotionStore } from "./store/useMotionStore";
 import { getSelfTestMode, runSelfTest } from "./lib/selfTest";
+import { listen } from "@tauri-apps/api/event";
+import { openSource } from "./components/notices/Notices";
+import type { Notice } from "./types";
 import "./App.css";
 
 // 全体レイアウト(詩織Ver6.0の段階2)。上の帯(全幅)の下に、左の縦の列と、選んだ画面を1つ出す
@@ -56,6 +59,14 @@ function App() {
       .ensureBackendServicesStarted()
       .then((results) => console.log("backend services:", results))
       .catch((err) => console.error("バックエンドサービスの起動に失敗:", err));
+  }, []);
+
+  useEffect(() => {
+    // ペットの吹き出しから、ウィンドウに戻ってその知らせの元を開く(詩織Ver6.0の段階4)
+    const stop = listen<Notice>("shiori://open-source", (e) => openSource(e.payload));
+    return () => {
+      stop.then((u) => u());
+    };
   }, []);
 
   useEffect(() => {

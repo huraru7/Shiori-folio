@@ -1,0 +1,254 @@
+/* 本のメニューと小道具の枠(詩織Ver6.0の段階4)。値は tokens.css。
+   本は見本の案A「横に見開きで開く」(prototypes/ver6-s4/book-menu/)。ページの色はこの本だけの値 */
+.pet-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  height: 100%;
+  padding: 6px;
+  box-sizing: border-box;
+  color: var(--paper);
+  font-family: var(--font-display);
+  --page: #efe7d3;
+  --page-edge: #d9cdb2;
+  --ink: #2b271d;
+  --ink-dim: #6b6252;
+  --ink-line: rgba(43, 39, 29, 0.18);
+  --hover: rgba(143, 160, 107, 0.22);
+  --dur: 0.3s;
+  --ease: cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+
+/* 本も小道具の枠も、ペットの側に寄せる */
+.pet-panel--right {
+  align-items: flex-start;
+}
+
+.pet-panel--left {
+  align-items: flex-end;
+}
+
+.pet-panel__tool {
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  max-height: 100%;
+  background: var(--bg-deep);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.pet-panel__book[hidden],
+.pet-panel__tool[hidden] {
+  display: none;
+}
+
+.pet-panel__tool {
+  height: 100%;
+}
+
+/* ---- 見開きの本 ---- */
+.pet-panel__book {
+  position: relative;
+  width: 420px;
+  height: 270px;
+  perspective: 1400px;
+}
+
+.pet-panel__spread {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  padding: 7px;
+  border-radius: 6px;
+  background: var(--moss-deep);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.55);
+  transform: scale(0.3);
+  opacity: 0;
+  transition: transform var(--dur) var(--ease), opacity calc(var(--dur) * 0.6) linear;
+  transform-style: preserve-3d;
+}
+
+.pet-panel__book--right .pet-panel__spread {
+  flex-direction: row;
+  transform-origin: 0% 85%;
+}
+
+.pet-panel__book--left .pet-panel__spread {
+  flex-direction: row-reverse;
+  transform-origin: 100% 85%;
+}
+
+.pet-panel__book.is-open .pet-panel__spread {
+  transform: none;
+  opacity: 1;
+}
+
+.pet-panel__page {
+  flex: 1;
+  position: relative;
+  background: var(--page);
+  padding: 14px 14px 12px;
+  color: var(--ink);
+}
+
+/* 近い方のページ(ペット側)に項目、遠い方のページは見出しと続きの余白 */
+.pet-panel__book--right .pet-panel__page--near {
+  border-radius: 3px 0 0 3px;
+  box-shadow: inset -14px 0 16px -12px rgba(0, 0, 0, 0.35);
+}
+
+.pet-panel__book--left .pet-panel__page--near {
+  border-radius: 0 3px 3px 0;
+  box-shadow: inset 14px 0 16px -12px rgba(0, 0, 0, 0.35);
+}
+
+.pet-panel__page--far {
+  backface-visibility: hidden;
+  transition: transform var(--dur) var(--ease);
+}
+
+.pet-panel__book--right .pet-panel__page--far {
+  border-radius: 0 3px 3px 0;
+  box-shadow: inset 14px 0 16px -12px rgba(0, 0, 0, 0.35);
+  transform-origin: 0% 50%;
+  transform: rotateY(-180deg);
+}
+
+.pet-panel__book--left .pet-panel__page--far {
+  border-radius: 3px 0 0 3px;
+  box-shadow: inset -14px 0 16px -12px rgba(0, 0, 0, 0.35);
+  transform-origin: 100% 50%;
+  transform: rotateY(180deg);
+}
+
+.pet-panel__book.is-open .pet-panel__page--far {
+  transform: none;
+}
+
+.pet-panel__page-title {
+  font-weight: 500;
+  font-size: var(--fs-md);
+  color: var(--ink-dim);
+  letter-spacing: 0.15em;
+  margin: 0 0 6px;
+}
+
+.pet-panel__ruled {
+  height: 150px;
+  margin-top: 10px;
+  background: repeating-linear-gradient(180deg, transparent 0 39px, var(--ink-line) 39px 40px);
+}
+
+.pet-panel__page-foot {
+  position: absolute;
+  bottom: 8px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: var(--fs-xs);
+  color: var(--ink-dim);
+}
+
+.pet-panel__items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pet-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px dotted var(--ink-line);
+  border-radius: 3px;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pet-panel__item:hover,
+.pet-panel__item:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+
+.pet-panel__seal {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--moss-deep);
+  border-radius: 3px;
+  color: var(--moss-deep);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+}
+
+.pet-panel__item--back {
+  color: var(--ink-dim);
+}
+
+.pet-panel__item--back .pet-panel__seal {
+  border-style: dashed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-panel__spread,
+  .pet-panel__page--far {
+    transition: none;
+  }
+}
+
+.pet-panel__empty {
+  font-size: var(--fs-sm);
+  color: var(--ink-dim);
+}
+
+.pet-panel__bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.pet-panel__title {
+  flex: 1;
+  font-size: var(--fs-md);
+}
+
+.pet-panel__back {
+  background: none;
+  border: none;
+  color: var(--paper-dim);
+  font: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.pet-panel__back:hover {
+  color: var(--paper);
+}
+
+.pet-panel__slot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.pet-panel__slot[hidden] {
+  display: none;
+}
+
+.pet-panel__slot > * {
+  flex: 1;
+}

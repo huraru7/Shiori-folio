@@ -3815,6 +3815,7 @@ dependencies = [
  "cpal",
  "fs4",
  "hound",
+ "png 0.17.16",
  "rmcp",
  "rodio",
  "rusqlite",

@@ -16,7 +16,7 @@ const KIND_LABEL: Record<NoticeKind, string> = {
   extension: "知らせ",
 };
 
-function openSource(n: Notice) {
+export function openSource(n: Notice) {
   const view = useMainViewStore.getState();
   if (n.kind === "claude") view.setActive("claude");
   else if (n.kind === "pending") usePendingStore.getState().setOpen(true);

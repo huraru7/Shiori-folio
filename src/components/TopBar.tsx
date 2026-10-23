@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { api } from "../api/tauri";
 import { useDateDisplayStore, type DateDisplayConfig } from "../store/useDateDisplayStore";
 import { useAppModeStore } from "../store/useAppModeStore";
 import { pendingBadgeCount, usePendingStore } from "../store/usePendingStore";
@@ -80,6 +81,17 @@ function TopBar() {
           </button>
         </div>
       )}
+      {/* ペットの形にする(詩織Ver6.0の段階4)。ホットキーはCtrl+Alt+D */}
+      <button
+        type="button"
+        className="top-bar__pending top-bar__pet"
+        data-ripple
+        data-pet-enter
+        title="ペットの形にする(Ctrl+Alt+D)"
+        onClick={() => api.petEnter().catch((e) => console.error("ペットの形にできない:", e))}
+      >
+        ペット
+      </button>
       <button
         type="button"
         className="top-bar__pending"
