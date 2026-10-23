@@ -1,0 +1,106 @@
+/* 拡張機能の一覧(詩織Ver6.0の段階1の、仮の入り口)。段階2で左の縦の列に移す。 */
+.extensions-screen {
+  font-family: var(--font-body);
+  color: var(--paper);
+}
+
+.extensions-screen__lead,
+.extensions-screen__empty {
+  color: var(--paper-dim);
+  font-size: var(--fs-sm);
+  margin: 0 0 12px;
+}
+
+.extensions-screen__error {
+  color: var(--danger);
+  background: var(--danger-bg);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  font-size: var(--fs-sm);
+}
+
+.extensions-screen__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.extensions-screen__item {
+  background: var(--glass);
+  border: 0.5px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.extensions-screen__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.extensions-screen__title {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+}
+
+.extensions-screen__meta,
+.extensions-screen__folder {
+  color: var(--paper-dim);
+  font-size: var(--fs-xs);
+}
+
+.extensions-screen__status {
+  margin-left: auto;
+  font-size: var(--fs-xs);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.extensions-screen__status--ready {
+  color: var(--safe);
+  background: var(--safe-bg);
+}
+
+.extensions-screen__status--needs-approval {
+  color: var(--caution);
+  background: var(--caution-bg);
+}
+
+.extensions-screen__status--invalid {
+  color: var(--danger);
+  background: var(--danger-bg);
+}
+
+.extensions-screen__desc,
+.extensions-screen__uses {
+  font-size: var(--fs-sm);
+  margin: 6px 0 0;
+}
+
+.extensions-screen__invalid {
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  margin: 6px 0 0;
+  word-break: break-all;
+}
+
+.extensions-screen__approve {
+  margin-top: 10px;
+  background: var(--moss-deep);
+  color: var(--paper);
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.extensions-screen__approve:hover {
+  background: var(--moss);
+}

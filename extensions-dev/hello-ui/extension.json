@@ -1,0 +1,16 @@
+{
+  "name": "hello-ui",
+  "version": "0.1.0",
+  "title": "試しの画面",
+  "description": "段階1の受け入れ基準を確かめるための、画面の部品の拡張機能",
+  "kind": "ui",
+  "entry": "index.html",
+  "places": ["window"],
+  "uses": ["storage", "library.read", "ext.call"],
+  "provides": [
+    { "method": "greet", "description": "あいさつを返す" }
+  ],
+  "errors": [
+    { "code": "hello-ui-001", "message": "入力が空" }
+  ]
+}

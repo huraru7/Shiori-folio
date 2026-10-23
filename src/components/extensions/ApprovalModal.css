@@ -1,0 +1,79 @@
+/* 拡張機能の承認の画面(詩織Ver6.0の段階1)。枠はPendingModal.cssを借りる。 */
+.approval-modal__body {
+  padding: 16px 22px;
+  overflow-y: auto;
+  font-family: var(--font-body);
+  color: var(--paper);
+  font-size: var(--fs-md);
+}
+
+.approval-modal__name {
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  margin: 0;
+}
+
+.approval-modal__meta {
+  margin-left: 10px;
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  color: var(--paper-dim);
+}
+
+.approval-modal__desc,
+.approval-modal__lead,
+.approval-modal__none {
+  margin: 10px 0 0;
+}
+
+.approval-modal__desc,
+.approval-modal__none {
+  color: var(--paper-dim);
+  font-size: var(--fs-sm);
+}
+
+.approval-modal__uses {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  line-height: 1.7;
+}
+
+.approval-modal__use-name {
+  margin-left: 8px;
+  color: var(--paper-dim);
+  font-size: var(--fs-xs);
+}
+
+.approval-modal__error {
+  margin: 10px 0 0;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+}
+
+.approval-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 22px 18px;
+  border-top: 1px solid var(--glass-border);
+}
+
+.approval-modal__btn {
+  background: none;
+  border: 1px solid var(--glass-border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: var(--paper);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.approval-modal__btn--primary {
+  background: var(--moss-deep);
+  border-color: var(--moss-deep);
+}
+
+.approval-modal__btn--primary:hover {
+  background: var(--moss);
+}

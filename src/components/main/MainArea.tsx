@@ -9,6 +9,7 @@ import LibraryBrowseScreen from "../library/LibraryBrowseScreen";
 import ControlPanel from "../controlpanel/ControlPanel";
 import RulesScreen from "../rules/RulesScreen";
 import ShelfScreen from "../shelf/ShelfScreen";
+import ExtensionsScreen from "../extensions/ExtensionsScreen";
 import HomeScreen from "./HomeScreen";
 import PendingModal from "./PendingModal";
 import ErrorBoundary from "../shared/ErrorBoundary";
@@ -36,6 +37,8 @@ const VIEWS: ViewDef[] = [
   { id: "shelf", label: "知識の棚", content: <ShelfScreen />, selfScroll: true },
   { id: "rules", label: "規約・記憶", content: <RulesScreen />, selfScroll: true },
   { id: "claude", label: "Claude", content: <ClaudeMonitorPanel />, selfScroll: false },
+  // 拡張機能(詩織Ver6.0の段階1の、仮の入り口。段階2で左の縦の列に移す)
+  { id: "extensions", label: "拡張機能", content: <ExtensionsScreen />, selfScroll: false },
   { id: "settings", label: "設定", content: <ControlPanel />, selfScroll: true },
 ];
 

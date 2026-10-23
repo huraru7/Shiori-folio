@@ -11,6 +11,7 @@ export type MainView =
   | "shelf"
   | "rules"
   | "claude"
+  | "extensions"
   | "settings";
 
 interface MainViewStore {

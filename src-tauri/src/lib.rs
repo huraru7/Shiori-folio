@@ -1,6 +1,7 @@
 #[macro_use]
 pub mod shiori_log;
 pub mod error_codes;
+pub mod hub;
 mod audio;
 mod claude_stats;
 mod claude_status;
@@ -5345,6 +5346,8 @@ pub fn run() {
                 .build(),
         )
         .manage(BackendState(Mutex::new(BackendProcesses::default())))
+        // 拡張機能(詩織Ver6.0の段階1)。起動時に1回だけ読み込む
+        .manage(hub::HubState(Mutex::new(hub::Hub::load(&root))))
         .manage(audio::RecordingState::new())
         .manage(SttManager::new())
         .manage(Mutex::new(sysinfo::System::new_all()))
@@ -5414,7 +5417,9 @@ pub fn run() {
             get_tts_failures,
             get_passive_recall_stats,
             get_ragas_history,
-            log_ui_event
+            log_ui_event,
+            hub::list_extensions,
+            hub::approve_extension
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

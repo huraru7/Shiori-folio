@@ -10,6 +10,7 @@ import DebugScreen from "./components/debug/DebugScreen";
 import StartupScreen from "./components/startup/StartupScreen";
 import CloseGuard from "./components/eject/CloseGuard";
 import ExternalModeNotice from "./components/ExternalModeNotice";
+import ApprovalModal from "./components/extensions/ApprovalModal";
 import { useAppModeStore } from "./store/useAppModeStore";
 import { useShioriStore } from "./store/useShioriStore";
 import "./App.css";
@@ -80,6 +81,8 @@ function App() {
     <>
       <CloseGuard />
       {showStartup && <StartupScreen onFinished={() => setShowStartup(false)} />}
+      {/* 拡張機能の承認(詩織Ver6.0の段階1)。起動画面が消えてから出す */}
+      {!showStartup && <ApprovalModal />}
       <div className="app">
         <TopBar leftCollapsed={leftCollapsed} onToggleLeftCollapsed={toggleLeftCollapsed} />
         <div className="app__body">

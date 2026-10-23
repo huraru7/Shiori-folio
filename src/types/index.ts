@@ -345,3 +345,28 @@ export interface EjectOutcome {
   forced: number[];
   failed: number[];
 }
+
+// 拡張機能(詩織Ver6.0の段階1)。hub/mod.rsのExtensionDtoと同じ形。
+export interface ExtensionUse {
+  name: string;
+  label: string;
+}
+
+export type ExtensionStatus = "ready" | "needs-approval" | "invalid";
+
+export interface ExtensionInfo {
+  folder: string;
+  name: string | null;
+  title: string | null;
+  version: string | null;
+  description: string | null;
+  kind: "ui" | "program" | null;
+  places: ("window" | "pet")[];
+  uses: ExtensionUse[];
+  status: ExtensionStatus;
+  // 初めての承認か(falseなら、使うものが増えたための承認)
+  firstTime: boolean;
+  addedUses: ExtensionUse[];
+  errorCode: string | null;
+  errorMessage: string | null;
+}

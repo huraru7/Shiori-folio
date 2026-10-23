@@ -10,6 +10,7 @@ import type {
   LibraryFilter,
   EjectOutcome,
   EjectPreview,
+  ExtensionInfo,
   KnowledgeResult,
   LibraryFile,
   ModelInfo,
@@ -86,6 +87,10 @@ export const api = {
   // 画面の操作(タブの移動など)をログに残す(詩織Ver6.0の段階1)。部品名は本体側でUIに固定される。
   logUiEvent: (event: string, fields?: Record<string, string>) =>
     invoke<void>("log_ui_event", { event, fields: fields ?? null }),
+
+  // 拡張機能(詩織Ver6.0の段階1)。一覧は起動時に読み込んだもの。承認すると、新しい一覧が返る。
+  listExtensions: () => invoke<ExtensionInfo[]>("list_extensions"),
+  approveExtension: (name: string) => invoke<ExtensionInfo[]>("approve_extension", { name }),
   // forceがfalseなら、前回の取り込みから間もないときは省く。
   refreshClaudeStats: (force: boolean) => invoke<unknown>("refresh_claude_stats", { force }),
   // hostがnullなら全端末の合算。
