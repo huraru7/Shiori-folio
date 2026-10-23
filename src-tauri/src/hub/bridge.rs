@@ -5,7 +5,8 @@
 //! 断ったときはエラーコードを返し、ログに書く。
 
 use super::manifest::Manifest;
-use super::HubState;
+use super::process::Programs;
+use super::{storage, HubState};
 use crate::error_codes::{self, ErrorCode};
 use crate::shiori_log;
 use serde::Serialize;
@@ -20,13 +21,13 @@ struct MethodDef {
 
 const METHODS: &[MethodDef] = &[
     MethodDef { method: "log.write", uses: None, ready: true },
-    // 段階1のステップ6で作る
-    MethodDef { method: "storage.get", uses: Some("storage"), ready: false },
-    MethodDef { method: "storage.set", uses: Some("storage"), ready: false },
-    MethodDef { method: "storage.delete", uses: Some("storage"), ready: false },
-    MethodDef { method: "library.search", uses: Some("library.read"), ready: false },
-    MethodDef { method: "shelf.search", uses: Some("library.read"), ready: false },
-    MethodDef { method: "ext.call", uses: Some("ext.call"), ready: false },
+    MethodDef { method: "storage.get", uses: Some("storage"), ready: true },
+    MethodDef { method: "storage.set", uses: Some("storage"), ready: true },
+    MethodDef { method: "storage.delete", uses: Some("storage"), ready: true },
+    MethodDef { method: "library.search", uses: Some("library.read"), ready: true },
+    MethodDef { method: "shelf.search", uses: Some("library.read"), ready: true },
+    MethodDef { method: "library.get", uses: Some("library.read"), ready: true },
+    MethodDef { method: "ext.call", uses: Some("ext.call"), ready: true },
     // 段階3で作る
     MethodDef { method: "clipboard.write", uses: Some("clipboard.write"), ready: false },
     MethodDef { method: "notify.show", uses: Some("notify"), ready: false },
@@ -67,14 +68,30 @@ fn authorize(manifest: &Manifest, method: &str) -> Result<&'static MethodDef, Ca
 }
 
 /// 頼みごとを1つ処理する。`name`は、詩織の側で確かめた拡張機能の名前(拡張機能が名乗った名前は使わない)。
-pub fn call(state: &HubState, name: &str, method: &str, params: &Value) -> Result<Value, CallError> {
-    let manifest = {
+/// `programs`は、ほかの拡張機能を呼ぶ(`ext.call`)ときの中継先。無ければ`ext.call`は断る。
+pub fn call(
+    state: &HubState,
+    programs: Option<&Programs>,
+    name: &str,
+    method: &str,
+    params: &Value,
+) -> Result<Value, CallError> {
+    let (manifest, data_dir) = {
         let hub = state.0.lock().map_err(|e| CallError::new(error_codes::EXT_009, e.to_string()))?;
-        hub.ready(name)
+        let manifest = hub
+            .ready(name)
             .and_then(|e| e.manifest.clone())
-            .ok_or_else(|| CallError::new(error_codes::EXT_009, name))?
+            .ok_or_else(|| CallError::new(error_codes::EXT_009, name))?;
+        (manifest, hub.data_dir_of(name))
     };
-    let result = authorize(&manifest, method).and_then(|_| run(name, method, params));
+    let result = authorize(&manifest, method).and_then(|_| match method {
+        "storage.get" => storage::get(&data_dir, params),
+        "storage.set" => storage::set(&data_dir, params),
+        "storage.delete" => storage::delete(&data_dir, params),
+        "library.search" | "shelf.search" | "library.get" => library(name, method, params),
+        "ext.call" => ext_call_other(state, programs, name, params),
+        _ => run(name, method, params),
+    });
     match &result {
         Ok(_) => shiori_log::debug("HUB", "頼みごとを受けた", &[("name", &name), ("method", &method)]),
         Err(e) => shiori_log::warn(e.code, "頼みごとを断った", &[("name", &name), ("method", &method), ("理由", &e.message)]),
@@ -87,6 +104,72 @@ fn run(name: &str, method: &str, params: &Value) -> Result<Value, CallError> {
         "log.write" => log_write(name, params),
         _ => Err(CallError::new(error_codes::EXT_012, method)),
     }
+}
+
+/// `ext.call {target, method, params}`。相手の説明書のprovidesにある操作だけを中継する。
+fn ext_call_other(state: &HubState, programs: Option<&Programs>, name: &str, params: &Value) -> Result<Value, CallError> {
+    let bad = |d: &str| CallError::new(error_codes::EXT_014, d);
+    let target = params.get("target").and_then(Value::as_str).ok_or_else(|| bad("targetが要る"))?;
+    let method = params.get("method").and_then(Value::as_str).ok_or_else(|| bad("methodが要る"))?;
+    let inner = params.get("params").cloned().unwrap_or(Value::Null);
+    let programs = programs.ok_or_else(|| CallError::new(error_codes::EXT_017, "中継先が無い"))?;
+    let result = super::call_provided(state, programs, target, method, &inner);
+    let outcome = if result.is_ok() { "成功" } else { "失敗" };
+    shiori_log::info(
+        "HUB",
+        "拡張機能どうしの呼び出しを中継した",
+        &[("from", &name), ("to", &target), ("method", &method), ("結果", &outcome)],
+    );
+    result
+}
+
+/// library・棚・memoryを読む(検索と閲覧だけ)。
+fn library(name: &str, method: &str, params: &Value) -> Result<Value, CallError> {
+    let bad = |d: &str| CallError::new(error_codes::EXT_014, d);
+    if method == "library.get" {
+        let path = params.get("path").and_then(Value::as_str).ok_or_else(|| bad("pathが要る(検索の結果のpath)"))?;
+        let content = read_library_file(path)?;
+        shiori_log::info("HUB", "拡張機能が記事を読んだ", &[("name", &name), ("path", &path), ("字数", &content.chars().count())]);
+        return Ok(serde_json::json!({ "content": content }));
+    }
+    let query = params.get("query").and_then(Value::as_str).ok_or_else(|| bad("queryが要る"))?;
+    let limit = params.get("limit").and_then(Value::as_u64).unwrap_or(10).min(50) as u32;
+    let offset = params.get("offset").and_then(Value::as_u64).unwrap_or(0) as u32;
+    let port = crate::load_search_backend_config(&crate::project_root())
+        .map_err(|e| CallError::new(error_codes::EXT_023, e))?
+        .rag_port;
+    let rag_err = |e: String| CallError::new(error_codes::EXT_023, e);
+    let (value, count, top) = if method == "library.search" {
+        let hits = crate::rag_client::search_library(port, query, limit, offset, None, false).map_err(rag_err)?;
+        let top = shiori_log::summarize_hits(hits.iter().map(|h| (h.title.as_str(), h.source.as_str(), h.best_score)), 3);
+        (serde_json::to_value(&hits), hits.len(), top)
+    } else {
+        let hits = crate::rag_client::search_shelf(port, query, limit, offset, None).map_err(rag_err)?;
+        let top = shiori_log::summarize_hits(hits.iter().map(|h| (h.title.as_str(), h.source.as_str(), h.best_score)), 3);
+        (serde_json::to_value(&hits), hits.len(), top)
+    };
+    shiori_log::info(
+        "HUB",
+        "拡張機能が検索した",
+        &[("name", &name), ("method", &method), ("語", &query), ("件数", &count), ("上位", &top)],
+    );
+    value.map_err(|e| CallError::new(error_codes::EXT_023, e.to_string()))
+}
+
+/// 記事の閲覧で読めるのは、libraryと棚の中の`.md`と`.meta`だけ(検索の結果のpathを渡す)。
+fn read_library_file(path: &str) -> Result<String, CallError> {
+    let denied = |d: &str| CallError::new(error_codes::EXT_021, d);
+    let full = std::fs::canonicalize(path).map_err(|_| denied("ファイルが無い"))?;
+    let roots = [crate::library_root(), crate::shelf_root()];
+    let inside = roots
+        .iter()
+        .filter_map(|r| std::fs::canonicalize(r).ok())
+        .any(|root| full.starts_with(&root));
+    let ext_ok = full.extension().and_then(|e| e.to_str()).is_some_and(|e| e == "md" || e == "meta");
+    if !inside || !ext_ok {
+        return Err(denied("libraryと棚の中の.md・.metaだけを読める"));
+    }
+    std::fs::read_to_string(&full).map_err(|e| CallError::new(error_codes::EXT_021, e.to_string()))
 }
 
 /// 拡張機能のログ。部品名に拡張機能の名前を使う。`fields`は文字列の値だけを受ける。
@@ -121,14 +204,27 @@ fn log_write(name: &str, params: &Value) -> Result<Value, CallError> {
 }
 
 /// 画面の部品からの頼みごと。本体の画面が、送り主のiframeから拡張機能の名前を決めて渡す。
+/// 検索や、ほかの拡張機能の返事を待つことがあるので、画面を止めないよう別のスレッドで処理する。
 #[tauri::command]
-pub fn ext_call(
-    state: tauri::State<'_, HubState>,
+pub async fn ext_call(
+    app: tauri::AppHandle,
     name: String,
     method: String,
     params: Option<Value>,
 ) -> Result<Value, CallError> {
-    call(&state, &name, &method, &params.unwrap_or(Value::Null))
+    use tauri::Manager;
+    tauri::async_runtime::spawn_blocking(move || {
+        let programs = app.try_state::<super::process::ProgramsState>();
+        call(
+            &app.state::<HubState>(),
+            programs.as_ref().map(|p| &p.0),
+            &name,
+            &method,
+            &params.unwrap_or(Value::Null),
+        )
+    })
+    .await
+    .map_err(|e| CallError::new(error_codes::EXT_017, e.to_string()))?
 }
 
 #[cfg(test)]
@@ -153,29 +249,35 @@ mod tests {
     fn ログは全員に貸す() {
         let (_t, state) = state_with("", true);
         let params = serde_json::json!({ "event": "押された", "fields": { "回": 1 } });
-        assert_eq!(call(&state, "hello-ui", "log.write", &params), Ok(Value::Null));
+        assert_eq!(call(&state, None, "hello-ui", "log.write", &params), Ok(Value::Null));
         let bad = serde_json::json!({ "level": "loud", "event": "x" });
-        assert_eq!(call(&state, "hello-ui", "log.write", &bad).unwrap_err().code, "EXT-014");
+        assert_eq!(call(&state, None, "hello-ui", "log.write", &bad).unwrap_err().code, "EXT-014");
     }
 
     #[test]
     fn 断る理由ごとのエラーコード() {
-        let (_t, state) = state_with(r#""storage""#, true);
+        let (_t, state) = state_with(r#""storage", "llm.ask""#, true);
         let p = Value::Null;
         // 説明書に書いていない
-        assert_eq!(call(&state, "hello-ui", "clipboard.write", &p).unwrap_err().code, "EXT-011");
+        assert_eq!(call(&state, None, "hello-ui", "clipboard.write", &p).unwrap_err().code, "EXT-011");
         // 知らない頼みごと
-        assert_eq!(call(&state, "hello-ui", "fs.read", &p).unwrap_err().code, "EXT-010");
-        // 書いてあるが、まだ作っていない
-        assert_eq!(call(&state, "hello-ui", "storage.get", &p).unwrap_err().code, "EXT-012");
+        assert_eq!(call(&state, None, "hello-ui", "fs.read", &p).unwrap_err().code, "EXT-010");
+        // 書いてあるが、まだ作っていない(段階3で作る)
+        assert_eq!(call(&state, None, "hello-ui", "llm.ask", &p).unwrap_err().code, "EXT-012");
+        // 置き場は使える
+        let set = serde_json::json!({ "key": "a", "value": 1 });
+        assert_eq!(call(&state, None, "hello-ui", "storage.set", &set), Ok(Value::Null));
+        // 説明書に無いext.callは、中継の前にEXT-011で断る
+        let ext = serde_json::json!({ "target": "x", "method": "greet" });
+        assert_eq!(call(&state, None, "hello-ui", "ext.call", &ext).unwrap_err().code, "EXT-011");
         // 無い拡張機能
-        assert_eq!(call(&state, "other", "log.write", &p).unwrap_err().code, "EXT-009");
+        assert_eq!(call(&state, None, "other", "log.write", &p).unwrap_err().code, "EXT-009");
     }
 
     #[test]
     fn 承認していない拡張機能は頼めない() {
         let (_t, state) = state_with("", false);
         let params = serde_json::json!({ "event": "x" });
-        assert_eq!(call(&state, "hello-ui", "log.write", &params).unwrap_err().code, "EXT-009");
+        assert_eq!(call(&state, None, "hello-ui", "log.write", &params).unwrap_err().code, "EXT-009");
     }
 }

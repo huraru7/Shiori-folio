@@ -9,6 +9,7 @@ pub mod bridge;
 pub mod manifest;
 pub mod process;
 pub mod protocol;
+pub mod storage;
 
 use crate::error_codes::{self, ErrorCode};
 use crate::shiori_log;

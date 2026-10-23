@@ -5364,7 +5364,14 @@ pub fn run() {
             {
                 let handle = app.handle().clone();
                 let handler: hub::process::Handler = Arc::new(move |name, method, params| {
-                    hub::bridge::call(&handle.state::<hub::HubState>(), name, method, params)
+                    let programs = handle.try_state::<hub::process::ProgramsState>();
+                    hub::bridge::call(
+                        &handle.state::<hub::HubState>(),
+                        programs.as_ref().map(|p| &p.0),
+                        name,
+                        method,
+                        params,
+                    )
                 });
                 let programs = hub::process::Programs::new(handler);
                 if let Ok(state) = app.state::<hub::HubState>().0.lock() {

@@ -4,6 +4,9 @@ const check = document.getElementById("script-check");
 check.textContent = "スクリプトが動いた(app.jsとshiori.jsが読めた)";
 check.className = window.shiori ? "ok" : "ng";
 
+// 直前の検索の結果(記事の閲覧の確かめに使う)
+let lastHits = null;
+
 // 試すことの一覧。runは、期待どおりならtrueと、表に出す説明を返す。
 const TESTS = [
   {
@@ -20,9 +23,64 @@ const TESTS = [
     run: () => expectRefused("clipboard.write", { text: "x" }, "EXT-011"),
   },
   {
-    label: "説明書にあるが、まだ作っていない storage.get",
-    expect: "EXT-012で断られる(ステップ6で作る)",
-    run: () => expectRefused("storage.get", { key: "a" }, "EXT-012"),
+    label: "置き場に書いて、読んで、消す(storage)",
+    expect: "書いた値が読め、消せる",
+    run: async () => {
+      const value = { 時刻: new Date().toISOString() };
+      await shiori.call("storage.set", { key: "試し", value });
+      const read = await shiori.call("storage.get", { key: "試し" });
+      const removed = await shiori.call("storage.delete", { key: "試し" });
+      const after = await shiori.call("storage.get", { key: "試し" });
+      const ok = JSON.stringify(read) === JSON.stringify(value) && removed === true && after === null;
+      return [ok, `読めた値=${JSON.stringify(read)} 消した=${removed} 消した後=${JSON.stringify(after)}`];
+    },
+  },
+  {
+    label: "置き場の外を指すキー(../hello-program/storage)",
+    expect: "自分の置き場の中の1つのキーになるだけ",
+    run: async () => {
+      await shiori.call("storage.set", { key: "../hello-program/storage", value: "外へ出たい" });
+      const read = await shiori.call("storage.get", { key: "../hello-program/storage" });
+      await shiori.call("storage.delete", { key: "../hello-program/storage" });
+      return [read === "外へ出たい", "data/extensions/hello-program/ にはファイルができない(フォルダはClaudeが確かめる)"];
+    },
+  },
+  {
+    label: "libraryを検索する(library.search)",
+    expect: "結果が返る",
+    run: async () => {
+      const hits = await shiori.call("library.search", { query: "詩織 拡張機能", limit: 3 });
+      lastHits = hits;
+      const titles = hits.map((h) => h.title).join(" / ");
+      return [Array.isArray(hits) && hits.length > 0, `${hits.length}件: ${titles}`];
+    },
+  },
+  {
+    label: "検索の結果の記事を読む(library.get)",
+    expect: "本文が読める",
+    run: async () => {
+      if (!lastHits || lastHits.length === 0) return [false, "先に検索の結果が要る"];
+      const { content } = await shiori.call("library.get", { path: lastHits[0].path });
+      return [typeof content === "string" && content.length > 0, `${lastHits[0].source}: ${content.length}文字`];
+    },
+  },
+  {
+    label: "libraryの外のファイルを読む(C:/Windows/win.ini)",
+    expect: "EXT-021で断られる",
+    run: () => expectRefused("library.get", { path: "C:/Windows/win.ini" }, "EXT-021"),
+  },
+  {
+    label: "ほかの拡張機能を呼ぶ(ext.call hello-program greet)",
+    expect: "あいさつが返る",
+    run: async () => {
+      const r = await shiori.call("ext.call", { target: "hello-program", method: "greet", params: { who: "hello-ui" } });
+      return [typeof r?.message === "string", JSON.stringify(r)];
+    },
+  },
+  {
+    label: "相手のprovidesに無い操作を呼ぶ(ext.call hello-program nope)",
+    expect: "EXT-020で断られる",
+    run: () => expectRefused("ext.call", { target: "hello-program", method: "nope" }, "EXT-020"),
   },
   {
     label: "詩織が知らない頼みごと",
