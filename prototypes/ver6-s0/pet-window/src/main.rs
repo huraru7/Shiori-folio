@@ -280,6 +280,9 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![grab, quit])
         .setup(move |app| {
+            // Macでは skip_taskbar が効かないので、アクセサリにしてDockとCmd+Tabから外す
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let handle = app.handle().clone();
             let monitor = app.primary_monitor()?.ok_or("画面が見つからない")?;
             let scale = monitor.scale_factor();
