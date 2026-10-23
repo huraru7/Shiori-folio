@@ -64,6 +64,20 @@ codes! {
     EXT_021 = "EXT-021", "記事の閲覧で、libraryと棚の外か、.md・.meta以外を読もうとした";
     EXT_022 = "EXT-022", "拡張機能の置き場を読み書きできない(壊れている、大きすぎるなど)";
     EXT_023 = "EXT-023", "拡張機能からの検索に失敗した(RAGが動いていないなど)";
+    // RAG(段階5のRust版 shiori-rag。一覧の元は services/shiori-rag/src/errors.rs。そちらと同じに保つ)
+    RAG_001 = "RAG-001", "設定(config.json)を読めない";
+    RAG_002 = "RAG-002", "索引のフォルダを作れないか、読めない";
+    RAG_003 = "RAG-003", "索引のファイルが壊れている(その記事は作り直す)";
+    RAG_004 = "RAG-004", "索引のファイルを書けない";
+    RAG_005 = "RAG-005", "記事を読めない(文字コードなど)ので、索引に入れずに飛ばした";
+    RAG_006 = "RAG-006", "埋め込みのサーバーに問い合わせられない";
+    RAG_007 = "RAG-007", "リランカーのモデルを読み込めない";
+    RAG_008 = "RAG-008", "リランカーの計算に失敗した";
+    RAG_009 = "RAG-009", "素材に秘密情報らしき文字列があるので、抽出を止めた";
+    RAG_010 = "RAG-010", "素材の抽出に失敗した";
+    RAG_011 = "RAG-011", "ポートを開けない";
+    RAG_012 = "RAG-012", "要求の形が正しくない";
+    RAG_013 = "RAG-013", "要求の処理に失敗した";
     // 本体の画面(段階2)
     UI_001 = "UI-001", "列の並びの記録(sidebar.json)が壊れていたので、脇に退けて既定の並びにした";
     UI_002 = "UI-002", "列の並びの記録(sidebar.json)を書けない";
@@ -88,5 +102,18 @@ mod tests {
             assert!(num.len() == 3 && num.chars().all(|ch| ch.is_ascii_digit()), "番号: {}", c.code);
         }
         assert_eq!(lookup("LOG-001").map(|c| c.message), Some("ログのフォルダを作れない"));
+    }
+
+    #[test]
+    fn RAGのコードはshiori_ragの一覧と同じ() {
+        // shiori-ragは別のクレートなので、一覧のファイルを文字列として読んで突き合わせる
+        let theirs = include_str!("../../services/shiori-rag/src/errors.rs");
+        let ours: Vec<_> = ALL.iter().filter(|c| c.code.starts_with("RAG-")).collect();
+        let their_count = theirs.matches("= \"RAG-").count();
+        assert_eq!(ours.len(), their_count, "数が違う");
+        for c in ours {
+            let line = format!("= \"{}\", \"{}\";", c.code, c.message);
+            assert!(theirs.contains(&line), "shiori-ragの一覧と違う: {}", c.code);
+        }
     }
 }

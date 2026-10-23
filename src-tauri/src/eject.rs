@@ -70,12 +70,12 @@ fn is_mcp_server(p: &ProcInfo) -> bool {
     stem(p) == "mcp_server"
 }
 
-/// 止める順の優先度。詩織本体→RAGのpython→それ以外。
+/// 止める順の優先度。詩織本体→RAG(Python版のpython・Rust版のshiori-rag)→それ以外。
 fn stop_rank(p: &ProcInfo) -> u8 {
     let s = stem(p);
     if s == "shiori-folio" {
         0
-    } else if s.starts_with("python") || s == "uvicorn" {
+    } else if s.starts_with("python") || s == "uvicorn" || s == "shiori-rag" {
         1
     } else {
         2

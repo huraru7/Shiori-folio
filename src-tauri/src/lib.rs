@@ -880,10 +880,28 @@ fn macos_local_vectordb_dir() -> Option<PathBuf> {
     )
 }
 
-// RAGサーバーが索引(ChromaDBと進捗ファイル)を置くディレクトリ。Python側の
-// resolve_vectordb_dir(library_path.py)と同じ場所を指す必要がある
-// (macOSはSHIORI_VECTORDB_DIRで上のローカルディスクへ逃がし、それ以外はdata/vectordb)。
+// Rust版のRAG(shiori-rag、詩織Ver6.0の段階5)の実行ファイル。いま動いている実行ファイルと
+// 同じフォルダ(開発の版のbin/<os>/ver6-dev/など)を先に見て、無ければbin/<os>/を見る。
+// どちらにも無ければNoneで、いままでどおりPython版(services/rag)を起動する。
+// 実行ファイルを置くだけで切り替わり、外せば戻る(切り替えの途中で、版ごとに試せるように)。
+pub fn rust_rag_exe() -> Option<PathBuf> {
+    let name = exe_name("shiori-rag");
+    let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(&name)));
+    beside
+        .into_iter()
+        .chain(std::iter::once(portable_bin_dir().join(&name)))
+        .find(|p| p.is_file())
+}
+
+// RAGサーバーが索引(と進捗ファイル)を置くディレクトリ。
+// - Rust版: data/rag-index(WindowsとMacで共有する。SQLiteを使わないので、Macのexfatでも
+//   ロックの問題に当たらない見込み。段階5の企画書)
+// - Python版: services/rag/library_path.pyのresolve_vectordb_dirと同じ場所(macOSは
+//   SHIORI_VECTORDB_DIRで上のローカルディスクへ逃がし、それ以外はdata/vectordb)
 pub fn rag_vectordb_dir(root: &Path) -> PathBuf {
+    if rust_rag_exe().is_some() {
+        return root.join("data").join("rag-index");
+    }
     #[cfg(target_os = "macos")]
     if let Some(dir) = macos_local_vectordb_dir() {
         return dir;
@@ -892,6 +910,9 @@ pub fn rag_vectordb_dir(root: &Path) -> PathBuf {
 }
 
 pub fn build_rag_command(root: &Path, port: u16, quiet_stdio: bool) -> std::io::Result<Child> {
+    if let Some(exe) = rust_rag_exe() {
+        return build_rust_rag_command(&exe, root, port, quiet_stdio);
+    }
     let rag_dir = root.join("services/rag");
     // 【2026-08-13修正】ポータブル版(bin/<os>/rag-venv)はuv python installで
     // 取得した「venvではない可搬版Python本体」で、Windowsではpython.exeが
@@ -963,6 +984,27 @@ pub fn build_rag_command(root: &Path, port: u16, quiet_stdio: bool) -> std::io::
         cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
     }
     no_console_window(&mut cmd);
+    cmd.spawn()
+}
+
+// Rust版のRAG(shiori-rag)を起動する。モデルは<root>/models/rerank/、索引は<root>/data/rag-index/、
+// ログは<root>/data/logs/rag-…(shiori-ragの既定)。Python版と違い、PCのキャッシュもPATHも使わない。
+fn build_rust_rag_command(exe: &Path, root: &Path, port: u16, quiet_stdio: bool) -> std::io::Result<Child> {
+    let port_str = port.to_string();
+    let mut cmd = Command::new(exe);
+    cmd.current_dir(root)
+        .arg("serve")
+        .arg("--root")
+        .arg(root)
+        .arg("--port")
+        .arg(&port_str);
+    // MCPサーバーから起動するときに、標準入力を引き継がない理由はPython版と同じ(下のbuild_rag_commandの説明)
+    cmd.stdin(std::process::Stdio::null());
+    if quiet_stdio {
+        cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    }
+    no_console_window(&mut cmd);
+    shiori_log::info("RAG", "Rust版のRAGを起動する", &[("実行ファイル", &exe.display()), ("ポート", &port)]);
     cmd.spawn()
 }
 
