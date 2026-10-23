@@ -12,8 +12,9 @@ function stripFrontmatter(content: string): string {
   return match ? content.slice(match[0].length) : content;
 }
 
-// 知識の棚画面(Ver5.0候補)。ふらるが学んで自分の言葉で説明できるようになった知識を読む。
-// 左に記事の一覧と検索、右に本文。読み取り専用で、編集はしない(棚への保存は`knowledge-learning`の手順)。
+// 知識の棚画面(Ver5.0)。出典で確かめた、正確な参照ノートでありAI共通の正本となる知識を読む。
+// 調べて置いたもの(`knowledge-research`)と、学んで理解したもの(`knowledge-learning`)の両方が入る。
+// 左に記事の一覧と検索、右に本文。読み取り専用で、編集はしない(棚への保存は`shiori-save`を通す)。
 // 一覧と本文はファイルを直接読む。検索だけRAG(search_shelf)を使い、RAGが止まっていても閲覧はできる。
 // 学習の都度ファイルが増えるので、この画面が開かれるたびと更新ボタンで読み直す。
 function ShelfScreen() {
