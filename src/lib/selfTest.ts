@@ -138,6 +138,7 @@ export async function runSelfTest(): Promise<void> {
     await checkEffects(report);
     await checkNotices(report);
     await checkPet(report);
+    await checkRepair(report);
   } catch (e) {
     await report("自己確認の途中", false, { 内容: String(e).slice(0, 200) });
   } finally {
@@ -386,6 +387,17 @@ async function checkSettingsPage(report: Report) {
   });
   document.querySelector<HTMLElement>('[data-nav-key="system"]')?.click();
   useMainViewStore.getState().setActive("home");
+}
+
+// 自動修復(段階6): SSDの試しのためだけのフォルダで、壊したものが起動時の修復で直る。本物の設定や記録には触れない
+async function checkRepair(report: Report) {
+  const result = await api.selfTestRepair();
+  if (!result) {
+    await report("自動修復", false, { 結果: "返事が無い" });
+    return;
+  }
+  const [pass, fields] = result;
+  await report("自動修復", pass, fields);
 }
 
 // 演出: 動きを抑えていなければ、星が出ていて、押したときに水紋が出る。抑えていれば、どちらも出ない。

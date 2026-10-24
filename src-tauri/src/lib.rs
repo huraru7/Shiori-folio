@@ -5705,6 +5705,7 @@ pub fn run() {
             diagnose_report,
             diagnose_copy,
             self_test::self_test_notify,
+            self_test::self_test_repair,
             pet::pet_enter,
             pet::pet_leave,
             pet::pet_press,

@@ -125,6 +125,52 @@ pub fn save_last_good_config(root: &Path) {
     }
 }
 
+/// 自己確認の起動(段階6)で、起動時の修復が本当に直すかを確かめる。本物の設定や記録には触れず、
+/// SSDの `data/_selftest-repair/` に試しのためだけのルートを作り、壊したものを用意して、起動時と同じ
+/// 修復を当てる(exfatのSSDの上で確かめるため、PCの一時フォルダではなくSSDに作る)。終わったら消す。
+/// 戻り値は、全部直ったかと、ログの欄。
+pub fn self_check(root: &Path) -> (bool, Vec<(&'static str, String)>) {
+    let f = root.join("data").join("_selftest-repair");
+    let _ = std::fs::remove_dir_all(&f);
+    let data = f.join("data");
+    let prepared = (|| -> std::io::Result<()> {
+        std::fs::create_dir_all(data.join("extensions"))?;
+        std::fs::copy(root.join("config.json"), last_good_config_path(&f))?;
+        std::fs::write(f.join("config.json"), "{ 壊れている")?;
+        // 動いていないPIDとして、ありえない大きな値を使う
+        std::fs::write(data.join(".shiori-rag.lock"), "4294967")?;
+        std::fs::write(data.join("extensions").join("_approvals.json"), "壊れている")
+    })();
+    if let Err(e) = prepared {
+        let _ = std::fs::remove_dir_all(&f);
+        return (false, vec![("用意できない", e.to_string())]);
+    }
+
+    run_at_startup(&f, before_log(&f));
+    let _ = crate::hub::Hub::load(&f);
+    let sidebar = data.join("ui").join("sidebar.json");
+    let sidebar_ready = std::fs::write(&sidebar, "壊れている").is_ok();
+    let _ = crate::sidebar_layout::load(&sidebar);
+
+    let names = |dir: &Path| -> Vec<String> {
+        std::fs::read_dir(dir).map(|e| e.flatten().map(|x| x.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default()
+    };
+    let aside = |dir: &Path, prefix: &str| names(dir).iter().any(|n| n.starts_with(prefix));
+    let checks = [
+        ("設定を前回の写しに戻した", std::fs::read(f.join("config.json")).ok() == std::fs::read(last_good_config_path(&f)).ok()),
+        ("壊れた設定を残した", aside(&f, "config.json.broken-")),
+        ("古いロックを消した", !data.join(".shiori-rag.lock").exists()),
+        ("作業用フォルダを作った", data.join("ui").is_dir()),
+        ("承認の記録を退けた", aside(&data.join("extensions"), "_approvals.json.broken-")),
+        ("列の並びの記録を退けた", sidebar_ready && aside(&data.join("ui"), "sidebar.json.broken-")),
+    ];
+    let cleaned = std::fs::remove_dir_all(&f).is_ok();
+    let pass = cleaned && checks.iter().all(|(_, ok)| *ok);
+    let mut fields: Vec<(&'static str, String)> = checks.iter().map(|(k, ok)| (*k, ok.to_string())).collect();
+    fields.push(("片付けた", cleaned.to_string()));
+    (pass, fields)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,6 +236,16 @@ mod tests {
         stale_locks(&t.0);
         assert!(!t.0.join("data").join(".shiori-rag.lock").exists());
         assert!(t.0.join("data").join(".shiori-embed.lock").exists(), "動いているPIDのロックは残す");
+    }
+
+    #[test]
+    fn 自己確認の修復の確かめは全部直して片付ける() {
+        let t = TempRoot::new("self-check");
+        std::fs::write(t.0.join("config.json"), DEFAULT_CONFIG).unwrap();
+        let (pass, fields) = self_check(&t.0);
+        assert!(pass, "{fields:?}");
+        assert!(!t.0.join("data").join("_selftest-repair").exists());
+        assert_eq!(std::fs::read_to_string(t.0.join("config.json")).unwrap(), DEFAULT_CONFIG, "本物の設定は触らない");
     }
 
     #[test]

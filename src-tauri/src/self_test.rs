@@ -128,6 +128,17 @@ pub fn self_test_clipboard_text() -> Option<String> {
     crate::notify::app()?.clipboard().read_text().ok()
 }
 
+/// 自己確認(段階6): 起動時の自動修復が、壊したものを直すかを確かめる(`repair::self_check`)。
+/// ふつうの起動では何もしない。合否と欄を、画面の側がそのまま `[SELFTEST]` の行に書く。
+#[tauri::command]
+pub async fn self_test_repair() -> Option<(bool, BTreeMap<String, String>)> {
+    if !is_enabled() {
+        return None;
+    }
+    let (pass, fields) = tauri::async_runtime::spawn_blocking(|| crate::repair::self_check(&crate::project_root())).await.ok()?;
+    Some((pass, fields.into_iter().map(|(k, v)| (k.to_string(), v)).collect()))
+}
+
 /// 自己確認(段階3): Claudeと要確認の知らせを、試しに入口へ入れる(本当の終わりや増えを待たないため)。
 #[tauri::command]
 pub fn self_test_notify(kind: String) -> Option<u64> {

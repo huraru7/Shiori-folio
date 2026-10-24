@@ -120,6 +120,8 @@ export const api = {
   diagnoseReport: () => invoke<DiagnoseReport>("diagnose_report"),
   diagnoseCopy: (text: string) => invoke<void>("diagnose_copy", { text }),
   selfTestNotify: (kind: "claude" | "pending") => invoke<number | null>("self_test_notify", { kind }),
+  // 自己確認(段階6): 起動時の自動修復が壊したものを直すか。[合否, 欄]
+  selfTestRepair: () => invoke<[boolean, Record<string, string>] | null>("self_test_repair"),
   // ペットの形(詩織Ver6.0の段階4)
   petEnter: () => invoke<void>("pet_enter"),
   petLeave: () => invoke<void>("pet_leave"),
