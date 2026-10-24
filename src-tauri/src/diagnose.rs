@@ -1,0 +1,422 @@
+//! 診断の内容(詩織Ver6.0の段階6)。
+//!
+//! 外部のAIに貼り付けて渡すための、1つの文章を作る。窓を使わないCLI(`shiori-doctor`)と、
+//! 本体の診断の画面の両方から呼ぶ。詩織が正常に動いていなくても作れるよう、本体の状態
+//! (Tauriの管理する状態)には頼らず、SSDのファイルとポートだけを見る。
+//!
+//! 守ること:
+//! - 何も書き換えない(承認の記録が壊れていても脇へ移さない。直すのは起動時の自動修復の役目)
+//! - 記事の本文と会話の中身は入れない(ログと同じ決まり。ログの行は1行200文字までに切る)
+//!
+//! 企画書は plan-shiori-ver6-s6-doctor-20261024(詩織のlibrary)。
+
+use crate::hub::{self, Status};
+use crate::shared_daemon;
+use chrono::Local;
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
+
+/// 自動修復の行に付ける部品名(段階6の「4」。起動時に直したものを、この部品名でログに書く)。
+pub const REPAIR_PART: &str = "FIX";
+
+/// ログから拾う行の上限と、1行の長さの上限。
+const LOG_LINES: usize = 10;
+const LINE_CHARS: usize = 200;
+
+/// 1つの確かめの結果。
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Mark {
+    Ok,
+    Ng,
+    /// 無くても動く(音声やLLMなど)か、ふらるに見てほしいもの
+    Note,
+}
+
+impl Mark {
+    fn label(self) -> &'static str {
+        match self {
+            Mark::Ok => "[OK]",
+            Mark::Ng => "[NG]",
+            Mark::Note => "[--]",
+        }
+    }
+}
+
+struct Out {
+    text: String,
+    ng: usize,
+}
+
+impl Out {
+    fn section(&mut self, title: &str) {
+        let _ = write!(self.text, "\n## {title}\n");
+    }
+
+    fn item(&mut self, mark: Mark, line: impl AsRef<str>) {
+        if mark == Mark::Ng {
+            self.ng += 1;
+        }
+        let _ = writeln!(self.text, "- {} {}", mark.label(), line.as_ref());
+    }
+
+    fn plain(&mut self, line: impl AsRef<str>) {
+        let _ = writeln!(self.text, "- {}", line.as_ref());
+    }
+
+    /// 1つ上の行に付く、字下げした行。
+    fn sub(&mut self, line: impl AsRef<str>) {
+        let _ = writeln!(self.text, "  - {}", line.as_ref());
+    }
+}
+
+/// 診断の結果。`ng`は `[NG]` の数(CLIの終了コードと、画面の見出しに使う)。
+pub struct Report {
+    pub text: String,
+    pub ng: usize,
+}
+
+/// `root`(`portable/`)を見て、診断の文章を作る。`tool`は呼び出し元の名前(`shiori-doctor` など)。
+pub fn build(root: &Path, tool: &str) -> Report {
+    let mut out = Out { text: String::new(), ng: 0 };
+    let _ = writeln!(
+        out.text,
+        "# 詩織の診断({tool} {})  {}",
+        env!("CARGO_PKG_VERSION"),
+        Local::now().format("%Y-%m-%d %H:%M:%S")
+    );
+    out.text.push_str("外部のAIに貼り付けて渡すための文です。記事の本文と会話の中身は入っていません。\n");
+
+    environment(&mut out, root);
+    let config = files(&mut out, root);
+    services(&mut out, root, config.as_ref());
+    index(&mut out, root);
+    extensions(&mut out, root);
+    to_check(&mut out, root);
+    logs(&mut out, root);
+
+    let _ = write!(out.text, "\n(NGは{}件)\n", out.ng);
+    Report { text: out.text, ng: out.ng }
+}
+
+fn os_dir() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "mac"
+    } else if cfg!(windows) {
+        "win"
+    } else {
+        "linux"
+    }
+}
+
+fn environment(out: &mut Out, root: &Path) {
+    out.section("環境");
+    let os = sysinfo::System::long_os_version().unwrap_or_else(|| std::env::consts::OS.to_string());
+    out.plain(format!("OS: {os}(CPU: {})", std::env::consts::ARCH));
+    if cfg!(target_os = "macos") && std::env::consts::ARCH != "aarch64" {
+        out.item(Mark::Ng, "このMacはApple シリコンではない(詩織のMac用のプログラムはApple シリコンだけ)");
+    }
+    out.plain(format!("SSDの場所: {}", root.display()));
+    if let Ok(exe) = std::env::current_exe() {
+        out.plain(format!("実行ファイル: {}", exe.display()));
+    }
+}
+
+/// SSDの中に、動かすのに要るものがそろっているか。読めた `config.json` を返す。
+fn files(out: &mut Out, root: &Path) -> Option<serde_json::Value> {
+    out.section("SSDの中");
+    let config = match std::fs::read_to_string(root.join("config.json")) {
+        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
+            Ok(v) => {
+                out.item(Mark::Ok, "config.json(JSONとして読める)");
+                Some(v)
+            }
+            Err(e) => {
+                out.item(Mark::Ng, format!("config.json がJSONとして読めない({e})"));
+                None
+            }
+        },
+        Err(e) => {
+            out.item(Mark::Ng, format!("config.json を読めない({e})"));
+            None
+        }
+    };
+
+    // モデル。埋め込みとリランカーは検索に要る。LLM・音声は無くても検索は動く
+    let model = |key: &str| {
+        config.as_ref().and_then(|c| c[key]["modelPath"].as_str()).map(|p| root.join(p.trim_start_matches("./")))
+    };
+    let check = |out: &mut Out, what: &str, path: Option<PathBuf>, required: bool| match path {
+        Some(p) if p.is_file() => out.item(Mark::Ok, format!("{what}: {}", rel(root, &p))),
+        Some(p) => out.item(if required { Mark::Ng } else { Mark::Note }, format!("{what}が無い: {}", rel(root, &p))),
+        None => out.item(if required { Mark::Ng } else { Mark::Note }, format!("{what}の場所が config.json に無い")),
+    };
+    check(out, "埋め込みのモデル", model("embedding"), true);
+    let rerank = root.join("models").join("rerank");
+    for f in ["model.safetensors", "tokenizer.json", "config.json"] {
+        check(out, "リランカーのモデル", Some(rerank.join(f)), true);
+    }
+    let external = config.as_ref().and_then(|c| c["mode"].as_str()) == Some("external");
+    check(out, if external { "LLMのモデル(外部AIモードなので使わない)" } else { "LLMのモデル" }, model("llm"), !external);
+    check(out, "音声認識のモデル", model("stt"), false);
+    check(out, "読み上げのモデル", model("tts"), false);
+
+    // 実行ファイル。本体は、この診断の隣(開発の版の bin/<os>/ver6-dev/ など)を先に見て、無ければ bin/<os>/ を見る
+    let bin = root.join("bin").join(os_dir());
+    let exe = |name: &str| bin.join(crate::exe_name(name));
+    let main_in = |dir: &Path| {
+        if cfg!(target_os = "macos") {
+            dir.join("shiori-folio.app").join("Contents").join("MacOS").join("shiori-folio")
+        } else {
+            dir.join(crate::exe_name("shiori-folio"))
+        }
+    };
+    let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(main_in)).filter(|p| p.is_file());
+    check(out, "本体", Some(beside.unwrap_or_else(|| main_in(&bin))), true);
+    check(out, "埋め込みのサーバー", Some(exe("llama-server")), true);
+    match crate::rust_rag_exe() {
+        Some(p) => out.item(Mark::Ok, format!("RAG(Rust版): {}", rel(root, &p))),
+        None if bin.join("rag-venv").is_dir() => out.item(Mark::Ok, "RAG(Python版、rag-venv)"),
+        None => out.item(Mark::Ng, "RAGが無い(shiori-rag も rag-venv も無い)"),
+    }
+    check(out, "MCPサーバー", Some(exe("mcp_server")), false);
+    check(out, "音声認識のサーバー", Some(exe("whisper-server")), false);
+    check(out, "読み上げ", Some(exe("piper-plus-cli")), false);
+
+    #[cfg(windows)]
+    webview2(out);
+
+    config
+}
+
+/// WebView2(Windowsで本体の画面を出す部品)の版を、レジストリから読む。
+#[cfg(windows)]
+fn webview2(out: &mut Out) {
+    const KEY: &str = "Microsoft\\EdgeUpdate\\Clients\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}";
+    let keys = [
+        format!("HKLM\\SOFTWARE\\WOW6432Node\\{KEY}"),
+        format!("HKLM\\SOFTWARE\\{KEY}"),
+        format!("HKCU\\Software\\{KEY}"),
+    ];
+    for key in &keys {
+        let Ok(o) = std::process::Command::new("reg").args(["query", key, "/v", "pv"]).output() else { continue };
+        let text = String::from_utf8_lossy(&o.stdout);
+        if let Some(version) = text.split_whitespace().last().filter(|v| o.status.success() && *v != "0.0.0.0") {
+            out.item(Mark::Ok, format!("WebView2: {version}"));
+            return;
+        }
+    }
+    out.item(Mark::Ng, "WebView2が見つからない(本体の画面が出ない原因になる)");
+}
+
+fn services(out: &mut Out, root: &Path, config: Option<&serde_json::Value>) {
+    out.section("サービス");
+    let port = |key: &str, default: u16| {
+        config.and_then(|c| c[key]["port"].as_u64()).and_then(|p| u16::try_from(p).ok()).unwrap_or(default)
+    };
+    let mut sys = sysinfo::System::new();
+    sys.refresh_processes(sysinfo::ProcessesToUpdate::All, true);
+    for (name, key, default, lock) in [
+        ("埋め込み", "embedding", 8082, ".shiori-embed.lock"),
+        ("RAG", "rag", 8083, ".shiori-rag.lock"),
+    ] {
+        let port = port(key, default);
+        let healthy = ureq::get(&format!("http://127.0.0.1:{port}/health")).timeout(Duration::from_secs(2)).call().is_ok();
+        let pid = shared_daemon::read_daemon_pid(root, lock);
+        let alive = shared_daemon::daemon_pid_if_alive(&sys, root, lock).is_some();
+        let pid_text = match (pid, alive) {
+            (Some(p), true) => format!("記録のPID {p}は動いている"),
+            (Some(p), false) => format!("記録のPID {p}は動いていない(古いロック)"),
+            (None, _) => "ロックの記録は無い".to_string(),
+        };
+        // 詩織が起動していなければ止まっているのがふつうなので、NGにはしない
+        let mark = if healthy { Mark::Ok } else { Mark::Note };
+        let state = if healthy { "返事がある" } else { "返事が無い(詩織が起動していなければふつう)" };
+        out.item(mark, format!("{name}(ポート{port}): {state}。{pid_text}"));
+    }
+}
+
+fn index(out: &mut Out, root: &Path) {
+    out.section("索引");
+    let dir = crate::rag_vectordb_dir(root);
+    if !dir.is_dir() {
+        out.item(Mark::Note, format!("索引のフォルダが無い: {}(次の起動で作り直す)", rel(root, &dir)));
+        return;
+    }
+    let count = |d: PathBuf| std::fs::read_dir(d).map(|e| e.flatten().filter(|f| !is_mac_meta(&f.path())).count()).ok();
+    match count(dir.join("chunks")) {
+        Some(n) => out.item(Mark::Ok, format!("{}: library {n}件", rel(root, &dir))),
+        None => out.item(Mark::Ok, format!("{}(Python版の形)", rel(root, &dir))),
+    }
+    if let Some(n) = count(dir.join("shelf").join("chunks")) {
+        out.sub(format!("棚: {n}件"));
+    }
+    if let Some(t) = modified(&dir.join(".index_state.json")) {
+        out.sub(format!("最後の同期: {t}"));
+    }
+}
+
+fn extensions(out: &mut Out, root: &Path) {
+    out.section("拡張機能");
+    let (list, broken) = hub::inspect(root);
+    match broken {
+        None => out.item(Mark::Ok, "承認の記録(data/extensions/_approvals.json)"),
+        Some(detail) => out.item(Mark::Ng, format!("承認の記録が読めない({detail})")),
+    }
+    if list.is_empty() {
+        out.plain("拡張機能は無い");
+    }
+    for ext in list {
+        let kind = ext.manifest.as_ref().map(|m| format!("{:?}", m.kind).to_lowercase()).unwrap_or_else(|| "-".into());
+        match ext.status {
+            Status::Ready => out.item(Mark::Ok, format!("{}({kind}): 使える", ext.folder)),
+            Status::NeedsApproval { first_time, added } => out.item(
+                Mark::Note,
+                format!(
+                    "{}({kind}): 承認待ち({}。使うもの: {})",
+                    ext.folder,
+                    if first_time { "初めて" } else { "使うものが増えた" },
+                    added.join("・")
+                ),
+            ),
+            Status::Invalid { code, detail } => {
+                out.item(Mark::Ng, format!("{}: {code} {}({})", ext.folder, code.message, cut(&detail)))
+            }
+        }
+    }
+}
+
+/// ふらるが書いたものと会話の記録。詩織は直さず、見つけて報告するだけ。
+fn to_check(out: &mut Out, root: &Path) {
+    out.section("要確認(詩織は直さない)");
+    let db = root.join("data").join("shiori.db");
+    match std::fs::read(&db).ok().map(|b| b.starts_with(b"SQLite format 3\0")) {
+        Some(true) => out.item(Mark::Ok, "会話の記録(data/shiori.db)"),
+        Some(false) => out.item(Mark::Ng, "会話の記録(data/shiori.db)がSQLiteの形ではない"),
+        None => out.item(Mark::Note, "会話の記録(data/shiori.db)が無い(初めての起動ならふつう)"),
+    }
+    for (what, dir) in [("library", root.join("library")), ("棚", root.join("knowledge"))] {
+        match count_md(&dir) {
+            Some(n) => out.item(Mark::Ok, format!("{what}: 記事{n}件")),
+            None => out.item(Mark::Ng, format!("{what}のフォルダを読めない: {}", rel(root, &dir))),
+        }
+    }
+    let warnings = crate::rag_vectordb_dir(root).join(".extract_warnings.json");
+    if let Some(n) = std::fs::read_to_string(warnings)
+        .ok()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+        .map(|v| v.as_object().map(|o| o.len()).or_else(|| v.as_array().map(|a| a.len())).unwrap_or(0))
+        .filter(|n| *n > 0)
+    {
+        out.item(Mark::Note, format!("素材の抽出の警告: {n}件(索引の .extract_warnings.json)"));
+    }
+}
+
+fn logs(out: &mut Out, root: &Path) {
+    out.section("ログ");
+    let dir = root.join("data").join("logs");
+    for (what, prefix) in [("本体", "shiori-"), ("RAG", "rag-")] {
+        let Some(path) = newest(&dir, prefix) else {
+            out.plain(format!("{what}のログは無い(本体が一度も起動していない手がかり)"));
+            continue;
+        };
+        out.plain(format!("{what}の直近のログ: {}", rel(root, &path)));
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        let lines: Vec<&str> = text.lines().collect();
+        let errors: Vec<&str> = lines.iter().copied().filter(|l| l.contains(" エラー [")).collect();
+        let repairs: Vec<&str> =
+            lines.iter().copied().filter(|l| l.contains(&format!("[{REPAIR_PART}]"))).collect();
+        if errors.is_empty() {
+            out.sub("エラーの行は無い");
+        }
+        for l in errors.iter().rev().take(LOG_LINES).rev() {
+            out.sub(cut(l));
+        }
+        for l in repairs.iter().rev().take(LOG_LINES).rev() {
+            out.sub(format!("直した: {}", cut(l)));
+        }
+    }
+}
+
+/// 診断の文章を `data/logs/diagnose-日時.txt` に書く。書いた場所を返す。
+pub fn save(root: &Path, report: &Report) -> std::io::Result<PathBuf> {
+    let dir = root.join("data").join("logs");
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("diagnose-{}.txt", Local::now().format("%Y%m%d-%H%M%S")));
+    std::fs::write(&path, &report.text)?;
+    Ok(path)
+}
+
+fn newest(dir: &Path, prefix: &str) -> Option<PathBuf> {
+    std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.file_name().is_some_and(|n| n.to_string_lossy().starts_with(prefix)))
+        .filter(|p| p.extension().is_some_and(|e| e == "log"))
+        .max_by_key(|p| p.metadata().and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH))
+}
+
+fn count_md(dir: &Path) -> Option<usize> {
+    let mut n = 0;
+    let mut stack = vec![dir.to_path_buf()];
+    std::fs::read_dir(dir).ok()?;
+    while let Some(d) = stack.pop() {
+        for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
+            let p = e.path();
+            if is_mac_meta(&p) {
+                continue;
+            }
+            if p.is_dir() {
+                stack.push(p);
+            } else if p.extension().is_some_and(|x| x == "md") {
+                n += 1;
+            }
+        }
+    }
+    Some(n)
+}
+
+/// Macがexfatに作る `._` のファイル。
+fn is_mac_meta(p: &Path) -> bool {
+    p.file_name().is_some_and(|n| n.to_string_lossy().starts_with("._"))
+}
+
+fn modified(p: &Path) -> Option<String> {
+    let t = p.metadata().ok()?.modified().ok()?;
+    Some(chrono::DateTime::<Local>::from(t).format("%Y-%m-%d %H:%M").to_string())
+}
+
+fn rel(root: &Path, p: &Path) -> String {
+    p.strip_prefix(root).unwrap_or(p).display().to_string().replace('\\', "/")
+}
+
+fn cut(s: &str) -> String {
+    let mut c: String = s.chars().take(LINE_CHARS).collect();
+    if s.chars().count() > LINE_CHARS {
+        c.push('…');
+    }
+    c
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn 空のフォルダでも文章ができ_要るものが無いとNGになる() {
+        let dir = std::env::temp_dir().join(format!("shiori-diagnose-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let r = build(&dir, "test");
+        let _ = std::fs::remove_dir_all(&dir);
+        assert!(r.text.contains("## SSDの中"));
+        assert!(r.text.contains("[NG] config.json を読めない"));
+        assert!(r.ng > 0);
+    }
+
+    #[test]
+    fn 長い行は切る() {
+        let long = "あ".repeat(300);
+        assert_eq!(cut(&long).chars().count(), LINE_CHARS + 1);
+    }
+}

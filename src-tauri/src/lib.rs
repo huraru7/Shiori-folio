@@ -11,6 +11,7 @@ mod claude_stats;
 mod claude_status;
 mod db;
 pub mod eject;
+pub mod diagnose;
 #[cfg(windows)]
 mod disk_io;
 mod llm_client;
@@ -962,11 +963,17 @@ fn macos_local_vectordb_dir() -> Option<PathBuf> {
 // 同じフォルダ(開発の版のbin/<os>/ver6-dev/など)を先に見て、無ければbin/<os>/を見る。
 // どちらにも無ければNoneで、いままでどおりPython版(services/rag)を起動する。
 // 実行ファイルを置くだけで切り替わり、外せば戻る(切り替えの途中で、版ごとに試せるように)。
+// Macでは、CLI(shiori-doctorなど)が.appの隣にいるとき、その.appの中(本体の隣)も見る。
 pub fn rust_rag_exe() -> Option<PathBuf> {
     let name = exe_name("shiori-rag");
-    let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.join(&name)));
+    let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(Path::to_path_buf));
+    let beside = exe_dir.as_ref().map(|d| d.join(&name));
+    let in_app = exe_dir
+        .filter(|_| cfg!(target_os = "macos"))
+        .map(|d| d.join("shiori-folio.app").join("Contents").join("MacOS").join(&name));
     beside
         .into_iter()
+        .chain(in_app)
         .chain(std::iter::once(portable_bin_dir().join(&name)))
         .find(|p| p.is_file())
 }

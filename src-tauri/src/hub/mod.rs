@@ -79,8 +79,8 @@ impl Hub {
     /// 拡張機能のフォルダを全部読み直す。
     fn scan(&mut self) {
         self.extensions.clear();
-        let entries = match std::fs::read_dir(&self.extensions_dir) {
-            Ok(entries) => entries,
+        let dirs = match extension_dirs(&self.extensions_dir) {
+            Ok(dirs) => dirs,
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 shiori_log::info("HUB", "拡張機能のフォルダが無い", &[("場所", &self.extensions_dir.display())]);
                 return;
@@ -94,16 +94,8 @@ impl Hub {
                 return;
             }
         };
-        let mut dirs: Vec<PathBuf> = entries
-            .flatten()
-            .map(|e| e.path())
-            .filter(|p| p.is_dir())
-            // Macの`._`ファイルや、`_`で始まる作業用のフォルダは拡張機能として扱わない
-            .filter(|p| p.file_name().is_some_and(|n| !n.to_string_lossy().starts_with(['.', '_'])))
-            .collect();
-        dirs.sort();
         for dir in dirs {
-            let ext = self.read_one(dir);
+            let ext = read_one(dir, &self.approvals);
             log_extension(&ext);
             self.extensions.push(ext);
         }
@@ -113,26 +105,6 @@ impl Hub {
             "拡張機能を読み込んだ",
             &[("数", &self.extensions.len()), ("使える", &ready), ("場所", &self.extensions_dir.display())],
         );
-    }
-
-    fn read_one(&self, dir: PathBuf) -> Extension {
-        let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-        let (manifest, status) = match manifest::load(&dir) {
-            Ok(m) => {
-                let status = self.approval_status(&m);
-                (Some(m), status)
-            }
-            Err(e) => (None, Status::Invalid { code: e.code, detail: e.detail }),
-        };
-        Extension { folder, dir, manifest, status }
-    }
-
-    fn approval_status(&self, m: &Manifest) -> Status {
-        match approvals::unapproved_uses(&m.uses, self.approvals.extensions.get(&m.name)) {
-            None => Status::NeedsApproval { first_time: true, added: m.uses.clone() },
-            Some(added) if added.is_empty() => Status::Ready,
-            Some(added) => Status::NeedsApproval { first_time: false, added },
-        }
     }
 
     pub fn extensions(&self) -> &[Extension] {
@@ -218,6 +190,52 @@ pub fn call_provided(
         // 画面の部品の提供する操作を中継するのは、段階2以降(画面が開いていないと答えられないため)
         Kind::Ui => Err(CallError::new(error_codes::EXT_012, format!("画面の部品{target}の{method}"))),
     }
+}
+
+/// 拡張機能として読むフォルダの一覧(名前の順)。
+fn extension_dirs(extensions_dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(extensions_dir)?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        // Macの`._`ファイルや、`_`で始まる作業用のフォルダは拡張機能として扱わない
+        .filter(|p| p.file_name().is_some_and(|n| !n.to_string_lossy().starts_with(['.', '_'])))
+        .collect();
+    dirs.sort();
+    Ok(dirs)
+}
+
+fn read_one(dir: PathBuf, approvals: &ApprovalFile) -> Extension {
+    let folder = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let (manifest, status) = match manifest::load(&dir) {
+        Ok(m) => {
+            let status = approval_status(&m, approvals);
+            (Some(m), status)
+        }
+        Err(e) => (None, Status::Invalid { code: e.code, detail: e.detail }),
+    };
+    Extension { folder, dir, manifest, status }
+}
+
+fn approval_status(m: &Manifest, approvals: &ApprovalFile) -> Status {
+    match approvals::unapproved_uses(&m.uses, approvals.extensions.get(&m.name)) {
+        None => Status::NeedsApproval { first_time: true, added: m.uses.clone() },
+        Some(added) if added.is_empty() => Status::Ready,
+        Some(added) => Status::NeedsApproval { first_time: false, added },
+    }
+}
+
+/// 診断のために、拡張機能を読むだけ(段階6)。承認の記録が壊れていても脇へ移さず、ログにも書かない。
+/// 返すのは、拡張機能の一覧と、承認の記録が読めなかったときの理由。フォルダが無ければ空の一覧。
+pub fn inspect(root: &Path) -> (Vec<Extension>, Option<String>) {
+    let (approvals, broken) = match approvals::load(&approvals::approvals_path(&root.join("data").join("extensions"))) {
+        Ok(a) => (a, None),
+        Err(detail) => (ApprovalFile { format: 1, ..Default::default() }, Some(detail)),
+    };
+    let extensions = extension_dirs(&root.join("extensions"))
+        .map(|dirs| dirs.into_iter().map(|d| read_one(d, &approvals)).collect())
+        .unwrap_or_default();
+    (extensions, broken)
 }
 
 fn log_extension(ext: &Extension) {
