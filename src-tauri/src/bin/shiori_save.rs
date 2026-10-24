@@ -62,9 +62,17 @@ const MEMORY_HISTORY_DIR: &str = "memory-history";
 const MEMORY_HISTORY_GENERATIONS: usize = 3;
 // 退避ファイル名でproject idと区別するための、全体用memoryの識別子。
 const MEMORY_GLOBAL_KEY: &str = "_global";
-// 上限(frontmatter込み)。超えても保存は止めず、警告で整理を促す。
+// 上限(本文だけ。frontmatterは数えない)。超えても保存は止めず、警告で整理を促す。
+// frontmatterを外すのは、`related` が記録の増えるほど伸び、整理しても減らせないため(2026-10-24、ふらる)。
 const MEMORY_MAX_LINES: usize = 200;
 const MEMORY_MAX_CHARS: usize = 6000;
+
+/// memoryの本文の行数と字数が上限を超えていれば、その行数と字数を返す。
+fn memory_over_limit(body: &str) -> Option<(usize, usize)> {
+    let lines = body.lines().count();
+    let chars = body.chars().count();
+    (lines > MEMORY_MAX_LINES || chars > MEMORY_MAX_CHARS).then_some((lines, chars))
+}
 
 fn default_index() -> bool {
     true
@@ -684,11 +692,9 @@ fn save_memory(
     }
 
     let mut warnings = Vec::new();
-    let lines = new_content.lines().count();
-    let chars = new_content.chars().count();
-    if lines > MEMORY_MAX_LINES || chars > MEMORY_MAX_CHARS {
+    if let Some((lines, chars)) = memory_over_limit(&body) {
         let w = format!(
-            "memoryが上限を超えています({lines}行・{chars}字。上限は{MEMORY_MAX_LINES}行・{MEMORY_MAX_CHARS}字)。完了した項目を消し、履歴が要る内容はjournal/decisionへ移して整理してください"
+            "memoryが上限を超えています(本文{lines}行・{chars}字。上限は本文{MEMORY_MAX_LINES}行・{MEMORY_MAX_CHARS}字)。完了した項目を消し、履歴が要る内容はjournal/decisionへ移して整理してください"
         );
         eprintln!("警告: {w}");
         shiori_log::warn("SAVE", "memoryが上限を超えた", &[("行", &lines), ("字", &chars)]);
@@ -1141,6 +1147,13 @@ mod tests {
     fn 退避ファイル名にコロンを含めない() {
         let name = memory_history_file_name("shiori", "2026-10-10T15:31:52.928312+09:00");
         assert_eq!(name, "shiori-memory-2026-10-10T15-31-52.928312+09-00.md");
+    }
+
+    #[test]
+    fn memoryの上限は本文だけで数える() {
+        assert_eq!(memory_over_limit(&"あ".repeat(MEMORY_MAX_CHARS)), None);
+        assert_eq!(memory_over_limit(&"あ".repeat(MEMORY_MAX_CHARS + 1)), Some((1, MEMORY_MAX_CHARS + 1)));
+        assert_eq!(memory_over_limit(&"行\n".repeat(MEMORY_MAX_LINES + 1)), Some((MEMORY_MAX_LINES + 1, (MEMORY_MAX_LINES + 1) * 2)));
     }
 
     #[test]
