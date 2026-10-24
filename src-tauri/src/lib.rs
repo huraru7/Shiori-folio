@@ -1534,7 +1534,14 @@ async fn eject_preview() -> Result<EjectPreview, String> {
 /// `shiori-eject`か、再起動後にこの画面で行う)。
 #[tauri::command]
 async fn eject_execute(app: tauri::AppHandle) -> Result<eject::StopOutcome, String> {
+    // 先に、ハブで拡張機能の別のプログラムを止める(止める印を付けてから止めるので、再起動しない)。
+    // 外から一斉に止めると、ハブが「落ちた」と見て再起動し、SSDをつかみ直す恐れがあった(段階6で見つけた)
+    if let Some(programs) = app.try_state::<hub::process::ProgramsState>() {
+        programs.0.stop_all();
+    }
     let outcome = tauri::async_runtime::spawn_blocking(|| {
+        // 止めたプログラムが一覧に残らないよう、少し待ってから一覧を作る
+        std::thread::sleep(Duration::from_millis(300));
         let (plan, _sys) = eject::current_plan(&project_root());
         let pids: Vec<u32> = plan.to_stop.iter().map(|e| e.pid).collect();
         eject::stop_processes(&pids)
