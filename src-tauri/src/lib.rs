@@ -5733,31 +5733,43 @@ pub fn run() {
                     app_handle.exit(0);
                 }
             }
-            if let tauri::RunEvent::ExitRequested { .. } = event {
-                use tauri::Manager;
-                shiori_log::info("APP", "終了する", &[]);
-                if let Some(backend) = app_handle.try_state::<BackendState>() {
-                    if let Ok(mut procs) = backend.0.lock() {
-                        if let Some(mut c) = procs.llm.take() {
-                            let _ = c.kill();
-                        }
-                        let root = project_root();
-                        if let Some(mut c) = procs.embedding.take() {
-                            let _ = c.kill();
-                            shared_daemon::clear_lock_of(&root, ".shiori-embed.lock", c.id());
-                        }
-                        if let Some(mut c) = procs.rag.take() {
-                            let _ = c.kill();
-                            shared_daemon::clear_lock_of(&root, ".shiori-rag.lock", c.id());
-                        }
-                    }
-                }
-                if let Some(stt) = app_handle.try_state::<Arc<SttManager>>() {
-                    stt.stop_now("アプリ終了のため");
-                }
-                if let Some(programs) = app_handle.try_state::<hub::process::ProgramsState>() {
-                    programs.0.stop_all();
-                }
+            // Macの「終了」(⌘Q・Dock・アプリへの終了の合図)は、ExitRequestedを通らずにExitへ進む
+            // (段階6で見つけた)。どちらでも終わりの処理を走らせる(shutdownの中で1回だけにする)
+            if matches!(event, tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit) {
+                shutdown(app_handle);
             }
         });
+}
+
+/// 終わりの処理。起動した子プロセスを止め、自分が止めたサービスのロックを消し、拡張機能を止める。
+/// 何度呼んでも1回だけ走る。
+fn shutdown(app_handle: &tauri::AppHandle) {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static DONE: AtomicBool = AtomicBool::new(false);
+    if DONE.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    shiori_log::info("APP", "終了する", &[]);
+    if let Some(backend) = app_handle.try_state::<BackendState>() {
+        if let Ok(mut procs) = backend.0.lock() {
+            if let Some(mut c) = procs.llm.take() {
+                let _ = c.kill();
+            }
+            let root = project_root();
+            if let Some(mut c) = procs.embedding.take() {
+                let _ = c.kill();
+                shared_daemon::clear_lock_of(&root, ".shiori-embed.lock", c.id());
+            }
+            if let Some(mut c) = procs.rag.take() {
+                let _ = c.kill();
+                shared_daemon::clear_lock_of(&root, ".shiori-rag.lock", c.id());
+            }
+        }
+    }
+    if let Some(stt) = app_handle.try_state::<Arc<SttManager>>() {
+        stt.stop_now("アプリ終了のため");
+    }
+    if let Some(programs) = app_handle.try_state::<hub::process::ProgramsState>() {
+        programs.0.stop_all();
+    }
 }
