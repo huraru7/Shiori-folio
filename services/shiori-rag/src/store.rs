@@ -57,6 +57,11 @@ impl Collection {
             if path.extension().and_then(|e| e.to_str()) != Some(SHARD_EXT) {
                 continue;
             }
+            // Macがexfatに作る `._` のファイル(Macからは見えず、Windowsからは見える)は索引ではない。
+            // 読むと「壊れている」と扱ってしまう(段階6、別のWindowsのPCで見つかった)
+            if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("._")) {
+                continue;
+            }
             match read_shard(&path) {
                 Ok(records) if !records.is_empty() => {
                     let source = records[0].source().to_string();
@@ -261,6 +266,20 @@ mod tests {
         assert_eq!(report.broken_files, 1);
         assert_eq!(c2.count(), 0);
         assert!(!shard.exists());
+    }
+
+    #[test]
+    fn Macの隠しファイルは読まず_消さない() {
+        let dir = tempfile::tempdir().unwrap();
+        let (mut c, _) = Collection::open(dir.path()).unwrap();
+        c.replace_source("a.md", vec![rec("a-0", "a.md", [0.0, 0.0])]).unwrap();
+        let shard = c.shard_path("a.md");
+        let hidden = shard.with_file_name(format!("._{}", shard.file_name().unwrap().to_string_lossy()));
+        fs::write(&hidden, b"\x00\x05\x16\x07Mac OS X").unwrap();
+        let (c2, report) = Collection::open(dir.path()).unwrap();
+        assert_eq!(report.broken_files, 0, "壊れたファイルに数えない");
+        assert_eq!(c2.count(), 1);
+        assert!(hidden.exists(), "Macの隠しファイルは消さない");
     }
 
     #[test]
