@@ -21,9 +21,17 @@ use tauri::{Manager, Runtime, UriSchemeContext};
 pub const SCHEME: &str = "shiori-ext";
 
 /// 拡張機能のページに付ける守りの指定。
-/// `'self'`は、囲い(sandbox)の中でも拡張機能自身のURLを指す(WebView2とWKWebViewで確かめる。企画書の未確定事項)。
-pub const EXTENSION_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; \
-     img-src 'self' data:; font-src 'self'; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
+/// `'self'`だけでは、WKWebView(Mac)の囲い(sandbox、origin無し)の中で拡張機能自身のURLに合わず、
+/// スクリプトもCSSも読めなかった(2026-10-24、Macで確かめた)。そこで専用のURLのoriginをそのまま書く。
+/// WebView2(Windows)は`'self'`で読めていたが、同じ形にそろえる。
+#[cfg(windows)]
+pub const EXTENSION_CSP: &str = "default-src 'none'; script-src 'self' http://shiori-ext.localhost; \
+     style-src 'self' http://shiori-ext.localhost 'unsafe-inline'; img-src 'self' http://shiori-ext.localhost data:; \
+     font-src 'self' http://shiori-ext.localhost; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
+#[cfg(not(windows))]
+pub const EXTENSION_CSP: &str = "default-src 'none'; script-src 'self' shiori-ext://localhost; \
+     style-src 'self' shiori-ext://localhost 'unsafe-inline'; img-src 'self' shiori-ext://localhost data:; \
+     font-src 'self' shiori-ext://localhost; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
 
 /// 拡張機能が詩織に頼みごとをするための部品(`shiori.call(method, params)`)。
 const BRIDGE_JS: &str = include_str!("shiori-bridge.js");
