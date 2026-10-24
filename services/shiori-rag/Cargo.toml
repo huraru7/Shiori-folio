@@ -32,6 +32,12 @@ unicode-normalization = "0.1.26"
 ureq = { version = "2", features = ["json"] }
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 
+# Macでは、リランカーの行列の計算にAppleのAccelerateを使う(段階5のMacの速さ、2026-10-24)
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-core = { version = "0.11", default-features = false, features = ["accelerate"] }
+candle-nn = { version = "0.11", default-features = false, features = ["accelerate"] }
+candle-transformers = { version = "0.11", default-features = false, features = ["accelerate"] }
+
 [profile.release]
 debug = false
 
