@@ -233,8 +233,9 @@ impl Index {
 
     /// 保存の直後に、1件だけを登録し直す。ファイルが無ければNotFound。戻り値は登録したチャンクの数。
     pub fn reindex_one(&self, embedder: &Embedder, relative_path: &str) -> Result<usize, ReindexError> {
-        let rel = relative_path.replace('\\', "/");
-        let path = self.knowledge_dir.join(&rel);
+        // libraryの中の絶対パスで呼ばれても、状態のキーは同期と同じ相対の名前にする
+        let path = self.knowledge_dir.join(relative_path.replace('\\', "/"));
+        let rel = rel_of(&path, &self.knowledge_dir);
         if !path.is_file() {
             return Err(ReindexError::NotFound);
         }
@@ -450,12 +451,24 @@ pub fn asset_path_for(meta_path: &Path) -> Option<PathBuf> {
 }
 
 fn rel_of(path: &Path, base: &Path) -> String {
-    path.strip_prefix(base)
-        .unwrap_or(path)
-        .components()
-        .map(|c| c.as_os_str().to_string_lossy().into_owned())
-        .collect::<Vec<_>>()
-        .join("/")
+    index_key(
+        &path
+            .strip_prefix(base)
+            .unwrap_or(path)
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+            .join("/"),
+    )
+}
+
+/// 索引の中での記事の名前(状態のキーと `source`)。濁点などを1文字にまとめた形(NFC)にそろえる。
+/// MacはexfatのSSDの名前を分けた形(NFD)で返し、Windowsはまとめた形で返すので、そろえないと
+/// OSを切り替えるたびに同じ記事を「消して足す」ことになる(段階6、別のWindowsのPCで見つかった)。
+/// ファイルを開くときは、この名前ではなく、見つけたときのパスをそのまま使う。
+fn index_key(rel: &str) -> String {
+    use unicode_normalization::UnicodeNormalization;
+    rel.replace('\\', "/").nfc().collect()
 }
 
 /// 索引の対象(`*.md` と `*.meta`)。`_system/` の下と、`._` で始まるもの(macOSが作る付属ファイル)は除く。
@@ -538,5 +551,17 @@ mod tests {
         let got: Vec<String> = list_indexable_files(d.path()).iter().map(|p| rel_of(p, d.path())).collect();
         assert_eq!(got, vec!["a.md", "x/c.meta"]);
         assert_eq!(asset_path_for(&d.path().join("x/c.meta")), Some(d.path().join("x/c")));
+    }
+
+    #[test]
+    fn 記事の名前は濁点の表し方と区切りと絶対パスによらない() {
+        let base = Path::new("/ssd/library");
+        let nfd = "30-resources/\u{30b1}\u{3099}\u{30fc}\u{30e0}.md"; // ケ+濁点(Macの形)
+        let nfc = "30-resources/\u{30b2}\u{30fc}\u{30e0}.md"; // ゲ(Windowsの形)
+        assert_eq!(rel_of(&base.join(nfd), base), nfc);
+        assert_eq!(rel_of(&base.join(nfc), base), nfc);
+        assert_eq!(index_key("30-resources\\x.md"), "30-resources/x.md");
+        assert_eq!(rel_of(&base.join(base.join("a/b.md")), base), "a/b.md", "libraryの中の絶対パス");
+        assert_eq!(source_name_for(&rel_of(&base.join(nfd), base)), "\u{30b2}\u{30fc}\u{30e0}.md");
     }
 }
