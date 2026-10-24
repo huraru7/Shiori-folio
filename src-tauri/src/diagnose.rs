@@ -19,6 +19,8 @@ use std::time::{Duration, SystemTime};
 
 /// 自動修復の行に付ける部品名(段階6の「4」。起動時に直したものを、この部品名でログに書く)。
 pub const REPAIR_PART: &str = "FIX";
+/// 自己確認の「自動修復」が試しのルートで直したときの部品名。診断はこの行を「直した」に入れない。
+pub const REPAIR_REHEARSAL_PART: &str = "FIX-SELFTEST";
 
 /// ログから拾う行の上限と、1行の長さの上限。
 const LOG_LINES: usize = 10;

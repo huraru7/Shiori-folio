@@ -1,7 +1,8 @@
 //! 起動時の自動修復(詩織Ver6.0の段階6)。
 //!
 //! 詩織が作ったもの(作り直せるもの)だけを直し、直したことを部品名 `FIX` の行でログに書く
-//! (診断 `diagnose.rs` がこの行を「直した」として拾う)。ふらるが書いたもの(library・棚・memory)と
+//! (診断 `diagnose.rs` がこの行を「直した」として拾う)。自己確認の「自動修復」が試しのルートで直した
+//! 分は、部品名 `FIX-SELFTEST` で書き、診断には出さない。ふらるが書いたもの(library・棚・memory)と
 //! 会話の記録(`shiori.db`)は直さない(診断で報告するだけ)。
 //!
 //! ほかの場所にある自動修復: 列の並び(`UI-001`、sidebar_layout.rs)、承認の記録(`EXT-007`、hub)、
@@ -15,7 +16,30 @@ use chrono::Local;
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 
-pub use crate::diagnose::REPAIR_PART;
+pub use crate::diagnose::{REPAIR_PART, REPAIR_REHEARSAL_PART};
+
+thread_local! {
+    /// このスレッドで `self_check` が走っているあいだだけ true(試しの修復を本当の修復と分けて書く)。
+    static REHEARSAL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `self_check` のあいだ `REHEARSAL` を立て、抜けるときに(途中で戻っても)下ろす。
+struct Rehearsal;
+impl Rehearsal {
+    fn start() -> Self {
+        REHEARSAL.with(|r| r.set(true));
+        Self
+    }
+}
+impl Drop for Rehearsal {
+    fn drop(&mut self) {
+        REHEARSAL.with(|r| r.set(false));
+    }
+}
+
+fn repair_part() -> &'static str {
+    if REHEARSAL.with(|r| r.get()) { REPAIR_REHEARSAL_PART } else { REPAIR_PART }
+}
 
 /// 壊れた `config.json` を、写しも無いときに戻す既定の設定(リポジトリの `config.json`)。
 const DEFAULT_CONFIG: &str = include_str!("../../config.json");
@@ -38,7 +62,7 @@ pub fn before_log(root: &Path) -> Before {
 pub fn fixed(code: ErrorCode, fields: &[(&str, &dyn Display)]) {
     let mut all: Vec<(&str, &dyn Display)> = vec![("コード", &code.code)];
     all.extend_from_slice(fields);
-    shiori_log::warn(REPAIR_PART, code.message, &all);
+    shiori_log::warn(repair_part(), code.message, &all);
 }
 
 /// 起動の最初(ログを始めた直後、設定を読む前)に呼ぶ。
@@ -130,6 +154,7 @@ pub fn save_last_good_config(root: &Path) {
 /// 修復を当てる(exfatのSSDの上で確かめるため、PCの一時フォルダではなくSSDに作る)。終わったら消す。
 /// 戻り値は、全部直ったかと、ログの欄。
 pub fn self_check(root: &Path) -> (bool, Vec<(&'static str, String)>) {
+    let _rehearsal = Rehearsal::start();
     let f = root.join("data").join("_selftest-repair");
     let _ = std::fs::remove_dir_all(&f);
     let data = f.join("data");
@@ -246,6 +271,21 @@ mod tests {
         assert!(pass, "{fields:?}");
         assert!(!t.0.join("data").join("_selftest-repair").exists());
         assert_eq!(std::fs::read_to_string(t.0.join("config.json")).unwrap(), DEFAULT_CONFIG, "本物の設定は触らない");
+        assert_eq!(repair_part(), REPAIR_PART, "確かめが終わったら本当の修復の部品名に戻す");
+    }
+
+    #[test]
+    fn 試しの修復は診断の直したに入らない部品名で書く() {
+        {
+            let _r = Rehearsal::start();
+            assert_eq!(repair_part(), REPAIR_REHEARSAL_PART);
+            // 診断は `[FIX]` を含む行だけを拾うので、試しの行は拾われない
+            assert!(!format!("[{REPAIR_REHEARSAL_PART}]").contains(&format!("[{REPAIR_PART}]")));
+        }
+        assert_eq!(repair_part(), REPAIR_PART);
+        // ほかのスレッドは、試しのあいだでも本当の修復の部品名のまま
+        let _r = Rehearsal::start();
+        assert_eq!(std::thread::spawn(repair_part).join().unwrap(), REPAIR_PART);
     }
 
     #[test]
