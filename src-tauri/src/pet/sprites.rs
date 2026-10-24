@@ -18,7 +18,17 @@ pub const FRAME_W: u32 = 128;
 pub const FRAME_H: u32 = 192;
 
 const DEFAULT_JSON: &str = include_str!("../../../src/assets/pet/sprites.json");
-const DEFAULT_IDLE: &[u8] = include_bytes!("../../../src/assets/pet/idle.png");
+/// 同梱の絵(`sprites.json` に書いた動きの絵は、ここにも足す)
+const DEFAULT_FILES: &[(&str, &[u8])] = &[
+    ("idle.png", include_bytes!("../../../src/assets/pet/idle.png")),
+    ("read.png", include_bytes!("../../../src/assets/pet/read.png")),
+    ("sleep.png", include_bytes!("../../../src/assets/pet/sleep.png")),
+    ("wake.png", include_bytes!("../../../src/assets/pet/wake.png")),
+];
+
+fn default_file(name: &str) -> Option<Vec<u8>> {
+    DEFAULT_FILES.iter().find(|(n, _)| *n == name).map(|(_, b)| b.to_vec())
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -101,8 +111,7 @@ impl Sprites {
                 ),
             }
         }
-        Self::load_from(|f| (f == "idle.png").then(|| DEFAULT_IDLE.to_vec()))
-            .expect("同梱のペットの絵が読めない")
+        Self::load_from(default_file).expect("同梱のペットの絵が読めない")
     }
 
     fn load_from(read: impl Fn(&str) -> Option<Vec<u8>>) -> Result<Self, String> {
@@ -174,7 +183,7 @@ mod tests {
 
     #[test]
     fn 同梱の絵は読め_外と真ん中で透明かどうかが分かる() {
-        let s = Sprites::load_from(|f| (f == "idle.png").then(|| DEFAULT_IDLE.to_vec())).unwrap();
+        let s = Sprites::load_from(default_file).unwrap();
         assert!(!s.opaque_at("idle", 0, false, 0, 0));
         let (x, y) = s.center_opaque().expect("不透明な点がある");
         assert!(s.opaque_at("idle", 0, false, x, y));
@@ -188,9 +197,20 @@ mod tests {
         let json = r#"{"frameWidth":128,"frameHeight":192,"animations":{"idle":{"file":"idle.png","frames":2}}}"#;
         let r = Sprites::load_from(|f| match f {
             "sprites.json" => Some(json.as_bytes().to_vec()),
-            "idle.png" => Some(DEFAULT_IDLE.to_vec()),
+            "idle.png" => default_file("idle.png"),
             _ => None,
         });
         assert!(r.is_err());
+    }
+
+    #[test]
+    fn 同梱の動きの絵は全部読め_無い動きはidleになる() {
+        let s = Sprites::load_from(default_file).unwrap();
+        for name in ["idle", "read", "sleep", "wake"] {
+            assert_eq!(s.anim(name).0, name);
+        }
+        assert_eq!(s.anim("read").1.info.frames, 32);
+        assert!(!s.anim("wake").1.info.r#loop);
+        assert_eq!(s.anim("notify").0, "idle");
     }
 }

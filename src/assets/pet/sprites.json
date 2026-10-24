@@ -2,6 +2,9 @@
   "frameWidth": 128,
   "frameHeight": 192,
   "animations": {
-    "idle": { "file": "idle.png", "frames": 1, "loop": true }
+    "idle": { "file": "idle.png", "frames": 32, "loop": true },
+    "read": { "file": "read.png", "frames": 32, "loop": true },
+    "sleep": { "file": "sleep.png", "frames": 32, "loop": true },
+    "wake": { "file": "wake.png", "frames": 5, "loop": false }
   }
 }
