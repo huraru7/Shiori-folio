@@ -23,6 +23,10 @@ pub const REPAIR_PART: &str = "FIX";
 /// ログから拾う行の上限と、1行の長さの上限。
 const LOG_LINES: usize = 10;
 const LINE_CHARS: usize = 200;
+/// 問題のある記事を名前で並べる上限(多いときは「ほか何件」にする)。
+const ARTICLE_LINES: usize = 20;
+/// frontmatterの `status` の値(library の `_system/CLAUDE.md`)。
+const STATUSES: &[&str] = &["draft", "new", "outdated", "deprecated", "disputed"];
 
 /// 1つの確かめの結果。
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -295,10 +299,26 @@ fn to_check(out: &mut Out, root: &Path) {
         Some(false) => out.item(Mark::Ng, "会話の記録(data/shiori.db)がSQLiteの形ではない"),
         None => out.item(Mark::Note, "会話の記録(data/shiori.db)が無い(初めての起動ならふつう)"),
     }
-    for (what, dir) in [("library", root.join("library")), ("棚", root.join("knowledge"))] {
-        match count_md(&dir) {
-            Some(n) => out.item(Mark::Ok, format!("{what}: 記事{n}件")),
-            None => out.item(Mark::Ng, format!("{what}のフォルダを読めない: {}", rel(root, &dir))),
+    for (what, dir, types) in [
+        ("library", root.join("library"), &["project", "area", "resource", "profile"][..]),
+        ("棚", root.join("knowledge"), &["knowledge"][..]),
+    ] {
+        let Some(files) = md_files(&dir) else {
+            out.item(Mark::Ng, format!("{what}のフォルダを読めない: {}", rel(root, &dir)));
+            continue;
+        };
+        let problems: Vec<(PathBuf, String)> =
+            files.iter().filter_map(|f| article_problem(f, types).map(|why| (f.clone(), why))).collect();
+        if problems.is_empty() {
+            out.item(Mark::Ok, format!("{what}: 記事{}件(読めない記事・frontmatterの崩れは無い)", files.len()));
+            continue;
+        }
+        out.item(Mark::Note, format!("{what}: 記事{}件のうち{}件に問題がある", files.len(), problems.len()));
+        for (f, why) in problems.iter().take(ARTICLE_LINES) {
+            out.sub(format!("{}: {why}", rel(root, f)));
+        }
+        if problems.len() > ARTICLE_LINES {
+            out.sub(format!("ほか{}件", problems.len() - ARTICLE_LINES));
         }
     }
     let warnings = crate::rag_vectordb_dir(root).join(".extract_warnings.json");
@@ -357,24 +377,67 @@ fn newest(dir: &Path, prefix: &str) -> Option<PathBuf> {
         .max_by_key(|p| p.metadata().and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH))
 }
 
-fn count_md(dir: &Path) -> Option<usize> {
-    let mut n = 0;
+/// `dir` の下の記事(`.md`)を全部、名前の順で返す。いちばん上の `_system/`(決まりの書類など)は除く。
+fn md_files(dir: &Path) -> Option<Vec<PathBuf>> {
+    let mut files = Vec::new();
     let mut stack = vec![dir.to_path_buf()];
     std::fs::read_dir(dir).ok()?;
     while let Some(d) = stack.pop() {
         for e in std::fs::read_dir(&d).into_iter().flatten().flatten() {
             let p = e.path();
-            if is_mac_meta(&p) {
+            if is_mac_meta(&p) || (d == dir && p.file_name().is_some_and(|n| n == "_system")) {
                 continue;
             }
             if p.is_dir() {
                 stack.push(p);
             } else if p.extension().is_some_and(|x| x == "md") {
-                n += 1;
+                files.push(p);
             }
         }
     }
-    Some(n)
+    files.sort();
+    Some(files)
+}
+
+/// 記事の問題(読めない、frontmatterの崩れ)を1つ返す。問題が無ければ `None`。
+/// 決まりは library の `_system/CLAUDE.md` の「保存する前に」。本文は読むだけで、診断には入れない。
+fn article_problem(path: &Path, types: &[&str]) -> Option<String> {
+    let bytes = match std::fs::read(path) {
+        Ok(b) => b,
+        Err(e) => return Some(format!("読めない({e})")),
+    };
+    let Ok(text) = String::from_utf8(bytes) else {
+        return Some("UTF-8として読めない(文字コード)".into());
+    };
+    let text = text.strip_prefix('\u{feff}').unwrap_or(&text);
+    let Some(rest) = text.strip_prefix("---\n").or_else(|| text.strip_prefix("---\r\n")) else {
+        return Some("frontmatterが無い(先頭が---ではない)".into());
+    };
+    let Some(end) = rest.find("\n---") else {
+        return Some("frontmatterが閉じていない(終わりの---が無い)".into());
+    };
+    let fm = match serde_yaml::from_str::<serde_yaml::Value>(&rest[..end]) {
+        Ok(v) if v.is_mapping() => v,
+        Ok(_) => return Some("frontmatterが「項目: 値」の形ではない".into()),
+        Err(e) => return Some(format!("frontmatterのYAMLが読めない({})", cut(&e.to_string()))),
+    };
+    let field = |k: &str| fm.get(k).and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty());
+    if field("title").is_none() {
+        return Some("titleが無い".into());
+    }
+    let Some(ty) = field("type") else {
+        return Some("typeが無い".into());
+    };
+    if !types.contains(&ty) {
+        return Some(format!("typeの値が決まりの外({ty})"));
+    }
+    if matches!(ty, "project" | "area") && field("kind").is_none() {
+        return Some(format!("typeが{ty}なのにkindが無い"));
+    }
+    if let Some(status) = field("status").filter(|s| !STATUSES.contains(s)) {
+        return Some(format!("statusの値が決まりの外({status})"));
+    }
+    None
 }
 
 /// Macがexfatに作る `._` のファイル。
@@ -412,6 +475,40 @@ mod tests {
         assert!(r.text.contains("## SSDの中"));
         assert!(r.text.contains("[NG] config.json を読めない"));
         assert!(r.ng > 0);
+    }
+
+    #[test]
+    fn 崩れた記事を見つける() {
+        let dir = std::env::temp_dir().join(format!("shiori-diagnose-articles-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let types = ["project", "area", "resource", "profile"];
+        let check = |name: &str, body: &[u8]| {
+            let p = dir.join(name);
+            std::fs::write(&p, body).unwrap();
+            article_problem(&p, &types)
+        };
+        assert_eq!(check("ok.md", "---\ntitle: よい\ntype: resource\nstatus: new\n---\n本文".as_bytes()), None);
+        assert!(check("sjis.md", &[0x82, 0xa0, 0x0a]).unwrap().contains("UTF-8"));
+        assert!(check("none.md", "本文だけ".as_bytes()).unwrap().contains("frontmatterが無い"));
+        assert!(check("open.md", "---\ntitle: a\n本文".as_bytes()).unwrap().contains("閉じていない"));
+        assert!(check("yaml.md", "---\ntitle: [a\n---\n".as_bytes()).unwrap().contains("YAML"));
+        assert!(check("notitle.md", "---\ntype: resource\n---\n".as_bytes()).unwrap().contains("title"));
+        assert!(check("badtype.md", "---\ntitle: a\ntype: memo\n---\n".as_bytes()).unwrap().contains("type"));
+        assert!(check("nokind.md", "---\ntitle: a\ntype: area\n---\n".as_bytes()).unwrap().contains("kind"));
+        assert!(check("status.md", "---\ntitle: a\ntype: resource\nstatus: old\n---\n".as_bytes()).unwrap().contains("status"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn いちばん上の_systemは記事として数えない() {
+        let dir = std::env::temp_dir().join(format!("shiori-diagnose-system-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("_system")).unwrap();
+        std::fs::create_dir_all(dir.join("20-areas").join("_system")).unwrap();
+        std::fs::write(dir.join("_system").join("CLAUDE.md"), "決まり").unwrap();
+        std::fs::write(dir.join("20-areas").join("_system").join("a.md"), "x").unwrap();
+        let files = md_files(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(files.len(), 1, "いちばん上の_systemだけを除く");
     }
 
     #[test]
