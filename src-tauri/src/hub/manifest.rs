@@ -122,6 +122,9 @@ pub struct Manifest {
     pub provides: Vec<Provide>,
     #[serde(default)]
     pub errors: Vec<ErrorDef>,
+    /// 自己確認の起動の合図に応える、自分の確かめを持つか(段階6)。trueなのに応えなければ、自己確認はNGにする
+    #[serde(default)]
+    pub selftest: bool,
 }
 
 /// 読み込みの失敗。エラーコードと、何が悪いかの説明。
@@ -297,6 +300,15 @@ pub(crate) mod tests {
         assert_eq!(m.kind, Kind::Ui);
         assert_eq!(m.uses, vec!["storage", "ext.call"]);
         assert_eq!(m.entry.for_this_os(), Some("index.html"));
+        assert!(!m.selftest, "書いていなければ、自分の確かめは持たない");
+    }
+
+    #[test]
+    fn 自分の確かめを持つと書ける() {
+        let t = TempDir::new("manifest-selftest");
+        let json = ui_manifest("hello-ui", "").replacen(r#""kind": "ui","#, r#""kind": "ui", "selftest": true,"#, 1);
+        let dir = make_ext(&t.0, "hello-ui", &json);
+        assert!(load(&dir).unwrap().selftest);
     }
 
     #[test]

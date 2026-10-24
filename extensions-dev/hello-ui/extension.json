@@ -13,5 +13,6 @@
   ],
   "errors": [
     { "code": "hello-ui-001", "message": "入力が空" }
-  ]
+  ],
+  "selftest": true
 }

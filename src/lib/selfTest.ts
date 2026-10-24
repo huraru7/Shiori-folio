@@ -73,6 +73,13 @@ export async function askExtension(iframe: HTMLIFrameElement | null, name: strin
   }
 }
 
+// 拡張機能の中の確かめの結果を、ログの欄の文と合否にする。説明書で `selftest: true` と言っているのに
+// 応えなければNG(段階6。Macで拡張機能のスクリプトが読めなかったとき、応えないのを見過ごしてOKにしていた)。
+function extensionResult(done: SelfTestDone | null, hasSelfTest: boolean): [string, boolean] {
+  if (done) return [`期待どおり${done.ok} 違う${done.ng}`, done.ng === 0 && done.ok > 0];
+  return hasSelfTest ? ["応えない", false] : ["-", true];
+}
+
 export async function runSelfTest(): Promise<void> {
   // 画面の部品のエラー(console.errorと、捕まえられなかった例外)を集める
   const errors: string[] = [];
@@ -244,10 +251,7 @@ async function checkScreen(item: SidebarItem, visible: SidebarItem[], errors: st
   let extensionPass = true;
   if (item.ext) {
     const done = await askExtension(p?.querySelector("iframe") ?? null, item.ext.name);
-    if (done) {
-      fields.拡張機能の自己確認 = `期待どおり${done.ok} 違う${done.ng}`;
-      extensionPass = done.ng === 0 && done.ok > 0;
-    }
+    [fields.拡張機能の自己確認, extensionPass] = extensionResult(done, item.ext.selftest);
   }
 
   await sleep(150);
@@ -298,11 +302,8 @@ async function checkTool(item: SidebarItem, visible: SidebarItem[], errors: stri
     閉じても中身が残る: kept,
     エラー: newErrors.length,
   };
-  let extensionPass = true;
-  if (done) {
-    fields.拡張機能の自己確認 = `期待どおり${done.ok} 違う${done.ng}`;
-    extensionPass = done.ng === 0 && done.ok > 0;
-  }
+  const [summary, extensionPass] = extensionResult(done, item.ext.selftest);
+  fields.拡張機能の自己確認 = summary;
   if (newErrors.length > 0) fields.エラーの内容 = newErrors[0];
   await report(`小道具:${name}`, opened && stayedOnHome && closed && kept && extensionPass && newErrors.length === 0, fields);
 }

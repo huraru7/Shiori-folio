@@ -8,5 +8,6 @@
   "entry": "index.html",
   "places": ["window"],
   "slot": "screen",
-  "uses": []
+  "uses": [],
+  "selftest": true
 }

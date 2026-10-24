@@ -11,5 +11,6 @@
   "errors": [
     { "code": "timer-001", "message": "長さか時刻として読めない" },
     { "code": "timer-002", "message": "予約の数が多すぎる" }
-  ]
+  ],
+  "selftest": true
 }

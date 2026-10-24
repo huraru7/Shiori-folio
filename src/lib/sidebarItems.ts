@@ -16,7 +16,7 @@ export interface SidebarItem {
   // アイコンのURL。無ければ名前の頭の1文字を出す
   icon: string | null;
   // 拡張機能の項目なら、その名前と入口
-  ext: { name: string; entry: string } | null;
+  ext: { name: string; entry: string; selftest: boolean } | null;
 }
 
 // 同梱の仮のドット絵(src/assets/icons/{id}.png)。data/ui/icons/に同じ名前のPNGを置くと、そちらを使う。
@@ -54,7 +54,7 @@ function extensionItems(list: ExtensionInfo[]): SidebarItem[] {
       label: e.title ?? (e.name as string),
       group: e.slot,
       icon: e.icon ? extensionUrl(e.name as string, e.icon) : null,
-      ext: { name: e.name as string, entry: e.entry as string },
+      ext: { name: e.name as string, entry: e.entry as string, selftest: e.selftest },
     }));
 }
 

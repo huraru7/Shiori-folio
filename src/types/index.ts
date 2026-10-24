@@ -440,6 +440,8 @@ export interface ExtensionInfo {
   uses: ExtensionUse[];
   // ほかの拡張機能から呼ばれてよい操作
   provides: string[];
+  // 自己確認の起動の合図に応える、自分の確かめを持つか(段階6)
+  selftest: boolean;
   status: ExtensionStatus;
   // 初めての承認か(falseなら、使うものが増えたための承認)
   firstTime: boolean;

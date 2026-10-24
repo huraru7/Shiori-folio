@@ -11,5 +11,6 @@
   "errors": [
     { "code": "calculator-001", "message": "式が読めない" },
     { "code": "calculator-002", "message": "計算できない(0で割る、定義の外)" }
-  ]
+  ],
+  "selftest": true
 }

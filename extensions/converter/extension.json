@@ -11,5 +11,6 @@
   "errors": [
     { "code": "converter-001", "message": "数として読めない" },
     { "code": "converter-002", "message": "その基数で使えない文字" }
-  ]
+  ],
+  "selftest": true
 }

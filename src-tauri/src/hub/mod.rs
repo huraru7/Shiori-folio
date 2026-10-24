@@ -299,6 +299,8 @@ pub struct ExtensionDto {
     pub uses: Vec<UseDto>,
     /// ほかの拡張機能から呼ばれてよい操作
     pub provides: Vec<String>,
+    /// 自己確認の起動の合図に応える、自分の確かめを持つか
+    pub selftest: bool,
     /// "ready" | "needs-approval" | "invalid"
     pub status: &'static str,
     pub first_time: bool,
@@ -335,6 +337,7 @@ impl From<&Extension> for ExtensionDto {
             icon: m.and_then(|m| m.icon.clone()),
             uses: m.map(|m| use_dtos(&m.uses)).unwrap_or_default(),
             provides: m.map(|m| m.provides.iter().map(|p| p.method.clone()).collect()).unwrap_or_default(),
+            selftest: m.is_some_and(|m| m.selftest),
             status,
             first_time,
             added_uses: use_dtos(&added),
