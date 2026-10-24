@@ -30,16 +30,14 @@ body,
   transform-origin: 50% 100%;
 }
 
-/* 絵が1枚の間の、動きの代わりの印と揺れ。本当の動きの絵に差し替えたら外す */
+/* 動きの絵がまだ無い状態の、動きの代わりの印と揺れ。本当の動きの絵に差し替えたら外す
+   (読む・眠るは本当の絵にしたので外した) */
 @media (prefers-reduced-motion: no-preference) {
   .pet--appear .pet__sprite {
     animation: pet-appear 1s ease-out;
   }
   .pet--normal.pet--walk .pet__sprite {
     animation: pet-bob 0.25s steps(2) infinite;
-  }
-  .pet--normal.pet--read .pet__sprite {
-    animation: pet-breathe 3s ease-in-out infinite;
   }
   .pet--react .pet__sprite {
     animation: pet-squash 0.4s ease-out;
@@ -54,23 +52,73 @@ body,
   .pet--land .pet__sprite {
     animation: pet-squash 0.5s ease-out;
   }
-  .pet--sleep .pet__sprite {
-    filter: brightness(0.8);
-  }
 }
 
-.pet__mark {
+/* 眠っている間の「Z」。フードの右上(左向きのときは左上)から、小さく出て、斜め上へ上がりながら
+   大きくなって消える。3つを1秒ずつずらして流す。
+   ウィンドウは絵と同じ大きさなので、位置と大きさは絵の高さ(vh)の割合で決める */
+.pet__zzz {
   position: absolute;
-  font-family: var(--font-display, serif);
-  color: #ede6d6;
+  left: 66%;
+  top: 31%;
+  width: 0;
+  height: 0;
   pointer-events: none;
 }
 
-.pet__mark--sleep {
-  top: 4%;
-  right: 22%;
-  font-size: 9vh;
-  animation: pet-z 2.4s ease-in-out infinite;
+.pet__zzz > span {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  font-family: var(--font-display, serif);
+  font-size: 8vh;
+  font-weight: 600;
+  line-height: 1;
+  color: #ede6d6;
+  /* 明るい壁紙の上でも読めるよう、夜空色のふちを付ける */
+  text-shadow:
+    0 0 0.12em rgba(24, 30, 72, 0.9),
+    0 0 0.3em rgba(24, 30, 72, 0.6);
+  transform-origin: 0 100%;
+  opacity: 0;
+  animation: pet-z 3s linear infinite;
+}
+
+.pet__zzz > span:nth-child(2) {
+  animation-delay: 1s;
+}
+
+.pet__zzz > span:nth-child(3) {
+  animation-delay: 2s;
+}
+
+.pet__zzz--left {
+  left: 34%;
+}
+
+.pet__zzz--left > span {
+  left: auto;
+  right: 0;
+  transform-origin: 100% 100%;
+  --pet-z-dir: -1;
+}
+
+/* 動きを減らす設定のときは、動かさずに、小・中・大の3つを斜めに並べて出す */
+@media (prefers-reduced-motion: reduce) {
+  .pet__zzz > span {
+    animation: none;
+    opacity: 0.9;
+  }
+  .pet__zzz > span:nth-child(1) {
+    scale: 0.6;
+  }
+  .pet__zzz > span:nth-child(2) {
+    translate: calc(var(--pet-z-dir, 1) * 3vh) -6vh;
+    scale: 0.8;
+  }
+  .pet__zzz > span:nth-child(3) {
+    translate: calc(var(--pet-z-dir, 1) * 6vh) -12vh;
+  }
 }
 
 /* 知らせ: ランプのあたりの灯りが強くなる(右向きの絵では右手のあたり) */
@@ -107,12 +155,6 @@ body,
   }
 }
 
-@keyframes pet-breathe {
-  50% {
-    scale: 1 0.985;
-  }
-}
-
 @keyframes pet-squash {
   30% {
     scale: 1.06 0.94;
@@ -134,17 +176,26 @@ body,
   }
 }
 
+/* 「Z」が、小さく出て、ゆらぎながら斜め上へ上がり、大きくなって消える(左向きは --pet-z-dir で左へ) */
 @keyframes pet-z {
   0% {
     opacity: 0;
-    transform: translate(0, 20%);
+    translate: 0 0;
+    scale: 0.45;
+  }
+  15% {
+    opacity: 0.95;
   }
   50% {
-    opacity: 1;
+    translate: calc(var(--pet-z-dir, 1) * 5vh) -7vh;
+  }
+  75% {
+    opacity: 0.85;
   }
   100% {
     opacity: 0;
-    transform: translate(40%, -40%);
+    translate: calc(var(--pet-z-dir, 1) * 6vh) -15vh;
+    scale: 1.05;
   }
 }
 

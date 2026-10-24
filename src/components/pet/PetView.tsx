@@ -7,7 +7,8 @@ import "./pet.css";
 
 // ペットのウィンドウの中身(詩織Ver6.0の段階4)。位置・状態・絵のコマは本体(pet/mod.rs)が決めて
 // `pet://frame` で送るので、ここは絵を出すだけ。ウィンドウはキャラクターの絵と同じ大きさ(段階0の方式A)。
-// 絵が1枚の間は、動きを小さな印と揺れで表す(状態ごとのクラス。本当の動きの絵に差し替えたら外す)。
+// 動きの絵がまだ無い状態は、動きを小さな印と揺れで表す(状態ごとのクラス。本当の動きの絵に差し替えたら外す)。
+// 待機・読む・眠る・起きるは本当の絵がある。眠っている間の「Z」は、絵ではなく演出として残す。
 function PetView() {
   const [frame, setFrame] = useState<PetFrame | null>(null);
 
@@ -38,7 +39,14 @@ function PetView() {
           transform: frame.facing < 0 ? "scaleX(-1)" : undefined,
         }}
       />
-      {frame.state === "sleep" && <span className="pet__mark pet__mark--sleep">z</span>}
+      {frame.state === "sleep" && (
+        // 眠っている間の「Z」(絵ではなく演出)。頭の上から、ずらして3つ浮かべる
+        <span className={`pet__zzz${frame.facing < 0 ? " pet__zzz--left" : ""}`} aria-hidden>
+          <span>z</span>
+          <span>z</span>
+          <span>Z</span>
+        </span>
+      )}
       {(frame.state === "notify" || frame.state === "happy") && (
         <span className={`pet__glow${frame.facing < 0 ? " pet__glow--left" : ""}`} />
       )}
