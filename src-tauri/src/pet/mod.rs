@@ -250,7 +250,10 @@ pub fn enter(app: &AppHandle) -> Result<(), String> {
     let monitor = monitor_at(app, center.0, center.1).ok_or("画面が見つからない")?;
     let scale = dot_scale(&monitor);
     let world = world_of(&monitor, scale, false);
-    let sleep_after = crate::pet_sleep_minutes() as f64 * 60.0;
+    // 自己確認の起動では眠らせない。最後の入力から眠るまでの時間を過ぎてから走らせると、
+    // ペットが出た直後に眠り、「現れてから普段」の確かめが走らせる環境で変わってしまうため(段階6)
+    let sleep_after =
+        if crate::self_test::is_enabled() { f64::INFINITY } else { crate::pet_sleep_minutes() as f64 * 60.0 };
     let brain = Brain::new(&world, crate::notify::now_ms());
     let pet = window(app, PET).ok_or("ペットのウィンドウが無い")?;
     pet.set_size(PhysicalSize::new(FRAME_W * scale, FRAME_H * scale)).map_err(|e| e.to_string())?;
