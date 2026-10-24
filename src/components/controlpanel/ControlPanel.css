@@ -562,3 +562,23 @@
   font-size: var(--fs-sm);
   color: var(--paper-dim);
 }
+
+/* 診断のページ(詩織Ver6.0の段階6)。文章は外部のAIに貼るので、折り返して全部見えるようにする */
+.diagnose__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.diagnose__text {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+  color: var(--paper);
+  user-select: text;
+}

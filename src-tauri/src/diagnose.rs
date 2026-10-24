@@ -175,7 +175,13 @@ fn files(out: &mut Out, root: &Path) -> Option<serde_json::Value> {
             dir.join(crate::exe_name("shiori-folio"))
         }
     };
-    let beside = std::env::current_exe().ok().and_then(|e| e.parent().map(main_in)).filter(|p| p.is_file());
+    // 本体の診断の画面から呼んだときは、いま動いている実行ファイルが本体そのもの
+    let exe_now = std::env::current_exe().ok();
+    let beside = exe_now
+        .clone()
+        .filter(|e| e.file_stem().is_some_and(|s| s == "shiori-folio"))
+        .or_else(|| exe_now.and_then(|e| e.parent().map(main_in)))
+        .filter(|p| p.is_file());
     check(out, "本体", Some(beside.unwrap_or_else(|| main_in(&bin))), true);
     check(out, "埋め込みのサーバー", Some(exe("llama-server")), true);
     match crate::rust_rag_exe() {

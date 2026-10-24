@@ -11,9 +11,10 @@ import { SidebarSettingsPage } from "./SidebarSettingsPage";
 import { NotifySettingsPage } from "./NotifySettingsPage";
 import { PetSettingsPage } from "./PetSettingsPage";
 import { DebugPage } from "./DebugPage";
+import { DiagnosePage } from "./DiagnosePage";
 import { HISTORY_LENGTH } from "./shared";
 
-type NavKey = "system" | "sidebar" | "notify" | "pet" | "voice" | "advanced" | "model" | "eject" | "debug";
+type NavKey = "system" | "sidebar" | "notify" | "pet" | "voice" | "advanced" | "model" | "eject" | "diagnose" | "debug";
 
 const NAV_ITEMS: { key: NavKey; label: string; level: "safe" | "caution" | "danger" }[] = [
   { key: "system", label: "システム状態", level: "safe" },
@@ -26,6 +27,8 @@ const NAV_ITEMS: { key: NavKey; label: string; level: "safe" | "caution" | "dang
   { key: "advanced", label: "詳細設定", level: "caution" },
   { key: "model", label: "モデル切替", level: "danger" },
   { key: "eject", label: "SSDの取り外し", level: "caution" },
+  // 診断(詩織Ver6.0の段階6)。外部のAIに渡す文章を出す
+  { key: "diagnose", label: "診断", level: "safe" },
   // デバッグ(詩織Ver6.0の段階2で、上のタブの右の全画面表示から、ほかのページと同じタブにした)
   { key: "debug", label: "デバッグ", level: "caution" },
 ];
@@ -125,6 +128,7 @@ function ControlPanel() {
         {activeNav === "voice" && <VoiceSettingsPage />}
         {activeNav === "advanced" && <AdvancedSettingsPage />}
         {activeNav === "eject" && <EjectPage />}
+        {activeNav === "diagnose" && <DiagnosePage />}
         {activeNav === "debug" && <DebugPage />}
         {activeNav === "model" && (
           <ModelSwitchPage onSwitchingChange={setIsSwitchingModel} platform={info?.platform ?? null} />

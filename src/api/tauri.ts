@@ -5,6 +5,7 @@ import type {
   ClaudeSession,
   ClaudeStats,
   ClaudeStatsRange,
+  DiagnoseReport,
   AppMode,
   Handoff,
   LibraryFilter,
@@ -115,6 +116,9 @@ export const api = {
   selfTestFinish: (ok: number, ng: number) => invoke<void>("self_test_finish", { ok, ng }),
   // 自己確認(段階3): クリップボードの読み戻しと、Claude・要確認の試しの知らせ
   selfTestClipboardText: () => invoke<string | null>("self_test_clipboard_text"),
+  // 診断(詩織Ver6.0の段階6)
+  diagnoseReport: () => invoke<DiagnoseReport>("diagnose_report"),
+  diagnoseCopy: (text: string) => invoke<void>("diagnose_copy", { text }),
   selfTestNotify: (kind: "claude" | "pending") => invoke<number | null>("self_test_notify", { kind }),
   // ペットの形(詩織Ver6.0の段階4)
   petEnter: () => invoke<void>("pet_enter"),

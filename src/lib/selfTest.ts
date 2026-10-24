@@ -21,6 +21,8 @@ export function getSelfTestMode(): Promise<SelfTestMode> {
 
 // 画面が開くまで待つ時間(検索の索引などを読みにいく画面があるため、少し長めにする)
 const SCREEN_WAIT_MS = 4000;
+// 診断の文章を作るのを待つ時間(ポートへの問い合わせで数秒かかることがある)
+const DIAGNOSE_WAIT_MS = 15000;
 // 拡張機能が自分の確かめを始めたと知らせるまで待つ時間と、終わるまで待つ時間
 const EXT_START_WAIT_MS = 3000;
 const EXT_DONE_WAIT_MS = 60000;
@@ -360,6 +362,28 @@ async function checkSettingsPage(report: Report) {
   );
   const stillInApp = document.querySelector(".sidebar") !== null && settingsPane?.hidden === false;
   await report("設定:デバッグ", debugShown && stillInApp, { 設定の中で開いた: debugShown, 列が出たまま: stillInApp });
+
+  // 診断(段階6): 文章が出て、「まとめてコピー」でクリップボードに同じ文章が入る。クリップボードは元に戻す
+  document.querySelector<HTMLElement>('[data-nav-key="diagnose"]')?.click();
+  const diagnoseText = () => settingsPane?.querySelector<HTMLElement>("[data-diagnose-text]")?.textContent ?? "";
+  const diagnoseShown = await waitFor(() => diagnoseText().includes("## 環境"), DIAGNOSE_WAIT_MS);
+  const sections = ["## 環境", "## SSDの中", "## サービス", "## 索引", "## 拡張機能", "## 要確認", "## ログ"];
+  const allSections = sections.every((s) => diagnoseText().includes(s));
+  const clipboardBefore = await api.selfTestClipboardText();
+  Array.from(settingsPane?.querySelectorAll<HTMLButtonElement>("button") ?? [])
+    .find((b) => b.textContent === "まとめてコピー")
+    ?.click();
+  let copiedSame = false;
+  for (const end = performance.now() + SCREEN_WAIT_MS; !copiedSame && performance.now() < end; await sleep(100)) {
+    copiedSame = (await api.selfTestClipboardText())?.trim() === diagnoseText().trim();
+  }
+  if (clipboardBefore !== null) await api.diagnoseCopy(clipboardBefore).catch(() => undefined);
+  await report("設定:診断", diagnoseShown && allSections && copiedSame, {
+    文章が出た: diagnoseShown,
+    見出しがそろう: allSections,
+    コピーで同じ文章: copiedSame,
+    NGの数: settingsPane?.querySelector<HTMLElement>("[data-diagnose-ng]")?.dataset.diagnoseNg ?? "0",
+  });
   document.querySelector<HTMLElement>('[data-nav-key="system"]')?.click();
   useMainViewStore.getState().setActive("home");
 }

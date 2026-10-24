@@ -1225,6 +1225,31 @@ async fn retry_rag_service(
     Ok(status)
 }
 
+// 診断の画面(詩織Ver6.0の段階6)。中身はCLIのshiori-doctorと同じ(diagnose.rs)。
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DiagnoseDto {
+    text: String,
+    ng: usize,
+}
+
+// ポートへの問い合わせで数秒かかることがあるので、画面を止めないよう別のスレッドで作る。
+#[tauri::command]
+async fn diagnose_report() -> Result<DiagnoseDto, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let r = diagnose::build(&project_root(), "shiori-folio");
+        DiagnoseDto { text: r.text, ng: r.ng }
+    })
+    .await
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn diagnose_copy(app: tauri::AppHandle, text: String) -> Result<(), String> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    app.clipboard().write_text(text).map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn start_backend_services(
     state: tauri::State<'_, BackendState>,
@@ -5670,6 +5695,8 @@ pub fn run() {
             self_test::self_test_log,
             self_test::self_test_finish,
             self_test::self_test_clipboard_text,
+            diagnose_report,
+            diagnose_copy,
             self_test::self_test_notify,
             pet::pet_enter,
             pet::pet_leave,

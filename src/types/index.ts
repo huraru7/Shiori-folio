@@ -459,6 +459,12 @@ export interface SidebarLayout {
   hidden: string[];
 }
 
+// 診断の文章(詩織Ver6.0の段階6、lib.rsのDiagnoseDtoと同じ形)。ngは [NG] の行の数
+export interface DiagnoseReport {
+  text: string;
+  ng: number;
+}
+
 // 自己確認の起動(詩織Ver6.0の段階2、self_test.rsと同じ形)
 export interface SelfTestMode {
   enabled: boolean;
