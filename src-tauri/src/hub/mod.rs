@@ -63,10 +63,13 @@ impl Hub {
             Err(detail) => {
                 // 壊れた記録は脇へ移して残し、全部を「承認待ち」として扱う(勝手に許さない側へ倒す)
                 let aside = approvals::set_aside_broken(&approvals_path);
-                shiori_log::error(
-                    error_codes::EXT_007.code,
-                    "承認の記録が読めないので、全部を承認待ちにする",
-                    &[("理由", &detail), ("移した先", &aside.map(|p| p.display().to_string()).unwrap_or_default())],
+                crate::repair::fixed(
+                    error_codes::EXT_007,
+                    &[
+                        ("直し方", &"脇へ移し、全部を承認待ちにした"),
+                        ("理由", &detail),
+                        ("移した先", &aside.map(|p| p.display().to_string()).unwrap_or_default()),
+                    ],
                 );
                 ApprovalFile { format: 1, ..Default::default() }
             }

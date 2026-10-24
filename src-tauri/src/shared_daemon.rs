@@ -55,6 +55,14 @@ pub fn daemon_pid_if_alive(sys: &sysinfo::System, root: &Path, lock_file_name: &
     Some(pid)
 }
 
+/// 自分が止めたプロセスのロックを消す(記録のPIDが`pid`と同じときだけ)。ふつうに閉じたあとに
+/// 古いロックが残り、次の起動の自動修復が毎回「直した」と書いてしまわないようにする(詩織Ver6.0の段階6)。
+pub fn clear_lock_of(root: &Path, lock_file_name: &str, pid: u32) {
+    if read_daemon_pid(root, lock_file_name) == Some(pid) {
+        let _ = std::fs::remove_file(lock_path(root, lock_file_name));
+    }
+}
+
 /// ロックファイルに記録されたPIDのプロセスをkillする。呼び出し元の
 /// BackendStateがハンドルを保持していない(=外部プロセスが起動した)
 /// デーモンを止めるための手段。生存していない、または記録が無い場合は

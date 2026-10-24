@@ -68,9 +68,8 @@ pub fn load(path: &Path) -> SidebarLayout {
         Ok(layout) => layout,
         Err(e) => {
             let aside = set_aside_broken(path);
-            shiori_log::warn(
-                error_codes::UI_001.code,
-                error_codes::UI_001.message,
+            crate::repair::fixed(
+                error_codes::UI_001,
                 &[
                     ("内容", &e),
                     ("退けた先", &aside.map(|p| p.display().to_string()).unwrap_or_else(|| "退けられなかった".into())),

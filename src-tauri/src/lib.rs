@@ -12,6 +12,7 @@ mod claude_status;
 mod db;
 pub mod eject;
 pub mod diagnose;
+mod repair;
 #[cfg(windows)]
 mod disk_io;
 mod llm_client;
@@ -1229,7 +1230,12 @@ async fn start_backend_services(
     state: tauri::State<'_, BackendState>,
     app: tauri::AppHandle,
 ) -> Result<Vec<ServiceStatus>, String> {
-    start_backend_services_impl(&state, Some(&app)).await
+    let statuses = start_backend_services_impl(&state, Some(&app)).await?;
+    // 全部が起動できた(意図して起動しなかったものを除く)ら、いまの設定を「前回正常に起動したときの写し」にする(段階6)
+    if statuses.iter().all(|s| s.healthy || s.skipped) {
+        repair::save_last_good_config(&project_root());
+    }
+    Ok(statuses)
 }
 
 // ディスクの読み書き速度は瞬間値ではなく「前回ポーリングからの差分」から算出するため、
@@ -5527,12 +5533,15 @@ fn handle_hotkey_toggle(app: &tauri::AppHandle) {
 pub fn run() {
     use tauri_plugin_global_shortcut::ShortcutState;
     let root = project_root();
+    let before = repair::before_log(&root);
     shiori_log::init(
         &root.join("data").join("logs"),
         shiori_log::LogKind::App,
         &shiori_log::LogSettings::from_config(&root),
     );
     shiori_log::info("APP", "起動した", &[("版", &env!("CARGO_PKG_VERSION")), ("場所", &root.display())]);
+    // 起動時の自動修復(詩織Ver6.0の段階6)。設定とハブを読む前に、詩織が作ったものを直す
+    repair::run_at_startup(&root, before);
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -5698,11 +5707,14 @@ pub fn run() {
                         if let Some(mut c) = procs.llm.take() {
                             let _ = c.kill();
                         }
+                        let root = project_root();
                         if let Some(mut c) = procs.embedding.take() {
                             let _ = c.kill();
+                            shared_daemon::clear_lock_of(&root, ".shiori-embed.lock", c.id());
                         }
                         if let Some(mut c) = procs.rag.take() {
                             let _ = c.kill();
+                            shared_daemon::clear_lock_of(&root, ".shiori-rag.lock", c.id());
                         }
                     }
                 }
