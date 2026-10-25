@@ -584,14 +584,24 @@ pub fn pet_bubble_done(app: AppHandle) {
     }
 }
 
-/// 吹き出しを押した: タイマーと拡張機能は本の小道具の枠、Claudeと要確認はウィンドウに戻ってその画面へ
+/// 吹き出しを押した: タイマーと拡張機能は本の小道具の枠。Claudeは、ペットの形のまま、作業が終わった
+/// セッションのアプリを前に出す(出せなければ下へ)。要確認などはウィンドウに戻ってその画面へ
 #[tauri::command]
 pub async fn pet_open_source(app: AppHandle, notice: Notice) -> Result<(), String> {
+    let focused = match (notice.kind, notice.source.clone()) {
+        (Kind::Claude, Some(session_id)) => {
+            tauri::async_runtime::spawn_blocking(move || crate::claude_status::focus_session(&session_id))
+                .await
+                .unwrap_or(false)
+        }
+        _ => false,
+    };
     match (notice.kind, notice.source.as_deref()) {
         (Kind::Timer | Kind::Extension, Some(name)) => {
             show_panel(&app);
             let _ = app.emit_to(PANEL, "pet://open-tool", name);
         }
+        (Kind::Claude, _) if focused => {}
         _ => {
             leave(&app)?;
             let _ = app.emit_to("main", "shiori://open-source", &notice);

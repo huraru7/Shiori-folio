@@ -146,6 +146,152 @@ fn to_session(
     })
 }
 
+/// 知らせを押したときに前に出すセッションのpid(詩織Ver6.0)。このPCのセッションで、
+/// pidが分かり、まだ生きているときだけ返す。それ以外は、呼び出し側が「Claude」の画面へ回す。
+pub fn local_pid(
+    dir: &Path,
+    session_id: &str,
+    local_host: &str,
+    alive: &dyn Fn(u32) -> bool,
+) -> Option<u32> {
+    // session_idはファイル名に使うので、パスとして働く文字を含むものは受けない
+    if session_id.is_empty() || session_id.contains(['/', '\\', '.']) {
+        return None;
+    }
+    let text = fs::read_to_string(dir.join(format!("{session_id}.json"))).ok()?;
+    let f: StatusFile = serde_json::from_str(&text).ok()?;
+    let pid = f.pid.filter(|_| f.host == local_host)?;
+    alive(pid).then_some(pid)
+}
+
+/// pidのプロセスから親へたどった、pidと実行ファイルの並び(自分が先頭、根に近いものが後ろ)。
+fn ancestors(pid: u32) -> Vec<(u32, std::path::PathBuf)> {
+    use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let mut sys = System::new();
+    sys.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::new().with_exe(UpdateKind::OnlyIfNotSet),
+    );
+    let mut chain = Vec::new();
+    let mut current = Some(Pid::from_u32(pid));
+    // 親の輪(起きないはずだが)で回り続けないよう、深さに上限を置く
+    while let Some(p) = current.and_then(|p| sys.process(p)) {
+        if chain.len() >= 64 {
+            break;
+        }
+        chain.push((p.pid().as_u32(), p.exe().map(Path::to_path_buf).unwrap_or_default()));
+        current = p.parent();
+    }
+    chain
+}
+
+/// Macで前に出すアプリ。根に近いほうから見て、最初に `.app/Contents/MacOS/` の中で動いている
+/// プロセスのアプリを選ぶ。Claudeのデスクトップアプリの中の `claude` は、それ自体も `claude.app` の
+/// 中にあるが、根に近いClaude.appが先に見つかる。VS Codeの端末も、Code.appの本体が先に見つかる。
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn mac_app_bundle(exes: &[std::path::PathBuf]) -> Option<std::path::PathBuf> {
+    exes.iter().rev().find_map(|exe| {
+        let text = exe.to_string_lossy();
+        if !text.contains(".app/Contents/MacOS/") {
+            return None;
+        }
+        // 外側のアプリ(パスの最初の「.app」まで)を選ぶ
+        let end = text.find(".app/")? + ".app".len();
+        Some(std::path::PathBuf::from(&text[..end]))
+    })
+}
+
+/// セッションのClaude Codeが動いているアプリのウィンドウを前に出す。前に出したアプリの名前を返す。
+/// アプリの中の、そのセッションのタブまでは選べない(外から選ぶ方法が無い)。
+pub fn bring_to_front(pid: u32) -> Option<String> {
+    let chain = ancestors(pid);
+    #[cfg(target_os = "macos")]
+    {
+        let exes: Vec<_> = chain.into_iter().map(|(_, exe)| exe).collect();
+        let bundle = mac_app_bundle(&exes)?;
+        let ok = std::process::Command::new("open")
+            .arg("-a")
+            .arg(&bundle)
+            .status()
+            .is_ok_and(|s| s.success());
+        ok.then(|| bundle.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default())
+    }
+    #[cfg(windows)]
+    {
+        windows_focus::focus_first_window(&chain)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
+    {
+        let _ = chain;
+        None
+    }
+}
+
+#[cfg(windows)]
+mod windows_focus {
+    use std::path::PathBuf;
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindow, GetWindowThreadProcessId, IsIconic, IsWindowVisible, SetForegroundWindow,
+        ShowWindow, GW_OWNER, SW_RESTORE,
+    };
+
+    struct Search {
+        pid: u32,
+        found: HWND,
+    }
+
+    // 見えていて、ほかのウィンドウに持たれていない(=作業用の主な)ウィンドウを探す
+    unsafe extern "system" fn visit(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let search = &mut *(lparam as *mut Search);
+        let mut owner_pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut owner_pid);
+        if owner_pid == search.pid && IsWindowVisible(hwnd) != 0 && GetWindow(hwnd, GW_OWNER).is_null() {
+            search.found = hwnd;
+            return 0;
+        }
+        1
+    }
+
+    /// 自分に近い先祖から順に、ウィンドウを持つものを探して前に出す。エクスプローラーはタスクバーや
+    /// デスクトップのウィンドウを持つので、そこまで来たら諦める(関係のないウィンドウを出さない)。
+    pub fn focus_first_window(chain: &[(u32, PathBuf)]) -> Option<String> {
+        for (pid, exe) in chain {
+            let name = exe.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+            if name.eq_ignore_ascii_case("explorer") {
+                return None;
+            }
+            let mut search = Search { pid: *pid, found: std::ptr::null_mut() };
+            unsafe {
+                EnumWindows(Some(visit), &mut search as *mut Search as LPARAM);
+                if search.found.is_null() {
+                    continue;
+                }
+                if IsIconic(search.found) != 0 {
+                    ShowWindow(search.found, SW_RESTORE);
+                }
+                SetForegroundWindow(search.found);
+            }
+            return Some(name);
+        }
+        None
+    }
+}
+
+/// 知らせを押したとき: セッションのアプリを前に出し、出せたかを返す。出せなかったときは、
+/// 呼び出し側が詩織の「Claude」の画面を開く。どちらになったかをログに書く。
+pub fn focus_session(session_id: &str) -> bool {
+    let dir = crate::project_root().join("data").join("claude-status");
+    let local_host = if cfg!(windows) { "win" } else { "mac" };
+    let app = local_pid(&dir, session_id, local_host, &is_claude_alive).and_then(bring_to_front);
+    match &app {
+        Some(name) => crate::shiori_log::info("CLAUDE", "セッションのアプリを前に出した", &[("アプリ", name)]),
+        None => crate::shiori_log::info("CLAUDE", "セッションのアプリを前に出せなかった", &[("元", &"Claudeの画面へ")]),
+    }
+    app.is_some()
+}
+
 fn state_rank(state: &str) -> u8 {
     match state {
         "working" | "waiting" => 0,
@@ -286,5 +432,53 @@ mod tests {
     #[test]
     fn 自分自身のプロセスはclaudeではないので生きていると判定しない() {
         assert!(!is_claude_alive(std::process::id()));
+    }
+
+    #[test]
+    fn 前に出すpidはこのPCの生きているセッションだけ() {
+        let dir = temp_dir("localpid");
+        write_with(&dir, "here", "idle", 0, "mac", Some(100));
+        write_with(&dir, "dead", "idle", 0, "mac", Some(200));
+        write_with(&dir, "other", "idle", 0, "win", Some(100));
+        write_with(&dir, "nopid", "idle", 0, "mac", None);
+        assert_eq!(local_pid(&dir, "here", "mac", &alive_100), Some(100));
+        assert_eq!(local_pid(&dir, "dead", "mac", &alive_100), None);
+        assert_eq!(local_pid(&dir, "other", "mac", &alive_100), None);
+        assert_eq!(local_pid(&dir, "nopid", "mac", &alive_100), None);
+        assert_eq!(local_pid(&dir, "missing", "mac", &alive_100), None);
+        // パスとして働くidは、ファイルを探しに行かない
+        assert_eq!(local_pid(&dir, "../here", "mac", &alive_100), None);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn macでは根に近いアプリを前に出す() {
+        let p = |s: &str| std::path::PathBuf::from(s);
+        // Claudeのデスクトップアプリ: 中のclaude.appではなく、Claude.appを選ぶ
+        let desktop = [
+            p("/Users/u/Library/Application Support/Claude/claude-code/2.1/x/claude.app/Contents/MacOS/claude"),
+            p("/Applications/Claude.app/Contents/Helpers/disclaimer"),
+            p("/Applications/Claude.app/Contents/MacOS/Claude"),
+            p("/sbin/launchd"),
+        ];
+        assert_eq!(mac_app_bundle(&desktop), Some(p("/Applications/Claude.app")));
+        // ターミナル
+        let terminal = [
+            p("/usr/local/bin/claude"),
+            p("/bin/zsh"),
+            p("/usr/bin/login"),
+            p("/System/Applications/Utilities/Terminal.app/Contents/MacOS/Terminal"),
+        ];
+        assert_eq!(mac_app_bundle(&terminal), Some(p("/System/Applications/Utilities/Terminal.app")));
+        // VS Codeの端末: 手伝いのアプリではなく、外側のCode.app
+        let vscode = [
+            p("/usr/local/bin/claude"),
+            p("/bin/zsh"),
+            p("/Applications/Visual Studio Code.app/Contents/Frameworks/Code Helper (Plugin).app/Contents/MacOS/Code Helper (Plugin)"),
+            p("/Applications/Visual Studio Code.app/Contents/MacOS/Electron"),
+        ];
+        assert_eq!(mac_app_bundle(&vscode), Some(p("/Applications/Visual Studio Code.app")));
+        // アプリの中で動いていない(tmuxなど)
+        assert_eq!(mac_app_bundle(&[p("/usr/local/bin/claude"), p("/opt/homebrew/bin/tmux")]), None);
     }
 }

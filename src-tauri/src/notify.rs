@@ -265,7 +265,8 @@ fn watch_claude() {
                 let was_working = prev.get(&s.session_id).is_some_and(|st| st == "working");
                 if was_working && (s.state == "idle" || s.state == "ended") {
                     let name = if s.title.is_empty() { s.project.as_str() } else { s.title.as_str() };
-                    show(Kind::Claude, "Claudeの作業が終わった", name, None);
+                    // 元にはセッションidを持たせ、押したときにそのセッションのアプリを前に出す
+                    show(Kind::Claude, "Claudeの作業が終わった", name, Some(&s.session_id));
                 }
             }
         }

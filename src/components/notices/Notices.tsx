@@ -3,11 +3,13 @@ import { useNoticeStore } from "../../store/useNoticeStore";
 import { useMainViewStore } from "../../store/useMainViewStore";
 import { usePendingStore } from "../../store/usePendingStore";
 import { useReduceMotion } from "../../store/useMotionStore";
+import { api } from "../../api/tauri";
 import type { Notice, NoticeKind } from "../../types";
 import "./Notices.css";
 
 // 知らせの札(詩織Ver6.0の段階3)。上の帯の下、画面の右上に、新しいものを上に積む。
-// 押すと、その知らせの元へ移る(タイマーと拡張機能は小道具の枠、Claudeは「Claude」の画面、要確認は一覧)。
+// 押すと、その知らせの元へ移る(タイマーと拡張機能は小道具の枠、Claudeは作業が終わったセッションのアプリ、
+// 要確認は一覧)。Claudeのアプリを前に出せなかったとき(別のPCのセッションなど)は「Claude」の画面へ。
 
 const KIND_LABEL: Record<NoticeKind, string> = {
   timer: "タイマー",
@@ -21,6 +23,20 @@ export function openSource(n: Notice) {
   if (n.kind === "claude") view.setActive("claude");
   else if (n.kind === "pending") usePendingStore.getState().setOpen(true);
   else if (n.source) view.showTool(n.source);
+}
+
+// 札を押したとき。Claudeは先にセッションのアプリを前に出してみる(ペットの吹き出しは本体の側で同じことをする)
+function openFromCard(n: Notice) {
+  if (n.kind === "claude" && n.source) {
+    api
+      .openClaudeSession(n.source)
+      .then((ok) => {
+        if (!ok) openSource(n);
+      })
+      .catch(() => openSource(n));
+    return;
+  }
+  openSource(n);
 }
 
 function formatTime(ms: number): string {
@@ -55,7 +71,7 @@ function Notices() {
             className="notices__main"
             data-ripple
             onClick={() => {
-              openSource(n);
+              openFromCard(n);
               dismiss(n.id);
             }}
           >

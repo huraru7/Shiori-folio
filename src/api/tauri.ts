@@ -86,6 +86,8 @@ export const api = {
   getConfig: () => invoke<AppConfigDto>("get_config"),
 
   listClaudeSessions: () => invoke<ClaudeSession[]>("list_claude_sessions"),
+  // Claudeの知らせから、作業が終わったセッションのアプリを前に出す。出せたかを返す(詩織Ver6.0)
+  openClaudeSession: (sessionId: string) => invoke<boolean>("open_claude_session", { sessionId }),
 
   // 画面側の未処理のエラーをdata/logs/へ記録する(詩織Ver4.0)。
   logFrontendError: (message: string) => invoke<void>("log_frontend_error", { message }),

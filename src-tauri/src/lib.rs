@@ -1574,6 +1574,15 @@ async fn list_claude_sessions() -> Result<Vec<claude_status::ClaudeSession>, Str
         .map_err(|e| format!("Claudeの状況の読み取りに失敗: {e}"))
 }
 
+// Claudeの知らせの札を押したとき(詩織Ver6.0)。作業が終わったセッションのアプリを前に出し、
+// 出せたかを返す。出せなければ画面の側が「Claude」の画面を開く。プロセスの一覧を読むのでasync。
+#[tauri::command]
+async fn open_claude_session(session_id: String) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || claude_status::focus_session(&session_id))
+        .await
+        .map_err(|e| format!("Claudeのセッションを前に出せなかった: {e}"))
+}
+
 // Claudeの利用統計(詩織Ver3.9)。このPCのClaude Codeの履歴を`data/claude-stats/`の
 // 台帳へ取り込み、全端末の台帳を合算して返す。起動時の取り込みと、統計タブを開いた
 // ときの取り込みが重ならないよう、取り込みは1つずつ行う。
@@ -5659,6 +5668,7 @@ pub fn run() {
             get_system_info,
             get_config,
             list_claude_sessions,
+            open_claude_session,
             refresh_claude_stats,
             log_frontend_error,
             set_app_mode,
