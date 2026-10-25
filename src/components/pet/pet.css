@@ -31,7 +31,7 @@ body,
 }
 
 /* 動きの絵がまだ無い状態の、動きの代わりの印と揺れ。本当の動きの絵に差し替えたら外す
-   (読む・眠るは本当の絵にしたので外した) */
+   (読む・眠るは本当の絵にしたので外した。つままれるは本当の絵にしたが、左右の揺れは残す(ふらる)) */
 @media (prefers-reduced-motion: no-preference) {
   .pet--appear .pet__sprite {
     animation: pet-appear 1s ease-out;
@@ -121,11 +121,12 @@ body,
   }
 }
 
-/* 知らせ: ランプのあたりの灯りが強くなる(右向きの絵では右手のあたり) */
+/* 知らせ: 胸の高さに掲げたランプのまわりの灯りが強くなる(右向きの絵では、画面の左の右手のランプ)。
+   喜ぶは、まだ待機の絵なので、下げたランプのまわり */
 .pet__glow {
   position: absolute;
-  left: 62%;
-  top: 46%;
+  left: 14%;
+  top: 29%;
   width: 30%;
   aspect-ratio: 1;
   border-radius: 50%;
@@ -135,7 +136,16 @@ body,
 }
 
 .pet__glow--left {
-  left: 8%;
+  left: 56%;
+}
+
+.pet--happy .pet__glow {
+  left: 11%;
+  top: 59%;
+}
+
+.pet--happy .pet__glow--left {
+  left: 59%;
 }
 
 @keyframes pet-appear {

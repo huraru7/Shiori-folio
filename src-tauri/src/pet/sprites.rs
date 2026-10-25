@@ -24,6 +24,10 @@ const DEFAULT_FILES: &[(&str, &[u8])] = &[
     ("read.png", include_bytes!("../../../src/assets/pet/read.png")),
     ("sleep.png", include_bytes!("../../../src/assets/pet/sleep.png")),
     ("wake.png", include_bytes!("../../../src/assets/pet/wake.png")),
+    ("notify.png", include_bytes!("../../../src/assets/pet/notify.png")),
+    ("dangle.png", include_bytes!("../../../src/assets/pet/dangle.png")),
+    ("fly.png", include_bytes!("../../../src/assets/pet/fly.png")),
+    ("fall.png", include_bytes!("../../../src/assets/pet/fall.png")),
 ];
 
 fn default_file(name: &str) -> Option<Vec<u8>> {

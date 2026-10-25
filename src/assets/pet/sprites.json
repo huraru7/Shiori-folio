@@ -5,6 +5,10 @@
     "idle": { "file": "idle.png", "frames": 32, "loop": true },
     "read": { "file": "read.png", "frames": 32, "loop": true },
     "sleep": { "file": "sleep.png", "frames": 32, "loop": true },
-    "wake": { "file": "wake.png", "frames": 5, "loop": false }
+    "wake": { "file": "wake.png", "frames": 10, "loop": false },
+    "notify": { "file": "notify.png", "frames": 40, "loop": false },
+    "dangle": { "file": "dangle.png", "frames": 12, "loop": true },
+    "fly": { "file": "fly.png", "frames": 4, "loop": true },
+    "fall": { "file": "fall.png", "frames": 4, "loop": true }
   }
 }

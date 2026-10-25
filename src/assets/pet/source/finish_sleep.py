@@ -2,7 +2,8 @@
 # - ランプは、4番の姿のものを、4つの姿の同じ位置に置く(姿ごとのランプのずれをなくす)
 # - かぶる(hood): 4つの姿を2コマずつ(8コマ・1秒)。コードが「始め+繰り返し」に対応したら使う
 # - 眠る(sleep): 4番の姿で、寝息(上半身を1ドット下げる)と、灯りの弱い明滅。32コマ・4秒で1周
-# - 起きる(wake): かぶるの逆順(4番→1番)を1コマずつと、最後に1番をもう1コマ(5コマ。コードの0.6秒に合わせた)
+# - 起きる(wake): かぶるの逆順(4番→1番)を2コマずつと、最後に1番をもう2コマ(10コマ。コードの1.25秒に合わせた。
+#   1コマずつの0.6秒は早すぎた(ふらる))
 # 使い方(このフォルダで): python finish_sleep.py sleep_raw.png hood.png ../sleep.png ../wake.png
 import sys
 import numpy as np
@@ -115,7 +116,7 @@ for i in range(32):
     if not (8 <= i < 12 or 24 <= i < 28):
         f = lamp_glow(f, 'dim')
     sleep.append(f)
-wake = [frames[3], frames[2], frames[1], frames[0], frames[0]]
+wake = [frames[3]] * 2 + [frames[2]] * 2 + [frames[1]] * 2 + [frames[0]] * 4
 
 for path, seq in zip(sys.argv[2:5], (hood, sleep, wake)):
     Image.fromarray(np.concatenate(seq, axis=1), 'RGBA').save(path)

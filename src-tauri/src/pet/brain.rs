@@ -292,7 +292,7 @@ impl Brain {
             State::Sleep => {
                 self.y = w.floor;
                 if input.idle_seconds.is_some_and(|i| i < 1.0) {
-                    self.set(State::Wake, Some(0.6), &mut events);
+                    self.set(State::Wake, Some(1.25), &mut events);
                 }
             }
             _ => {
@@ -394,7 +394,7 @@ mod tests {
         assert_eq!(b.state, State::Sleep);
         run(&mut b, 0.1, &awake());
         assert_eq!(b.state, State::Wake);
-        run(&mut b, 0.7, &awake());
+        run(&mut b, 1.3, &awake());
         assert_eq!(b.state, State::Normal);
     }
 
