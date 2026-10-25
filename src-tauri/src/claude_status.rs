@@ -271,7 +271,10 @@ mod windows_focus {
                 if IsIconic(search.found) != 0 {
                     ShowWindow(search.found, SW_RESTORE);
                 }
-                SetForegroundWindow(search.found);
+                // Windowsは前景の切り替えを断ることがある。断られたら「Claude」の画面へ回す
+                if SetForegroundWindow(search.found) == 0 {
+                    return None;
+                }
             }
             return Some(name);
         }
