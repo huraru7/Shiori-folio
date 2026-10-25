@@ -9,6 +9,10 @@
     "notify": { "file": "notify.png", "frames": 40, "loop": false },
     "dangle": { "file": "dangle.png", "frames": 12, "loop": true },
     "fly": { "file": "fly.png", "frames": 4, "loop": true },
-    "fall": { "file": "fall.png", "frames": 4, "loop": true }
+    "fall": { "file": "fall.png", "frames": 4, "loop": true },
+    "react": { "file": "react.png", "frames": 4, "loop": false },
+    "land": { "file": "land.png", "frames": 4, "loop": false },
+    "happy": { "file": "happy.png", "frames": 16, "loop": false },
+    "appear": { "file": "appear.png", "frames": 8, "loop": false }
   }
 }
