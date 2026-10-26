@@ -1,12 +1,11 @@
-/* スクロールさせず、1画面に収める(詩織Ver3.9)。最近の記録の欄だけが残りの高さを使い、
-   入る分だけ行を出す(HomeScreen.tsxのRECENT_ROW_HEIGHT参照)。 */
+/* スクロールさせず、1画面に収める(詩織Ver3.9)。2026-10-26に図書館の受付の形にした。
+   上から「奥(本棚と詩織)」「カウンター」「手前(伝言メモと新着の棚)」「掲示」の4段。
+   新着の棚だけが残りの高さを使い、入る分だけ行を出す(HomeScreen.tsxのRECENT_ROW_HEIGHT参照)。 */
 .home-screen {
   height: 100%;
   overflow: hidden;
-  padding: 22px 28px 16px;
   display: flex;
   flex-direction: column;
-  gap: 18px;
   color: var(--paper);
   font-family: var(--font-body);
 }
@@ -14,7 +13,6 @@
 /* 記事を開いている間は、記事詳細(ArticleDetail)が自前でスクロールする。 */
 .home-screen--detail {
   padding: 14px 0 0;
-  gap: 0;
 }
 
 .home-screen__dim {
@@ -22,134 +20,349 @@
   font-size: var(--fs-sm);
 }
 
-.home-screen__hello {
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
+/* ---- 奥(壁の本棚と詩織) ---- */
+
+.home-screen__scene {
+  position: relative;
+  flex: 0 0 clamp(170px, 34vh, 226px);
+  overflow: hidden;
 }
 
-.home-screen__greeting {
-  margin: 0;
+/* 奥の本棚。背表紙を暗く並べ、手前の詩織より沈ませる(段の板は--wood-shelf) */
+.home-screen__shelves {
+  position: absolute;
+  inset: 0;
+  opacity: 0.32;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0 74px,
+      var(--wood-shelf) 74px 80px,
+      transparent 80px 154px,
+      var(--wood-shelf) 154px 160px,
+      transparent 160px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      #4a3a28 0 9px,
+      #2f3a2a 9px 15px,
+      #5a3b2c 15px 26px,
+      #3b3426 26px 31px,
+      #44503a 31px 41px,
+      #2b2419 41px 44px
+    );
+  -webkit-mask: linear-gradient(to bottom, #000 0 66px, transparent 66px 82px, #000 82px 146px, transparent 146px 162px, #000 162px);
+  mask: linear-gradient(to bottom, #000 0 66px, transparent 66px 82px, #000 82px 146px, transparent 146px 162px, #000 162px);
+}
+
+/* 奥ほど暗く(詩織のまわりだけ明るく残す) */
+.home-screen__scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse 60% 90% at 26% 85%,
+    transparent 0%,
+    rgba(16, 15, 10, 0.55) 60%,
+    rgba(16, 15, 10, 0.85) 100%
+  );
+}
+
+/* 吊り下げの札 */
+.home-screen__plaque {
+  position: absolute;
+  z-index: 3;
+  right: 26px;
+  top: 14px;
+  padding: 6px 14px 7px;
+  text-align: center;
+  background: var(--wood-top);
+  border: 1px solid var(--wood-edge);
+  border-radius: 4px;
   font-family: var(--font-display);
-  font-size: var(--fs-2xl);
-  font-weight: 500;
+  font-size: var(--fs-md);
+  letter-spacing: 0.2em;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
-.home-screen__services {
-  display: flex;
-  gap: 14px;
-  font-size: var(--fs-sm);
+.home-screen__plaque small {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.05em;
   color: var(--paper-dim);
 }
 
-.home-screen__service {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.home-screen__plaque::before,
+.home-screen__plaque::after {
+  content: "";
+  position: absolute;
+  top: -14px;
+  width: 1px;
+  height: 14px;
+  background: rgba(237, 230, 214, 0.25);
 }
 
-.home-screen__service-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--paper-dim);
+.home-screen__plaque::before {
+  left: 14px;
 }
 
-.home-screen__service--ready .home-screen__service-dot {
-  background: var(--safe);
+.home-screen__plaque::after {
+  right: 14px;
 }
 
-.home-screen__service--starting .home-screen__service-dot {
-  background: var(--caution);
+/* カウンターの奥に座らせる。膝から下はカウンターに隠れ、本と上半身が見える */
+.home-screen__shiori {
+  position: absolute;
+  z-index: 2;
+  left: 64px;
+  bottom: -34px;
 }
 
-.home-screen__service--off .home-screen__service-dot {
-  opacity: 0.4;
+/* 吹き出し(ペットの吹き出しと同じ紙の色) */
+.home-screen__bubble {
+  position: absolute;
+  z-index: 3;
+  left: 238px;
+  right: 24px;
+  bottom: 36px;
+  width: fit-content;
+  max-width: 340px;
+  margin: 0;
+  padding: 11px 18px 12px;
+  border-radius: 14px;
+  background: var(--paper);
+  color: var(--slip-ink);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  font-weight: 500;
+  line-height: 1.55;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 
-.home-screen__service--failed .home-screen__service-dot {
-  background: var(--danger);
+.home-screen__bubble small {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  font-weight: 400;
+  color: var(--slip-ink-dim);
 }
 
-.home-screen__search {
+.home-screen__bubble::after {
+  content: "";
+  position: absolute;
+  left: -9px;
+  top: 26px;
+  border: 9px solid transparent;
+  border-left: 0;
+  border-right-color: var(--paper);
+}
+
+/* ---- カウンター ---- */
+
+.home-screen__counter {
+  position: relative;
+  z-index: 4;
   flex-shrink: 0;
-  max-width: 520px;
+  height: 54px;
+  padding: 0 22px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background: var(--glass);
-  border: 0.5px solid var(--glass-border);
-  border-radius: 999px;
-  font-size: var(--fs-sm);
+  gap: 14px;
+  background: linear-gradient(to bottom, var(--wood-top), var(--wood));
+  border-top: 1px solid #6e5640;
+  border-bottom: 3px solid var(--wood-edge);
+  box-shadow: 0 -6px 14px rgba(0, 0, 0, 0.35);
 }
 
-.home-screen__search input {
+/* 検索の紙(カウンターに置いた、少し傾いた紙) */
+.home-screen__slip {
+  flex: 1;
+  min-width: 0;
+  max-width: 430px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  background: var(--slip) linear-gradient(to bottom, transparent 24px, var(--slip-line) 24px 25px, transparent 25px);
+  border-radius: 2px;
+  transform: rotate(-0.6deg);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.4);
+}
+
+.home-screen__slip input {
   flex: 1;
   min-width: 0;
   background: none;
   border: none;
   outline: none;
-  color: var(--paper);
+  color: var(--slip-ink);
+  font-family: var(--font-display);
   font-size: var(--fs-md);
 }
 
-.home-screen__search input::placeholder {
-  color: var(--paper-dim);
+.home-screen__slip input::placeholder {
+  color: #8a8070;
 }
 
-.home-screen__handoff {
+.home-screen__slip:focus-within {
+  box-shadow:
+    0 2px 5px rgba(0, 0, 0, 0.4),
+    0 0 0 2px var(--moss);
+}
+
+/* 呼び鈴(会話へ) */
+.home-screen__bell {
   flex-shrink: 0;
-  padding: 2px 0 2px 12px;
-  border-left: 2px solid var(--moss);
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.home-screen__handoff-head {
-  align-self: flex-start;
-  display: inline-flex;
-  align-items: baseline;
-  gap: 10px;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
   padding: 0;
-  border: none;
-  background: none;
-  color: var(--paper);
-  font: inherit;
-  font-size: var(--fs-md);
-  font-weight: 500;
+  font-size: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.25);
+  border: 0.5px solid rgba(237, 230, 214, 0.15);
   cursor: pointer;
 }
 
-.home-screen__handoff-head:hover {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.home-screen__bell:hover {
+  background: rgba(0, 0, 0, 0.4);
 }
 
-.home-screen__handoff-body {
-  margin: 0;
+/* 開館中/準備中の札 */
+.home-screen__sign {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  font-size: var(--fs-xs);
   color: var(--paper-dim);
+}
+
+.home-screen__sign b {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: var(--fs-md);
+  color: var(--paper);
+  letter-spacing: 0.15em;
+}
+
+.home-screen__sign b::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 7px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--moss);
+  box-shadow: 0 0 6px var(--moss);
+}
+
+.home-screen__sign--wait b::before {
+  background: var(--clay);
+  box-shadow: 0 0 6px var(--clay);
+}
+
+/* ---- 手前(伝言メモと新着の棚) ---- */
+
+.home-screen__front {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 22px;
+  padding: 16px 22px 8px;
+  background: linear-gradient(to bottom, rgba(58, 44, 30, 0.35), transparent 40px);
+}
+
+.home-screen__front--no-memo {
+  grid-template-columns: 1fr;
+}
+
+/* 伝言メモ(申し送り)。留め具で留めた、少し傾いた紙 */
+.home-screen__memo {
+  align-self: start;
+  position: relative;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 14px 12px;
+  border: none;
+  background: var(--slip-memo);
+  color: var(--slip-ink);
+  font: inherit;
   font-size: var(--fs-sm);
   line-height: 1.6;
+  text-align: left;
+  transform: rotate(-1.4deg);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.home-screen__memo:hover {
+  transform: rotate(-1.4deg) translateY(-1px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+}
+
+.home-screen__memo::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  margin-left: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--clay);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.home-screen__memo-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 1px;
+  font-family: var(--font-display);
+  font-size: var(--fs-md);
+  font-weight: 500;
+}
+
+.home-screen__memo-head small {
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  font-weight: 400;
+  color: var(--slip-ink-dim);
+}
+
+.home-screen__memo-line {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* memory由来の申し送りの、行頭のラベル(やること/申し送り)。 */
-.home-screen__handoff-label {
-  margin-right: 8px;
-  color: var(--moss);
+.home-screen__memo-line em {
+  margin-right: 6px;
+  font-style: normal;
   font-size: var(--fs-xs);
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
+  color: var(--moss-deep);
 }
 
-.home-screen__recent-section {
-  flex: 1 1 auto;
+/* 新着の棚(最近更新された記録) */
+.home-screen__shelf {
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -158,9 +371,17 @@
 
 .home-screen__heading {
   margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
   font-size: var(--fs-md);
   font-weight: 500;
   color: var(--paper-dim);
+}
+
+.home-screen__heading small {
+  font-size: var(--fs-xs);
+  font-weight: 400;
 }
 
 .home-screen__recent {
@@ -174,12 +395,11 @@
 
 .home-screen__recent-item {
   width: 100%;
-  height: 36px;
+  height: 34px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 0 10px;
+  gap: 10px;
+  padding: 0 10px 0 0;
   border: none;
   border-bottom: 0.5px solid var(--glass-border);
   background: transparent;
@@ -194,19 +414,35 @@
   background: var(--glass);
 }
 
+/* 背表紙の色の帯(図書館のカテゴリ色) */
+.home-screen__spine {
+  flex-shrink: 0;
+  width: 5px;
+  height: 22px;
+  border-radius: 1px;
+}
+
 .home-screen__recent-title {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.home-screen__recent-item .home-screen__dim {
+  flex-shrink: 0;
+}
+
+/* ---- 掲示(状態行) ---- */
+
 .home-screen__status {
   flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 6px 20px;
-  padding-top: 10px;
+  margin: 0 22px;
+  padding: 10px 0 14px;
   border-top: 0.5px solid var(--glass-border);
   font-size: var(--fs-sm);
   color: var(--paper-dim);
@@ -226,4 +462,51 @@ button.home-screen__status-item {
 
 button.home-screen__status-item:hover {
   color: var(--paper);
+}
+
+/* 要確認が1件以上あるときは、印を付けて目立たせる */
+.home-screen__status-item--warn {
+  color: var(--paper);
+}
+
+.home-screen__status-item--warn::before {
+  content: "●";
+  margin-right: 6px;
+  font-size: 9px;
+  vertical-align: 2px;
+  color: var(--clay);
+}
+
+/* ---- 狭いウィンドウ ---- */
+
+@media (max-width: 760px) {
+  .home-screen__plaque {
+    display: none;
+  }
+
+  .home-screen__front {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .home-screen__memo {
+    transform: none;
+  }
+
+  .home-screen__memo:hover {
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 560px) {
+  .home-screen__shiori {
+    left: 8px;
+  }
+
+  .home-screen__bubble {
+    left: 176px;
+    right: 12px;
+    font-size: var(--fs-md);
+  }
 }

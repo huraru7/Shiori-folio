@@ -1,0 +1,39 @@
+.reception-shiori {
+  position: relative;
+}
+
+/* 足元のランプの灯り */
+.reception-shiori__glow {
+  position: absolute;
+  left: -60px;
+  bottom: 30px;
+  width: 280px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, var(--lamp-glow) 0%, transparent 65%);
+  pointer-events: none;
+}
+
+/* 1コマの大きさに切り抜き、横に並んだコマをsteps()で送る */
+.reception-shiori__sprite {
+  --shiori-w: calc(128px * var(--shiori-scale));
+  position: relative;
+  width: var(--shiori-w);
+  height: calc(192px * var(--shiori-scale));
+  background-repeat: no-repeat;
+  background-size: calc(var(--shiori-w) * var(--shiori-frames)) 100%;
+  background-position: 0 0;
+  image-rendering: pixelated;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .reception-shiori__sprite {
+    animation: reception-shiori-read var(--shiori-duration) steps(var(--shiori-frames)) infinite;
+  }
+}
+
+@keyframes reception-shiori-read {
+  to {
+    background-position: calc(var(--shiori-w) * var(--shiori-frames) * -1) 0;
+  }
+}
