@@ -1686,6 +1686,26 @@ async fn log_frontend_error(message: String) -> Result<(), String> {
     .await
 }
 
+/// 利用統計の台帳に使う端末名。macOSの`hostname`はつないだネットワークが割り当てる名前
+/// (`ip-10-…compute.internal`など)に変わり、同じMacが別の端末として増えるため、
+/// ネットワークで変わらないLocalHostNameに`.local`を付けて使う。
+fn stats_host_name() -> String {
+    #[cfg(target_os = "macos")]
+    {
+        let local = std::process::Command::new("scutil")
+            .args(["--get", "LocalHostName"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .filter(|s| !s.is_empty());
+        if let Some(name) = local {
+            return format!("{name}.local");
+        }
+    }
+    sysinfo::System::host_name().unwrap_or_else(|| "unknown".to_string())
+}
+
 /// 取り込みを省いたときは`None`を返す。
 fn refresh_claude_stats_blocking(force: bool) -> Result<Option<claude_stats::RefreshOutcome>, String> {
     let mut last = CLAUDE_STATS_REFRESH
@@ -1697,7 +1717,7 @@ fn refresh_claude_stats_blocking(force: bool) -> Result<Option<claude_stats::Ref
     }
     let projects = claude_stats::default_projects_dir()
         .ok_or("Claude Codeの履歴の場所(ホームフォルダ)が分かりません")?;
-    let host = sysinfo::System::host_name().unwrap_or_else(|| "unknown".to_string());
+    let host = stats_host_name();
     let outcome = claude_stats::refresh(&projects, &claude_stats_dir(), &host, now_ms)?;
     *last = Some(now_ms);
     Ok(Some(outcome))
