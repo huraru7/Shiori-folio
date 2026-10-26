@@ -31,13 +31,10 @@ body,
 }
 
 /* 動きの絵がまだ無い状態の、動きの代わりの印と揺れ。本当の動きの絵に差し替えたら外す
-   (読む・眠るは本当の絵にしたので外した。現れる・反応する・喜ぶ・つままれる・着地は本当の絵にしたが、揺れは重ねて残す(ふらる)) */
+   (読む・眠る・歩くは本当の絵にしたので外した。現れる・反応する・喜ぶ・つままれる・着地は本当の絵にしたが、揺れは重ねて残す(ふらる)) */
 @media (prefers-reduced-motion: no-preference) {
   .pet--appear .pet__sprite {
     animation: pet-appear 1s ease-out;
-  }
-  .pet--normal.pet--walk .pet__sprite {
-    animation: pet-bob 0.25s steps(2) infinite;
   }
   .pet--react .pet__sprite {
     animation: pet-squash 0.4s ease-out;
@@ -156,12 +153,6 @@ body,
   to {
     opacity: 1;
     transform: none;
-  }
-}
-
-@keyframes pet-bob {
-  50% {
-    translate: 0 -1.2%;
   }
 }
 

@@ -21,6 +21,7 @@ const DEFAULT_JSON: &str = include_str!("../../../src/assets/pet/sprites.json");
 /// 同梱の絵(`sprites.json` に書いた動きの絵は、ここにも足す)
 const DEFAULT_FILES: &[(&str, &[u8])] = &[
     ("idle.png", include_bytes!("../../../src/assets/pet/idle.png")),
+    ("walk.png", include_bytes!("../../../src/assets/pet/walk.png")),
     ("read.png", include_bytes!("../../../src/assets/pet/read.png")),
     ("sleep.png", include_bytes!("../../../src/assets/pet/sleep.png")),
     ("wake.png", include_bytes!("../../../src/assets/pet/wake.png")),
@@ -196,7 +197,7 @@ mod tests {
         let (x, y) = s.center_opaque().expect("不透明な点がある");
         assert!(s.opaque_at("idle", 0, false, x, y));
         // 無い動きはidleで出す
-        assert_eq!(s.anim("walk").0, "idle");
+        assert_eq!(s.anim("no-such-anim").0, "idle");
         assert!(!s.opaque_at("idle", 0, false, -1, 5));
     }
 
@@ -214,11 +215,12 @@ mod tests {
     #[test]
     fn 同梱の動きの絵は全部読め_無い動きはidleになる() {
         let s = Sprites::load_from(default_file).unwrap();
-        for name in ["idle", "read", "sleep", "wake"] {
+        for name in ["idle", "walk", "read", "sleep", "wake"] {
             assert_eq!(s.anim(name).0, name);
         }
         assert_eq!(s.anim("read").1.info.frames, 32);
+        assert_eq!(s.anim("walk").1.info.frames, 24);
         assert!(!s.anim("wake").1.info.r#loop);
-        assert_eq!(s.anim("notify").0, "idle");
+        assert_eq!(s.anim("no-such-anim").0, "idle");
     }
 }

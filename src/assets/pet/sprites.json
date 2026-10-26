@@ -3,6 +3,7 @@
   "frameHeight": 192,
   "animations": {
     "idle": { "file": "idle.png", "frames": 32, "loop": true },
+    "walk": { "file": "walk.png", "frames": 24, "loop": true },
     "read": { "file": "read.png", "frames": 32, "loop": true },
     "sleep": { "file": "sleep.png", "frames": 32, "loop": true },
     "wake": { "file": "wake.png", "frames": 10, "loop": false },
