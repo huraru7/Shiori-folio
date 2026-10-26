@@ -23,7 +23,10 @@ use serde_json::Value;
 use sprites::{Sprites, FRAME_H, FRAME_W};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindow,
+    WebviewWindowBuilder,
+};
 
 const PART: &str = "PET";
 pub const PET: &str = "pet";
@@ -58,7 +61,10 @@ struct FrameDto {
 struct Inner {
     active: bool,
     brain: Option<Brain>,
+    /// 1ドットが何物理画素か
     scale: u32,
+    /// 1ドットが座標の単位でいくつか(Windowsはscaleと同じ。Macは論理の点)
+    dot: f64,
     sprites: Sprites,
     ignoring: bool,
     last_pos: (i32, i32),
@@ -84,6 +90,7 @@ fn ctl() -> &'static Mutex<Inner> {
             active: false,
             brain: None,
             scale: 1,
+            dot: 1.0,
             sprites: Sprites::load(&crate::project_root().join("data").join("ui").join("pet")),
             ignoring: false,
             last_pos: (i32::MIN, i32::MIN),
@@ -193,32 +200,99 @@ fn window(app: &AppHandle, label: &str) -> Option<WebviewWindow> {
     app.get_webview_window(label)
 }
 
-/// いまいる画面(点を含む画面。無ければ主な画面)
-fn monitor_at(app: &AppHandle, x: f64, y: f64) -> Option<tauri::Monitor> {
-    app.monitor_from_point(x, y).ok().flatten().or_else(|| app.primary_monitor().ok().flatten())
+// ---- 画面の座標 ----
+//
+// ペットの位置・画面の範囲・カーソルは、同じ「座標の単位」で扱う。Windowsは物理の画素。
+// Macは論理の点にする。Macのtauri/taoの「物理の座標」は、画面の位置と大きさを、その画面の倍率で
+// 換算するので、倍率の違う画面(Retinaと外付け)をまたぐと座標が飛ぶ。カーソルは主画面の倍率で
+// 換算されるので、外付けの画面ではペットをつまめなかった(10/26)。論理の点なら、画面をまたいでも続く。
+
+/// 画面(座標の単位で表した範囲と、ドット絵の倍率)
+#[derive(Clone)]
+struct Screen {
+    monitor: tauri::Monitor,
+    /// 画面全体と作業領域(x, y, 幅, 高さ)
+    full: (f64, f64, f64, f64),
+    work: (f64, f64, f64, f64),
+    /// 1ドットが何物理画素か(絵をにじませないため整数)
+    dot_scale: u32,
+    /// 1ドットが座標の単位でいくつか
+    dot: f64,
+    /// 論理の画素1つが座標の単位でいくつか(本と吹き出しの大きさに使う)
+    logical: f64,
 }
 
-fn dot_scale(monitor: &tauri::Monitor) -> u32 {
-    let h = monitor.size().height as f64;
-    ((h * HEIGHT_RATIO / FRAME_H as f64).round() as u32).max(1)
-}
-
-fn world_of(monitor: &tauri::Monitor, scale: u32, fullscreen: bool) -> World {
-    let wa = monitor.work_area();
-    let (sw, sh) = ((FRAME_W * scale) as f64, (FRAME_H * scale) as f64);
-    // 全画面のアプリが前面にあるときは、タスクバーの分も床にする(作業領域が変わらず浮くため)
-    let bottom = if fullscreen {
-        (monitor.position().y + monitor.size().height as i32) as f64
+/// 物理の画素1つが、座標の単位でいくつか
+fn unit_per_px(monitor: &tauri::Monitor) -> f64 {
+    if cfg!(target_os = "macos") {
+        1.0 / monitor.scale_factor()
     } else {
-        (wa.position.y + wa.size.height as i32) as f64
-    };
-    World {
-        left: wa.position.x as f64,
-        right: (wa.position.x + wa.size.width as i32) as f64 - sw,
-        floor: bottom - sh,
-        top: wa.position.y as f64,
-        scale: scale as f64,
+        1.0
     }
+}
+
+fn screen_of(monitor: tauri::Monitor) -> Screen {
+    let k = unit_per_px(&monitor);
+    let (p, z, wa) = (monitor.position(), monitor.size(), monitor.work_area());
+    let full = (p.x as f64 * k, p.y as f64 * k, z.width as f64 * k, z.height as f64 * k);
+    let work =
+        (wa.position.x as f64 * k, wa.position.y as f64 * k, wa.size.width as f64 * k, wa.size.height as f64 * k);
+    let dot_scale = ((z.height as f64 * HEIGHT_RATIO / FRAME_H as f64).round() as u32).max(1);
+    let logical = monitor.scale_factor() * k;
+    Screen { monitor, full, work, dot_scale, dot: dot_scale as f64 * k, logical }
+}
+
+/// いまいる画面(点を含む画面。無ければ主な画面)。点は座標の単位
+fn screen_at(app: &AppHandle, x: f64, y: f64) -> Option<Screen> {
+    let screens: Vec<Screen> = app.available_monitors().unwrap_or_default().into_iter().map(screen_of).collect();
+    let inside = |s: &&Screen| {
+        let (sx, sy, w, h) = s.full;
+        x >= sx && x < sx + w && y >= sy && y < sy + h
+    };
+    screens.iter().find(inside).cloned().or_else(|| app.primary_monitor().ok().flatten().map(screen_of))
+}
+
+/// カーソルの位置(座標の単位)。Macのtaoは主画面の倍率で物理に換算して返すので、論理の点に戻す
+fn cursor_position(app: &AppHandle) -> Option<(f64, f64)> {
+    let c = app.cursor_position().ok()?;
+    let k = if cfg!(target_os = "macos") {
+        1.0 / app.primary_monitor().ok().flatten().map_or(1.0, |m| m.scale_factor())
+    } else {
+        1.0
+    };
+    Some((c.x * k, c.y * k))
+}
+
+/// ウィンドウの位置と大きさ(座標の単位)
+fn window_rect(w: &WebviewWindow) -> Option<(f64, f64, f64, f64)> {
+    let k = if cfg!(target_os = "macos") { 1.0 / w.scale_factor().ok()? } else { 1.0 };
+    let (p, z) = (w.outer_position().ok()?, w.outer_size().ok()?);
+    Some((p.x as f64 * k, p.y as f64 * k, z.width as f64 * k, z.height as f64 * k))
+}
+
+fn set_window_position(w: &WebviewWindow, x: f64, y: f64) -> tauri::Result<()> {
+    if cfg!(target_os = "macos") {
+        w.set_position(LogicalPosition::new(x, y))
+    } else {
+        w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32))
+    }
+}
+
+/// ペットのウィンドウを、絵と同じ大きさにする
+fn set_pet_size(w: &WebviewWindow, screen: &Screen) -> tauri::Result<()> {
+    if cfg!(target_os = "macos") {
+        w.set_size(LogicalSize::new(FRAME_W as f64 * screen.dot, FRAME_H as f64 * screen.dot))
+    } else {
+        w.set_size(PhysicalSize::new(FRAME_W * screen.dot_scale, FRAME_H * screen.dot_scale))
+    }
+}
+
+fn world_of(screen: &Screen, fullscreen: bool) -> World {
+    let (wx, wy, ww, wh) = screen.work;
+    let (sw, sh) = (FRAME_W as f64 * screen.dot, FRAME_H as f64 * screen.dot);
+    // 全画面のアプリが前面にあるときは、タスクバーの分も床にする(作業領域が変わらず浮くため)
+    let bottom = if fullscreen { screen.full.1 + screen.full.3 } else { wy + wh };
+    World { left: wx, right: wx + ww - sw, floor: bottom - sh, top: wy, scale: screen.dot }
 }
 
 fn set_dock(app: &AppHandle, visible: bool) {
@@ -241,27 +315,23 @@ pub fn enter(app: &AppHandle) -> Result<(), String> {
     })?;
     let main = window(app, "main").ok_or("本体のウィンドウが無い")?;
     // 本体のウィンドウがある画面の、下の右端に現れる
-    let center = main
-        .outer_position()
-        .ok()
-        .zip(main.outer_size().ok())
-        .map(|(p, s)| (p.x as f64 + s.width as f64 / 2.0, p.y as f64 + s.height as f64 / 2.0))
-        .unwrap_or((0.0, 0.0));
-    let monitor = monitor_at(app, center.0, center.1).ok_or("画面が見つからない")?;
-    let scale = dot_scale(&monitor);
-    let world = world_of(&monitor, scale, false);
+    let center = window_rect(&main).map(|(x, y, w, h)| (x + w / 2.0, y + h / 2.0)).unwrap_or((0.0, 0.0));
+    let screen = screen_at(app, center.0, center.1).ok_or("画面が見つからない")?;
+    let scale = screen.dot_scale;
+    let world = world_of(&screen, false);
     // 自己確認の起動では眠らせない。最後の入力から眠るまでの時間を過ぎてから走らせると、
     // ペットが出た直後に眠り、「現れてから普段」の確かめが走らせる環境で変わってしまうため(段階6)
     let sleep_after =
         if crate::self_test::is_enabled() { f64::INFINITY } else { crate::pet_sleep_minutes() as f64 * 60.0 };
     let brain = Brain::new(&world, crate::notify::now_ms());
     let pet = window(app, PET).ok_or("ペットのウィンドウが無い")?;
-    pet.set_size(PhysicalSize::new(FRAME_W * scale, FRAME_H * scale)).map_err(|e| e.to_string())?;
-    pet.set_position(PhysicalPosition::new(brain.x.round() as i32, brain.y.round() as i32)).map_err(|e| e.to_string())?;
+    set_pet_size(&pet, &screen).map_err(|e| e.to_string())?;
+    set_window_position(&pet, brain.x, brain.y).map_err(|e| e.to_string())?;
     {
         let mut c = lock();
         c.brain = Some(brain);
         c.scale = scale;
+        c.dot = screen.dot;
         c.world = Some(world);
         c.sleep_after = sleep_after;
         c.last_pos = (i32::MIN, i32::MIN);
@@ -314,17 +384,16 @@ fn place_beside(app: &AppHandle, label: &str, size: (f64, f64), above: bool) -> 
     let Some(w) = window(app, label) else { return true };
     let c = lock();
     let (Some(b), Some(world)) = (c.brain.as_ref(), c.world) else { return true };
-    let (pw, ph) = ((FRAME_W * c.scale) as f64, (FRAME_H * c.scale) as f64);
-    let Some(monitor) = monitor_at(app, b.x + pw / 2.0, b.y + ph / 2.0) else { return true };
-    let f = monitor.scale_factor();
-    let (w_px, h_px) = (size.0 * f, size.1 * f);
-    let wa = monitor.work_area();
-    let (min_x, max_x) = (wa.position.x as f64, (wa.position.x + wa.size.width as i32) as f64 - w_px);
-    let (min_y, max_y) = (wa.position.y as f64, world.floor + ph - h_px);
+    let (pw, ph) = (FRAME_W as f64 * c.dot, FRAME_H as f64 * c.dot);
+    let Some(screen) = screen_at(app, b.x + pw / 2.0, b.y + ph / 2.0) else { return true };
+    let (w_px, h_px) = (size.0 * screen.logical, size.1 * screen.logical);
+    let (wx, wy, ww, _) = screen.work;
+    let (min_x, max_x) = (wx, wx + ww - w_px);
+    let (min_y, max_y) = (wy, world.floor + ph - h_px);
     let right = b.x + pw <= max_x;
     let (x, y) = if above {
         // 吹き出しは頭の上
-        (b.x + pw / 2.0 - w_px / 2.0, b.y - h_px + 28.0 * c.scale as f64)
+        (b.x + pw / 2.0 - w_px / 2.0, b.y - h_px + 28.0 * c.dot)
     } else if right {
         (b.x + pw, b.y + ph - h_px)
     } else {
@@ -333,7 +402,7 @@ fn place_beside(app: &AppHandle, label: &str, size: (f64, f64), above: bool) -> 
     drop(c);
     let x = x.clamp(min_x, max_x.max(min_x));
     let y = y.clamp(min_y, max_y.max(min_y));
-    let _ = w.set_position(PhysicalPosition::new(x.round() as i32, y.round() as i32));
+    let _ = set_window_position(&w, x, y);
     right
 }
 
@@ -433,7 +502,7 @@ fn start_loop(app: AppHandle) {
 
 fn tick(app: &AppHandle, dt: f64) {
     let Some(pet) = window(app, PET) else { return };
-    let cursor = app.cursor_position().ok().map(|c| (c.x, c.y));
+    let cursor = cursor_position(app);
     let idle = os::idle_seconds();
     if idle.is_none() {
         static WARNED: OnceLock<()> = OnceLock::new();
@@ -443,25 +512,27 @@ fn tick(app: &AppHandle, dt: f64) {
     }
     let button_down = os::left_button_down();
 
-    let mut c = lock();
+    let c = lock();
     let Some(b) = c.brain.as_ref() else { return };
-    let (pw, ph) = ((FRAME_W * c.scale) as f64, (FRAME_H * c.scale) as f64);
+    let (pw, ph) = (FRAME_W as f64 * c.dot, FRAME_H as f64 * c.dot);
     let center = (b.x + pw / 2.0, b.y + ph / 2.0);
     drop(c);
-    let Some(monitor) = monitor_at(app, center.0, center.1) else { return };
+    let Some(screen) = screen_at(app, center.0, center.1) else { return };
 
     let mut c = lock();
     // 前面のアプリが全画面かは、0.5秒ごとに見る
     if c.fullscreen_checked.is_none_or(|t| t.elapsed() > Duration::from_millis(500)) {
-        let (p, s) = (monitor.position(), monitor.size());
+        let (p, s) = (screen.monitor.position(), screen.monitor.size());
         c.fullscreen = os::foreground_covers(p.x, p.y, s.width, s.height);
         c.fullscreen_checked = Some(Instant::now());
     }
     // 画面をまたいだら、その画面の倍率に直す
-    let scale = dot_scale(&monitor);
-    let resized = scale != c.scale;
+    let scale = screen.dot_scale;
+    let dot = screen.dot;
+    let resized = scale != c.scale || dot != c.dot;
     c.scale = scale;
-    let world = world_of(&monitor, scale, c.fullscreen);
+    c.dot = dot;
+    let world = world_of(&screen, c.fullscreen);
     c.world = Some(world);
     let sleep_after = c.sleep_after;
     let input = Input { cursor, button_down, idle_seconds: idle, sleep_after };
@@ -477,7 +548,7 @@ fn tick(app: &AppHandle, dt: f64) {
 
     // クリックを受けるのは、絵の不透明な点の上だけ(つまんでいる間は受け続ける)
     let over_sprite = cursor.is_some_and(|(cx, cy)| {
-        let (dx, dy) = (((cx - pos.0 as f64) / scale as f64).floor() as i32, ((cy - pos.1 as f64) / scale as f64).floor() as i32);
+        let (dx, dy) = (((cx - pos.0 as f64) / dot).floor() as i32, ((cy - pos.1 as f64) / dot).floor() as i32);
         let frame = frame_of(&c.sprites, anim_name, state_t);
         c.sprites.opaque_at(anim_name, frame, facing_left, dx, dy)
     });
@@ -506,10 +577,10 @@ fn tick(app: &AppHandle, dt: f64) {
     drop(c);
 
     if resized {
-        let _ = pet.set_size(PhysicalSize::new(FRAME_W * scale, FRAME_H * scale));
+        let _ = set_pet_size(&pet, &screen);
     }
     if moved {
-        let _ = pet.set_position(PhysicalPosition::new(pos.0, pos.1));
+        let _ = set_window_position(&pet, pos.0 as f64, pos.1 as f64);
         if panel_visible {
             let _ = place_beside(app, PANEL, panel_size, false);
         }
@@ -556,7 +627,7 @@ pub async fn pet_leave(app: AppHandle) -> Result<(), String> {
 /// ペットの絵を押した(画面のmousedown)
 #[tauri::command]
 pub fn pet_press(app: AppHandle) {
-    let cursor = app.cursor_position().ok().map(|c| (c.x, c.y));
+    let cursor = cursor_position(&app);
     if let (Some(cur), Some(b)) = (cursor, lock().brain.as_mut()) {
         b.press(cur);
     }
@@ -656,7 +727,8 @@ pub struct PetStatus {
 pub fn pet_status(app: AppHandle) -> PetStatus {
     let visible = |label: &str| window(&app, label).and_then(|w| w.is_visible().ok()).unwrap_or(false);
     let size = window(&app, PET).and_then(|w| w.outer_size().ok()).map(|s| (s.width, s.height));
-    let position = window(&app, PET).and_then(|w| w.outer_position().ok()).map(|p| (p.x, p.y));
+    let position =
+        window(&app, PET).and_then(|w| window_rect(&w)).map(|(x, y, _, _)| (x.round() as i32, y.round() as i32));
     let c = lock();
     let floor = c.world.map(|w| w.floor);
     let on_floor = matches!((position, floor), (Some((_, y)), Some(f)) if (y as f64 - f).abs() <= 1.5);
