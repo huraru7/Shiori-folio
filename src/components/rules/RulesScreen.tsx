@@ -35,7 +35,10 @@ const TABS = [
 ];
 
 // 小見出し(sub)の出現順(Rust側の並び順)を保ったまま、書類を小見出しごとにまとめる。
-function groupDocs(docs: SystemDoc[]): { sub: string; items: SystemDoc[] }[] {
+// 記憶は「全体」を先頭に更新の新しい順で1本に並べる(領域とプロジェクトが交互に来るので、
+// 小見出しで分けず、各行の種類の表示で見分ける)。
+function groupDocs(docs: SystemDoc[], tab: string): { sub: string; items: SystemDoc[] }[] {
+  if (tab === "memory") return docs.length ? [{ sub: "", items: docs }] : [];
   const groups: { sub: string; items: SystemDoc[] }[] = [];
   for (const doc of docs) {
     const last = groups[groups.length - 1];
@@ -138,8 +141,12 @@ function RulesScreen() {
   const parentDoc = selected?.parentId ? (docs?.find((d) => d.id === selected.parentId) ?? null) : null;
   // 閉じている親の子は一覧に出さない(選んでいる子は、見失わないよう出しておく)。
   const groups = useMemo(
-    () => groupDocs(tabDocs.filter((d) => !d.parentId || expanded.has(d.parentId) || d.id === selectedId)),
-    [tabDocs, expanded, selectedId],
+    () =>
+      groupDocs(
+        tabDocs.filter((d) => !d.parentId || expanded.has(d.parentId) || d.id === selectedId),
+        tab,
+      ),
+    [tabDocs, expanded, selectedId, tab],
   );
 
   // 書類を選ぶ。親を選ぶと子を開き、子を選ぶと親を開いておく(一覧で位置が分かるように)。
@@ -201,7 +208,7 @@ function RulesScreen() {
           {!docs && !listError && <p className="rules-screen__dim">読み込んでいます…</p>}
           {groups.map(({ sub, items }) => (
             <section key={sub} className="rules-screen__group">
-              <h3 className="rules-screen__group-title">{sub}</h3>
+              {sub && <h3 className="rules-screen__group-title">{sub}</h3>}
               {items.map((d) => {
                 const timeMs = docTimeMs(d);
                 const hasChildren = childrenOf.has(d.id);
