@@ -40,8 +40,8 @@ function groupDocs(docs: SystemDoc[]): { group: string; items: SystemDoc[] }[] {
   const groups: { group: string; items: SystemDoc[] }[] = [];
   for (const doc of docs) {
     const last = groups[groups.length - 1];
-    if (last && last.group === doc.group) last.items.push(doc);
-    else groups.push({ group: doc.group, items: [doc] });
+    if (last && last.group === doc.sub) last.items.push(doc);
+    else groups.push({ group: doc.sub, items: [doc] });
   }
   return groups;
 }

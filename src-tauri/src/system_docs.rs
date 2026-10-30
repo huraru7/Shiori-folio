@@ -15,25 +15,54 @@ use serde::Serialize;
 // 1ファイルの読み取り上限。規約・設定は数十KBなので、これを超えるものは想定外として読まない。
 const MAX_BYTES: u64 = 1024 * 1024;
 
-// 画面での並び順(グループの出現順がそのまま画面の順になる)。
-const GROUP_MEMORY: &str = "共通記憶(memory)";
-const GROUP_LIBRARY: &str = "libraryの規約";
-const GROUP_LEDGER: &str = "台帳";
-const GROUP_PROFILE: &str = "起動時のプロフィール";
-const GROUP_BEHAVIOR: &str = "詩織の動作";
+// 画面の見出し(タブ)。画面の左から、この順に並べる。
+const TAB_MEMORY: &str = "memory";
+const TAB_SKILL: &str = "skill";
+const TAB_RULES: &str = "rules";
+const TAB_BEHAVIOR: &str = "behavior";
+
+// 見出しの中の小見出し(sub)。出現順がそのまま画面の順になる。
+const SUB_GLOBAL: &str = "全体";
+const SUB_PROJECT: &str = "プロジェクト";
+const SUB_AREA: &str = "領域";
+const SUB_DEV: &str = "開発";
+const SUB_SHELF: &str = "知識の棚";
+const SUB_LIBRARY: &str = "libraryの規約";
+const SUB_LEDGER: &str = "台帳";
+const SUB_PROFILE: &str = "起動時のプロフィール";
+const SUB_BEHAVIOR: &str = "詩織の動作";
+
+// 「知識の棚」のスキル(それ以外のスキルは「開発」)。増えたらここに足す。
+const SHELF_SKILLS: [&str; 2] = ["knowledge-learning", "knowledge-research"];
 
 struct Entry {
     id: String,
-    group: &'static str,
+    tab: &'static str,
+    sub: &'static str,
     label: String,
     path: PathBuf,
+    // 技術別の参照ファイルが持つ、親スキルのid。
+    parent_id: Option<String>,
+    // memoryだけが持つ、frontmatterの更新日時。
+    updated: Option<String>,
+}
+
+impl Entry {
+    fn new(id: String, tab: &'static str, sub: &'static str, label: String, path: PathBuf) -> Self {
+        Entry { id, tab, sub, label, path, parent_id: None, updated: None }
+    }
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemDocDto {
     pub id: String,
-    pub group: String,
+    // 見出し。"memory" | "skill" | "rules" | "behavior"。
+    pub tab: String,
+    // 見出しの中の小見出し。
+    pub sub: String,
+    pub parent_id: Option<String>,
+    pub updated: Option<String>,
     pub label: String,
     pub file_name: String,
     // 画面での表示方法。"markdown" | "yaml" | "json" | "text"。
@@ -102,10 +131,10 @@ fn memory_updated(path: &Path) -> String {
 }
 
 // `10-projects/{project}/memory.md`・`20-areas/{project}/memory.md`をフォルダから探し、
-// updatedの新しい順で(project id, パス)を返す。新しいプロジェクトのmemoryは、コードを直さず
-// 一覧に出る。idに使うproject idは、フォルダ名がそのまま入るので、`/`や`.`始まりは除く。
-fn project_memories(library_root: &Path) -> Vec<(String, PathBuf)> {
-    let mut found: Vec<(String, String, PathBuf)> = Vec::new();
+// updatedの新しい順で(project id, 小見出し, updated, パス)を返す。新しいプロジェクトのmemoryは、
+// コードを直さず一覧に出る。idに使うproject idは、フォルダ名がそのまま入るので、`/`や`.`始まりは除く。
+fn project_memories(library_root: &Path) -> Vec<(String, &'static str, String, PathBuf)> {
+    let mut found: Vec<(String, &'static str, String, PathBuf)> = Vec::new();
     for top in ["10-projects", "20-areas"] {
         let Ok(read) = std::fs::read_dir(library_root.join(top)) else {
             continue;
@@ -116,14 +145,57 @@ fn project_memories(library_root: &Path) -> Vec<(String, PathBuf)> {
                 continue;
             }
             let memory = dir.join("memory.md");
-            if memory.is_file() && !found.iter().any(|(n, _, _)| *n == name) {
-                found.push((name, memory_updated(&memory), memory));
+            if memory.is_file() && !found.iter().any(|(n, _, _, _)| *n == name) {
+                let sub = if top == "10-projects" { SUB_PROJECT } else { SUB_AREA };
+                found.push((name, sub, memory_updated(&memory), memory));
             }
         }
     }
     // updatedの新しい順。同じ・無い場合はproject idの名前順で安定させる。
-    found.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-    found.into_iter().map(|(name, _, path)| (name, path)).collect()
+    found.sort_by(|a, b| b.2.cmp(&a.2).then_with(|| a.0.cmp(&b.0)));
+    found
+}
+
+// `30-resources/skills/`のスキルを、親→子の順で返す(開発→知識の棚、それぞれ名前順)。
+// `親名--技術名.md`は親の参照ファイルで、親が無いときは独立した行にする。
+// 隠しファイルとmacOSの`._`は除く。新しいスキルは、コードを直さず一覧に出る。
+fn skill_entries(library_root: &Path) -> Vec<Entry> {
+    let dir = library_root.join("30-resources").join("skills");
+    let Ok(read) = std::fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+    let mut stems: Vec<String> = read
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("md"))
+        .map(|p| file_name_of(&p))
+        .filter(|n| !n.starts_with('.'))
+        .map(|n| n.trim_end_matches(".md").to_string())
+        .collect();
+    stems.sort();
+
+    let parent_of = |stem: &str| -> Option<String> {
+        let (parent, _) = stem.split_once("--")?;
+        stems.iter().any(|s| s == parent).then(|| parent.to_string())
+    };
+    let sub_of = |parent: &str| if SHELF_SKILLS.contains(&parent) { SUB_SHELF } else { SUB_DEV };
+
+    let mut parents: Vec<&String> = stems.iter().filter(|s| parent_of(s).is_none()).collect();
+    // 開発が先、知識の棚が後。同じ小見出しの中は名前順(stemsが整列済みで、この並べ替えは安定)。
+    parents.sort_by_key(|s| sub_of(s) == SUB_SHELF);
+
+    let mut list = Vec::new();
+    for parent in parents {
+        let sub = sub_of(parent);
+        list.push(Entry::new(format!("skill/{parent}"), TAB_SKILL, sub, parent.clone(), dir.join(format!("{parent}.md"))));
+        for child in stems.iter().filter(|s| parent_of(s).as_deref() == Some(parent.as_str())) {
+            let suffix = child.split_once("--").map(|(_, rest)| rest).unwrap_or(child);
+            let mut entry = Entry::new(format!("skill/{child}"), TAB_SKILL, sub, suffix.to_string(), dir.join(format!("{child}.md")));
+            entry.parent_id = Some(format!("skill/{parent}"));
+            list.push(entry);
+        }
+    }
+    list
 }
 
 fn entries(library_root: &Path, project_root: &Path) -> Vec<Entry> {
@@ -131,21 +203,24 @@ fn entries(library_root: &Path, project_root: &Path) -> Vec<Entry> {
     let organizing = system.join("library-organizing");
     let prompts = project_root.join("prompts");
     let mut list = Vec::new();
-    let mut add = |id: String, group: &'static str, label: String, path: PathBuf| {
-        list.push(Entry { id, group, label, path });
-    };
 
-    add(
-        "memory/global".into(),
-        GROUP_MEMORY,
-        "全体のmemory(memory-global.md)".into(),
-        library_root.join("40-profile").join("memory-global.md"),
-    );
-    for (project, path) in project_memories(library_root) {
-        add(format!("memory/project/{project}"), GROUP_MEMORY, format!("{project}のmemory"), path);
+    let global = library_root.join("40-profile").join("memory-global.md");
+    let mut entry = Entry::new("memory/global".into(), TAB_MEMORY, SUB_GLOBAL, "全体のmemory(memory-global.md)".into(), global.clone());
+    entry.updated = Some(memory_updated(&global)).filter(|u| !u.is_empty());
+    list.push(entry);
+    for (project, sub, updated, path) in project_memories(library_root) {
+        let mut entry = Entry::new(format!("memory/project/{project}"), TAB_MEMORY, sub, format!("{project}のmemory"), path);
+        entry.updated = Some(updated).filter(|u| !u.is_empty());
+        list.push(entry);
     }
 
-    add("library/CLAUDE.md".into(), GROUP_LIBRARY, "保存の規約(CLAUDE.md)".into(), system.join("CLAUDE.md"));
+    list.extend(skill_entries(library_root));
+
+    let mut add = |id: String, tab: &'static str, sub: &'static str, label: String, path: PathBuf| {
+        list.push(Entry::new(id, tab, sub, label, path));
+    };
+
+    add("library/CLAUDE.md".into(), TAB_RULES, SUB_LIBRARY, "保存の規約(CLAUDE.md)".into(), system.join("CLAUDE.md"));
     for (file, label) in [
         ("01-reading-guide.md", "整理資料1: 読み方"),
         ("02-procedure.md", "整理資料2: 進め方"),
@@ -153,42 +228,42 @@ fn entries(library_root: &Path, project_root: &Path) -> Vec<Entry> {
     ] {
         add(
             format!("library/library-organizing/{file}"),
-            GROUP_LIBRARY,
+            TAB_RULES, SUB_LIBRARY,
             label.into(),
             organizing.join(file),
         );
     }
 
-    add("ledger/tags.yaml".into(), GROUP_LEDGER, "タグ台帳(tags.yaml)".into(), system.join("tags.yaml"));
+    add("ledger/tags.yaml".into(), TAB_RULES, SUB_LEDGER, "タグ台帳(tags.yaml)".into(), system.join("tags.yaml"));
     add(
         "ledger/projects.yaml".into(),
-        GROUP_LEDGER,
+        TAB_RULES, SUB_LEDGER,
         "プロジェクト台帳(projects.yaml)".into(),
         system.join("projects.yaml"),
     );
 
     add(
         "profile/tier1-profile.md".into(),
-        GROUP_PROFILE,
+        TAB_BEHAVIOR, SUB_PROFILE,
         "起動時に読むプロフィール(tier1-profile.md)".into(),
         system.join("tier1-profile.md"),
     );
 
     add(
         "prompts/system-prompt.md".into(),
-        GROUP_BEHAVIOR,
+        TAB_BEHAVIOR, SUB_BEHAVIOR,
         "システムプロンプト(system-prompt.md)".into(),
         prompts.join("system-prompt.md"),
     );
     for p in json_files(&prompts.join("tools")) {
         let name = file_name_of(&p);
-        add(format!("prompts/tools/{name}"), GROUP_BEHAVIOR, format!("ツール定義({name})"), p);
+        add(format!("prompts/tools/{name}"), TAB_BEHAVIOR, SUB_BEHAVIOR, format!("ツール定義({name})"), p);
     }
     for p in json_files(&prompts.join("transforms")) {
         let name = file_name_of(&p);
-        add(format!("prompts/transforms/{name}"), GROUP_BEHAVIOR, format!("整形ルール({name})"), p);
+        add(format!("prompts/transforms/{name}"), TAB_BEHAVIOR, SUB_BEHAVIOR, format!("整形ルール({name})"), p);
     }
-    add("config/config.json".into(), GROUP_BEHAVIOR, "設定(config.json)".into(), project_root.join("config.json"));
+    add("config/config.json".into(), TAB_BEHAVIOR, SUB_BEHAVIOR, "設定(config.json)".into(), project_root.join("config.json"));
 
     list
 }
@@ -210,7 +285,10 @@ pub fn list(library_root: &Path, project_root: &Path) -> Vec<SystemDocDto> {
                     .map(|d| d.as_secs_f64())
                     .unwrap_or(0.0),
                 id: e.id,
-                group: e.group.to_string(),
+                tab: e.tab.to_string(),
+                sub: e.sub.to_string(),
+                parent_id: e.parent_id,
+                updated: e.updated,
                 label: e.label,
             }
         })
@@ -256,10 +334,16 @@ mod tests {
         std::fs::write(root.join("prompts").join("tools").join("search_knowledge.json"), "{}").unwrap();
 
         let docs = list(&library, &root);
-        let groups: Vec<&str> = docs.iter().map(|d| d.group.as_str()).collect();
-        let mut dedup = groups.clone();
+        let tabs: Vec<&str> = docs.iter().map(|d| d.tab.as_str()).collect();
+        let mut dedup = tabs.clone();
         dedup.dedup();
-        assert_eq!(dedup, [GROUP_MEMORY, GROUP_LIBRARY, GROUP_LEDGER, GROUP_PROFILE, GROUP_BEHAVIOR]);
+        assert_eq!(dedup, [TAB_MEMORY, TAB_RULES, TAB_BEHAVIOR]);
+        // 規約の見出しには保存の規約・整理資料・台帳、詩織の動作には起動時のプロフィールなどが入る。
+        let tab_of = |id: &str| docs.iter().find(|d| d.id == id).unwrap().tab.clone();
+        assert_eq!(tab_of("library/CLAUDE.md"), TAB_RULES);
+        assert_eq!(tab_of("ledger/projects.yaml"), TAB_RULES);
+        assert_eq!(tab_of("profile/tier1-profile.md"), TAB_BEHAVIOR);
+        assert_eq!(tab_of("config/config.json"), TAB_BEHAVIOR);
 
         let claude = docs.iter().find(|d| d.id == "library/CLAUDE.md").unwrap();
         assert!(claude.exists && claude.size > 0 && claude.format == "markdown");
@@ -346,7 +430,7 @@ updated: 2026-10-01T00:00:00+09:00
 
         let ids: Vec<String> = list(&library, &root)
             .into_iter()
-            .filter(|d| d.group == GROUP_MEMORY)
+            .filter(|d| d.tab == TAB_MEMORY)
             .map(|d| d.id)
             .collect();
         assert_eq!(
@@ -370,6 +454,85 @@ updated: \"2026-10-10T00:00:00+09:00\"
             assert!(read(&library, &root, bad).is_err(), "{bad}は読めてはいけない");
         }
         assert!(read(&library, &root, "memory/project/shiori").is_ok());
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn memoryは小見出しとupdatedを持つ() {
+        let (base, library, root) = fixture("memory-sub");
+        write_memory(&library, "10-projects", "proj", Some("2026-10-10T00:00:00+09:00"));
+        write_memory(&library, "20-areas", "area", None);
+        let docs = list(&library, &root);
+        let find = |id: &str| docs.iter().find(|d| d.id == id).unwrap();
+        assert_eq!(find("memory/global").sub, SUB_GLOBAL);
+        assert_eq!(find("memory/project/proj").sub, SUB_PROJECT);
+        assert_eq!(find("memory/project/proj").updated.as_deref(), Some("2026-10-10T00:00:00+09:00"));
+        assert_eq!(find("memory/project/area").sub, SUB_AREA);
+        assert_eq!(find("memory/project/area").updated, None);
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    // skills/に空のスキルを置く。
+    fn write_skills(library: &Path, names: &[&str]) {
+        let dir = library.join("30-resources").join("skills");
+        std::fs::create_dir_all(&dir).unwrap();
+        for name in names {
+            std::fs::write(dir.join(name), "# スキル").unwrap();
+        }
+    }
+
+    #[test]
+    fn スキルは開発と知識の棚に分かれ参照ファイルは親の下に並ぶ() {
+        let (base, library, root) = fixture("skills");
+        write_skills(
+            &library,
+            &[
+                "work-start.md",
+                "implementation-execution.md",
+                "implementation-execution--tauri-principles.md",
+                "implementation-execution--web-principles.md",
+                "knowledge-learning.md",
+                "knowledge-research.md",
+                // macOSの`._`と隠しファイル、mdでないものは出さない。
+                "._work-start.md",
+                ".hidden.md",
+                "memo.txt",
+                // 親が無い参照ファイルは、独立した行になる。
+                "orphan--detail.md",
+            ],
+        );
+        let skills: Vec<_> = list(&library, &root).into_iter().filter(|d| d.tab == TAB_SKILL).collect();
+        let rows: Vec<(&str, &str, Option<&str>)> =
+            skills.iter().map(|d| (d.id.as_str(), d.sub.as_str(), d.parent_id.as_deref())).collect();
+        assert_eq!(
+            rows,
+            [
+                ("skill/implementation-execution", SUB_DEV, None),
+                ("skill/implementation-execution--tauri-principles", SUB_DEV, Some("skill/implementation-execution")),
+                ("skill/implementation-execution--web-principles", SUB_DEV, Some("skill/implementation-execution")),
+                ("skill/orphan--detail", SUB_DEV, None),
+                ("skill/work-start", SUB_DEV, None),
+                ("skill/knowledge-learning", SUB_SHELF, None),
+                ("skill/knowledge-research", SUB_SHELF, None),
+            ]
+        );
+        // 親は名前、子は親の名前を除いた技術名で出る。
+        assert_eq!(skills[0].label, "implementation-execution");
+        assert_eq!(skills[1].label, "tauri-principles");
+        assert_eq!(skills[3].label, "orphan--detail");
+        assert!(skills.iter().all(|d| d.exists && d.format == "markdown"));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn スキルのidにパスを渡しても読めない() {
+        let (base, library, root) = fixture("skills-path");
+        write_skills(&library, &["work-start.md"]);
+        std::fs::write(base.join("secret.txt"), "秘密").unwrap();
+        assert_eq!(read(&library, &root, "skill/work-start").unwrap(), "# スキル");
+        for bad in ["skill/../../secret.txt", "skill/work-start/..", "skill/", "skill/missing", "skill/._work-start"] {
+            assert!(read(&library, &root, bad).is_err(), "{bad}は読めてはいけない");
+        }
         std::fs::remove_dir_all(&base).unwrap();
     }
 }

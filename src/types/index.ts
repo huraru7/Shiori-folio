@@ -23,7 +23,14 @@ export interface KnowledgeResult {
 // 規約画面(詩織Ver4.1)の書類1件。idから本文を取得する(許可リストの書類のみ)。
 export interface SystemDoc {
   id: string;
-  group: string;
+  // 見出し。"memory" | "skill" | "rules" | "behavior"。
+  tab: string;
+  // 見出しの中の小見出し。
+  sub: string;
+  // 技術別の参照ファイルが持つ、親スキルのid。
+  parentId: string | null;
+  // memoryだけが持つ、frontmatterの更新日時。
+  updated: string | null;
   label: string;
   fileName: string;
   // 表示方法。"markdown" | "yaml" | "json" | "text"。
