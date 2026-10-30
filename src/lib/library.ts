@@ -179,3 +179,19 @@ export function formatMtime(mtime: number): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+// 「さっき」「3時間前」「2日前」のような相対表記。10分未満はさっき、1時間未満は分、
+// 24時間未満は時間、それ以上は日。時計のずれで未来になったときも「さっき」にする。
+export function formatRelative(timeMs: number, nowMs: number = Date.now()): string {
+  const min = Math.floor((nowMs - timeMs) / 60_000);
+  if (min < 10) return "さっき";
+  if (min < 60) return `${min}分前`;
+  const hour = Math.floor(min / 60);
+  if (hour < 24) return `${hour}時間前`;
+  return `${Math.floor(hour / 24)}日前`;
+}
+
+// 更新して48時間以内か(規約・記憶画面で目立たせる)。
+export function isRecent(timeMs: number, nowMs: number = Date.now()): boolean {
+  return nowMs - timeMs < 48 * 3_600_000;
+}

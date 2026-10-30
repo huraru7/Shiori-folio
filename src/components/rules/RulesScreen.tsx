@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/tauri";
-import { formatMtime } from "../../lib/library";
+import { formatMtime, formatRelative, isRecent } from "../../lib/library";
 import { handleArticleLinkClick, renderMarkdown } from "../../lib/markdown";
 import { useMainViewStore } from "../../store/useMainViewStore";
 import type { SystemDoc } from "../../types";
@@ -11,15 +11,6 @@ import "./RulesScreen.css";
 function stripFrontmatter(content: string): string {
   const match = content.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/);
   return match ? content.slice(match[0].length) : content;
-}
-
-// frontmatterの`updated`(共通記憶MDだけが持つ最終更新日時)。無いときはnull。
-// ファイルの更新日時(mtime)とは別で、`shiori-save`が書いた時刻を指す。
-function frontmatterUpdated(content: string): string | null {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-  const line = match?.[1].split(/\r?\n/).find((l) => l.startsWith("updated:"));
-  const value = line?.slice("updated:".length).trim().replace(/^"|"$/g, "");
-  return value ? value : null;
 }
 
 // jsonは読みやすく整形する。壊れていて解析できないときは、そのまま見せる。
@@ -35,18 +26,37 @@ function formatSize(bytes: number): string {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-// グループの出現順(Rust側の許可リストの順)を保ったまま、書類をグループごとにまとめる。
-function groupDocs(docs: SystemDoc[]): { group: string; items: SystemDoc[] }[] {
-  const groups: { group: string; items: SystemDoc[] }[] = [];
+// 画面の見出し(タブ)。順番は画面の左から。idはRust側(system_docs.rs)の`tab`と同じ。
+const TABS = [
+  { id: "memory", label: "記憶" },
+  { id: "skill", label: "スキル" },
+  { id: "rules", label: "規約" },
+  { id: "behavior", label: "詩織の動作" },
+];
+
+// 小見出し(sub)の出現順(Rust側の並び順)を保ったまま、書類を小見出しごとにまとめる。
+function groupDocs(docs: SystemDoc[]): { sub: string; items: SystemDoc[] }[] {
+  const groups: { sub: string; items: SystemDoc[] }[] = [];
   for (const doc of docs) {
     const last = groups[groups.length - 1];
-    if (last && last.group === doc.sub) last.items.push(doc);
-    else groups.push({ group: doc.sub, items: [doc] });
+    if (last && last.sub === doc.sub) last.items.push(doc);
+    else groups.push({ sub: doc.sub, items: [doc] });
   }
   return groups;
 }
 
-// 規約・記憶画面(詩織Ver4.1、memoryの閲覧はVer4.2)。詩織のシステムを決めている書類(libraryの
+// 書類の更新時刻(ミリ秒)。memoryはfrontmatterのupdated、それ以外はファイルの更新日時。
+function docTimeMs(doc: SystemDoc): number | null {
+  if (doc.updated) {
+    const t = Date.parse(doc.updated);
+    if (!Number.isNaN(t)) return t;
+  }
+  return doc.mtime ? doc.mtime * 1000 : null;
+}
+
+// 規約・記憶画面(詩織Ver4.1、memoryの閲覧はVer4.2、見出しで分けたのはVer6.0.2)。上の見出し
+// (記憶・スキル・規約・詩織の動作)で書類を種類ごとに分け、左の一覧には選んだ見出しの書類だけを出す。
+// 詩織のシステムを決めている書類(libraryの
 // 保存規約、タグ/プロジェクトの台帳、起動時のプロフィール、プロンプト、設定)と、共通記憶MD(全体用・
 // 各プロジェクトのmemory)を読む。これらは図書館の画面には出ない。読み取り専用で、編集はしない
 // (書き換えるのは、保存規約に従ったAIやふらるの作業。memoryは`shiori-save`経由のみ)。
@@ -55,7 +65,9 @@ function groupDocs(docs: SystemDoc[]): { group: string; items: SystemDoc[] }[] {
 function RulesScreen() {
   const [docs, setDocs] = useState<SystemDoc[] | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [tab, setTab] = useState("memory");
+  // 見出しごとに、最後に選んだ書類を覚える(見出しを行き来しても選択が戻る)。
+  const [selectedByTab, setSelectedByTab] = useState<Record<string, string>>({});
   const [text, setText] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   // 読み直しの合図。更新ボタンと、この画面が開かれたときに増やす。
@@ -75,8 +87,6 @@ function RulesScreen() {
       .then((list) => {
         if (cancelled) return;
         setDocs(list);
-        // 最初に見つかる書類を開いておく(保存の規約が先頭)。
-        setSelectedId((cur) => cur ?? list.find((d) => d.exists)?.id ?? null);
       })
       .catch((err) => {
         if (!cancelled) setListError(String(err));
@@ -85,6 +95,13 @@ function RulesScreen() {
       cancelled = true;
     };
   }, [reloadKey]);
+
+  const tabDocs = useMemo(() => (docs ?? []).filter((d) => d.tab === tab), [docs, tab]);
+  // 見出しで選んだ書類。まだ選んでいなければ、その見出しの最初に読める書類(記憶なら「全体」)。
+  const selectedId =
+    (selectedByTab[tab] && tabDocs.some((d) => d.id === selectedByTab[tab]) ? selectedByTab[tab] : null) ??
+    tabDocs.find((d) => d.exists)?.id ??
+    null;
 
   useEffect(() => {
     if (!selectedId) return;
@@ -107,9 +124,9 @@ function RulesScreen() {
     };
   }, [selectedId, reloadKey]);
 
-  const groups = useMemo(() => (docs ? groupDocs(docs) : []), [docs]);
+  const groups = useMemo(() => groupDocs(tabDocs), [tabDocs]);
   const selected = docs?.find((d) => d.id === selectedId) ?? null;
-  const updated = selected && text !== null ? frontmatterUpdated(text) : null;
+  const selectedTimeMs = selected ? docTimeMs(selected) : null;
 
   const body = (() => {
     if (!selected || text === null) return null;
@@ -129,47 +146,81 @@ function RulesScreen() {
 
   return (
     <div className="rules-screen">
-      <nav className="rules-screen__nav" aria-label="規約・記憶の書類">
+      <div className="rules-screen__tabs" role="tablist" aria-label="規約・記憶の見出し">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={t.id === tab}
+            className={`rules-screen__tab rules-screen__tab--${t.id}${t.id === tab ? " rules-screen__tab--active" : ""}`}
+            onClick={() => setTab(t.id)}
+          >
+            {t.label}
+            <span className="rules-screen__tab-count">
+              {(docs ?? []).filter((d) => d.tab === t.id && d.exists).length}
+            </span>
+          </button>
+        ))}
         <button type="button" className="rules-screen__refresh" onClick={() => setReloadKey((k) => k + 1)}>
           更新
         </button>
-        {listError && <p className="rules-screen__error">{listError}</p>}
-        {!docs && !listError && <p className="rules-screen__dim">読み込んでいます…</p>}
-        {groups.map(({ group, items }) => (
-          <section key={group} className="rules-screen__group">
-            <h3 className="rules-screen__group-title">{group}</h3>
-            {items.map((d) => (
-              <button
-                key={d.id}
-                type="button"
-                disabled={!d.exists}
-                className={`rules-screen__item${d.id === selectedId ? " rules-screen__item--active" : ""}`}
-                onClick={() => setSelectedId(d.id)}
-                title={d.exists ? d.fileName : `${d.fileName}(見つかりません)`}
-              >
-                {d.label}
-                {!d.exists && <span className="rules-screen__missing">なし</span>}
-              </button>
-            ))}
-          </section>
-        ))}
-      </nav>
+      </div>
 
-      <div className="rules-screen__main">
-        {selected && (
-          <header className="rules-screen__header">
-            <h2 className="rules-screen__title">{selected.label}</h2>
-            <p className="rules-screen__meta">
-              {selected.fileName} ・ {formatSize(selected.size)}
-              {updated ? ` ・ 最終更新(updated) ${updated}` : ` ・ 更新 ${formatMtime(selected.mtime)}`} ・ 読み取り専用
-            </p>
-          </header>
-        )}
-        <div className="rules-screen__scroll">
-          {readError && <p className="rules-screen__error">{readError}</p>}
-          {selected && text === null && !readError && <p className="rules-screen__dim">読み込んでいます…</p>}
-          {!selected && docs && <p className="rules-screen__dim">表示できる書類がありません。</p>}
-          {body}
+      <div className={`rules-screen__body rules-screen__body--${tab}`}>
+        <nav className="rules-screen__nav" aria-label="規約・記憶の書類">
+          {listError && <p className="rules-screen__error">{listError}</p>}
+          {!docs && !listError && <p className="rules-screen__dim">読み込んでいます…</p>}
+          {groups.map(({ sub, items }) => (
+            <section key={sub} className="rules-screen__group">
+              <h3 className="rules-screen__group-title">{sub}</h3>
+              {items.map((d) => {
+                const timeMs = docTimeMs(d);
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    disabled={!d.exists}
+                    className={`rules-screen__item${d.parentId ? " rules-screen__item--child" : ""}${d.id === selectedId ? " rules-screen__item--active" : ""}`}
+                    onClick={() => setSelectedByTab((cur) => ({ ...cur, [tab]: d.id }))}
+                    title={d.exists ? `${d.label}(${d.fileName})` : `${d.fileName}(見つかりません)`}
+                  >
+                    <span className="rules-screen__item-label">{d.label}</span>
+                    {tab === "memory" && <span className="rules-screen__item-kind">{d.sub}</span>}
+                    {!d.exists && <span className="rules-screen__missing">なし</span>}
+                    {d.exists && timeMs !== null && (
+                      <span
+                        className={`rules-screen__item-time${isRecent(timeMs) ? " rules-screen__item-time--recent" : ""}`}
+                      >
+                        {formatRelative(timeMs)}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </section>
+          ))}
+          {docs && groups.length === 0 && <p className="rules-screen__dim">この見出しの書類はありません。</p>}
+        </nav>
+
+        <div className="rules-screen__main">
+          {selected && (
+            <header className="rules-screen__header">
+              <h2 className="rules-screen__title">{selected.label}</h2>
+              <p className="rules-screen__meta">
+                {selected.fileName} ・ {formatSize(selected.size)}
+                {selectedTimeMs !== null &&
+                  ` ・ ${selected.updated ? "最終更新(updated)" : "更新"} ${formatRelative(selectedTimeMs)}(${formatMtime(selectedTimeMs / 1000)})`}
+                {" ・ 読み取り専用"}
+              </p>
+            </header>
+          )}
+          <div className="rules-screen__scroll">
+            {readError && <p className="rules-screen__error">{readError}</p>}
+            {selected && text === null && !readError && <p className="rules-screen__dim">読み込んでいます…</p>}
+            {!selected && docs && <p className="rules-screen__dim">表示できる書類がありません。</p>}
+            {body}
+          </div>
         </div>
       </div>
     </div>
