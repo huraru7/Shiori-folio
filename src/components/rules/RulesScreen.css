@@ -133,9 +133,40 @@
   box-shadow: inset 2px 0 0 var(--tab-color);
 }
 
+/* 一覧の1行。スキルの見出しでは、左に参照ファイルの開閉の矢印を置く。 */
+.rules-screen__row {
+  display: flex;
+  align-items: center;
+}
+
 /* スキルの参照ファイルは、親の下に字下げして並べる。 */
-.rules-screen__item--child {
-  padding-left: 22px;
+.rules-screen__row--child {
+  padding-left: 18px;
+}
+
+.rules-screen__row .rules-screen__item {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+}
+
+.rules-screen__toggle,
+.rules-screen__toggle-spacer {
+  flex: 0 0 18px;
+  width: 18px;
+}
+
+.rules-screen__toggle {
+  background: none;
+  border: none;
+  padding: 4px 0;
+  color: var(--paper-dim);
+  font-size: var(--fs-md);
+  cursor: pointer;
+}
+
+.rules-screen__toggle:hover {
+  color: var(--tab-color);
 }
 
 /* 長い名前は「…」で切る(全文はtitle属性)。 */
@@ -292,4 +323,44 @@
 .rules-screen__refresh:hover {
   background: rgba(143, 160, 107, 0.08);
   color: var(--paper);
+}
+
+/* 子を選んでいるとき、見出しに添える親の名前。 */
+.rules-screen__title-parent {
+  color: var(--paper-dim);
+  font-size: var(--fs-md);
+}
+
+/* 本文の終わりの、親子の行き来。親の本文の終わりに参照ファイル、子の本文の終わりに親を出す。 */
+.rules-screen__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 24px;
+  padding-top: 12px;
+  border-top: 0.5px solid var(--glass-border);
+}
+
+.rules-screen__links-title {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--paper-dim);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
+}
+
+.rules-screen__link {
+  padding: 4px 10px;
+  background: none;
+  border: 0.5px solid var(--glass-border);
+  border-radius: 6px;
+  color: var(--tab-color);
+  font-family: var(--font-body);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.rules-screen__link:hover:not(:disabled) {
+  background: rgba(143, 160, 107, 0.08);
 }

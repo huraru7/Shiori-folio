@@ -68,6 +68,8 @@ function RulesScreen() {
   const [tab, setTab] = useState("memory");
   // 見出しごとに、最後に選んだ書類を覚える(見出しを行き来しても選択が戻る)。
   const [selectedByTab, setSelectedByTab] = useState<Record<string, string>>({});
+  // 開いているスキル(子の参照ファイルを持つ親のid)。
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [text, setText] = useState<string | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
   // 読み直しの合図。更新ボタンと、この画面が開かれたときに増やす。
@@ -124,8 +126,34 @@ function RulesScreen() {
     };
   }, [selectedId, reloadKey]);
 
-  const groups = useMemo(() => groupDocs(tabDocs), [tabDocs]);
   const selected = docs?.find((d) => d.id === selectedId) ?? null;
+  // 子の参照ファイルを持つ親のid → 子の一覧。
+  const childrenOf = useMemo(() => {
+    const map = new Map<string, SystemDoc[]>();
+    for (const d of tabDocs) {
+      if (d.parentId) map.set(d.parentId, [...(map.get(d.parentId) ?? []), d]);
+    }
+    return map;
+  }, [tabDocs]);
+  const parentDoc = selected?.parentId ? (docs?.find((d) => d.id === selected.parentId) ?? null) : null;
+  // 閉じている親の子は一覧に出さない(選んでいる子は、見失わないよう出しておく)。
+  const groups = useMemo(
+    () => groupDocs(tabDocs.filter((d) => !d.parentId || expanded.has(d.parentId) || d.id === selectedId)),
+    [tabDocs, expanded, selectedId],
+  );
+
+  // 書類を選ぶ。親を選ぶと子を開き、子を選ぶと親を開いておく(一覧で位置が分かるように)。
+  const selectDoc = (d: SystemDoc) => {
+    setSelectedByTab((cur) => ({ ...cur, [d.tab]: d.id }));
+    const open = d.parentId ?? (childrenOf.has(d.id) ? d.id : null);
+    if (open) setExpanded((cur) => new Set(cur).add(open));
+  };
+  const toggleExpanded = (id: string) =>
+    setExpanded((cur) => {
+      const next = new Set(cur);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
   const selectedTimeMs = selected ? docTimeMs(selected) : null;
 
   const body = (() => {
@@ -176,26 +204,42 @@ function RulesScreen() {
               <h3 className="rules-screen__group-title">{sub}</h3>
               {items.map((d) => {
                 const timeMs = docTimeMs(d);
+                const hasChildren = childrenOf.has(d.id);
                 return (
-                  <button
-                    key={d.id}
-                    type="button"
-                    disabled={!d.exists}
-                    className={`rules-screen__item${d.parentId ? " rules-screen__item--child" : ""}${d.id === selectedId ? " rules-screen__item--active" : ""}`}
-                    onClick={() => setSelectedByTab((cur) => ({ ...cur, [tab]: d.id }))}
-                    title={d.exists ? `${d.label}(${d.fileName})` : `${d.fileName}(見つかりません)`}
-                  >
-                    <span className="rules-screen__item-label">{d.label}</span>
-                    {tab === "memory" && <span className="rules-screen__item-kind">{d.sub}</span>}
-                    {!d.exists && <span className="rules-screen__missing">なし</span>}
-                    {d.exists && timeMs !== null && (
-                      <span
-                        className={`rules-screen__item-time${isRecent(timeMs) ? " rules-screen__item-time--recent" : ""}`}
-                      >
-                        {formatRelative(timeMs)}
-                      </span>
-                    )}
-                  </button>
+                  <div key={d.id} className={`rules-screen__row${d.parentId ? " rules-screen__row--child" : ""}`}>
+                    {tab === "skill" &&
+                      (hasChildren ? (
+                        <button
+                          type="button"
+                          className="rules-screen__toggle"
+                          aria-expanded={expanded.has(d.id)}
+                          aria-label={`${d.label}の参照ファイルを${expanded.has(d.id) ? "閉じる" : "開く"}`}
+                          onClick={() => toggleExpanded(d.id)}
+                        >
+                          {expanded.has(d.id) ? "▾" : "▸"}
+                        </button>
+                      ) : (
+                        <span className="rules-screen__toggle-spacer" />
+                      ))}
+                    <button
+                      type="button"
+                      disabled={!d.exists}
+                      className={`rules-screen__item${d.id === selectedId ? " rules-screen__item--active" : ""}`}
+                      onClick={() => selectDoc(d)}
+                      title={d.exists ? `${d.label}(${d.fileName})` : `${d.fileName}(見つかりません)`}
+                    >
+                      <span className="rules-screen__item-label">{d.label}</span>
+                      {tab === "memory" && <span className="rules-screen__item-kind">{d.sub}</span>}
+                      {!d.exists && <span className="rules-screen__missing">なし</span>}
+                      {d.exists && timeMs !== null && (
+                        <span
+                          className={`rules-screen__item-time${isRecent(timeMs) ? " rules-screen__item-time--recent" : ""}`}
+                        >
+                          {formatRelative(timeMs)}
+                        </span>
+                      )}
+                    </button>
+                  </div>
                 );
               })}
             </section>
@@ -206,7 +250,10 @@ function RulesScreen() {
         <div className="rules-screen__main">
           {selected && (
             <header className="rules-screen__header">
-              <h2 className="rules-screen__title">{selected.label}</h2>
+              <h2 className="rules-screen__title">
+                {parentDoc && <span className="rules-screen__title-parent">{parentDoc.label} › </span>}
+                {selected.label}
+              </h2>
               <p className="rules-screen__meta">
                 {selected.fileName} ・ {formatSize(selected.size)}
                 {selectedTimeMs !== null &&
@@ -220,6 +267,22 @@ function RulesScreen() {
             {selected && text === null && !readError && <p className="rules-screen__dim">読み込んでいます…</p>}
             {!selected && docs && <p className="rules-screen__dim">表示できる書類がありません。</p>}
             {body}
+            {text !== null && selected && (parentDoc || childrenOf.has(selected.id)) && (
+              <footer className="rules-screen__links">
+                <h3 className="rules-screen__links-title">{parentDoc ? "親のスキル" : "参照ファイル"}</h3>
+                {(parentDoc ? [parentDoc] : (childrenOf.get(selected.id) ?? [])).map((d) => (
+                  <button
+                    key={d.id}
+                    type="button"
+                    disabled={!d.exists}
+                    className="rules-screen__link"
+                    onClick={() => selectDoc(d)}
+                  >
+                    {parentDoc ? `‹ ${d.label}` : `${d.label} ›`}
+                  </button>
+                ))}
+              </footer>
+            )}
           </div>
         </div>
       </div>
